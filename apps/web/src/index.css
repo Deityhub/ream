@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+@import '@ream/ui/theme.css';
+@source '../../../packages/ui/src';
+
+body {
+  @apply bg-canvas text-ink antialiased;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}

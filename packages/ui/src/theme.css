@@ -1,0 +1,29 @@
+/* Semantic tokens. light-dark() picks per colour-scheme; data-theme overrides the system setting. */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f4f8fe, #0a1424);
+  --surface: light-dark(#ffffff, #101e36);
+  --surface-2: light-dark(#eaf1fc, #172a48);
+  --border: light-dark(#d3e1f7, #25395c);
+  --text: light-dark(#0b1f3a, #e6eefb);
+  --text-muted: light-dark(#51668a, #8ea3c6);
+  --accent: light-dark(#1f6feb, #5b9bff);
+  --accent-hover: light-dark(#1859c0, #7db1ff);
+  --accent-soft: light-dark(#dce9fd, #1b3566);
+  --on-accent: light-dark(#ffffff, #06142b);
+}
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
+@theme inline {
+  --color-canvas: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+}
