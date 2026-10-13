@@ -527,6 +527,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ream/image-core@workspace:*, @ream/image-core@workspace:packages/image-core":
+  version: 0.0.0-use.local
+  resolution: "@ream/image-core@workspace:packages/image-core"
+  dependencies:
+    "@ream/core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ream/pdf-core@workspace:*, @ream/pdf-core@workspace:packages/pdf-core":
   version: 0.0.0-use.local
   resolution: "@ream/pdf-core@workspace:packages/pdf-core"
@@ -540,6 +548,7 @@ __metadata:
   resolution: "@ream/tools@workspace:packages/tools"
   dependencies:
     "@ream/core": "workspace:*"
+    "@ream/image-core": "workspace:*"
     "@ream/pdf-core": "workspace:*"
   peerDependencies:
     react: "*"
@@ -561,6 +570,7 @@ __metadata:
   resolution: "@ream/web@workspace:apps/web"
   dependencies:
     "@ream/core": "workspace:*"
+    "@ream/image-core": "workspace:*"
     "@ream/tools": "workspace:*"
     "@ream/ui": "workspace:*"
     "@tailwindcss/vite": "npm:^4.1.0"

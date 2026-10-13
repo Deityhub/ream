@@ -118,7 +118,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
         ) : (
           <>
-            {panel && options !== null && <panel.Panel options={options} onChange={setOptions} />}
+            {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} />}
             {running ? (
               <Progress value={state.progress} onCancel={cancel} />
             ) : (

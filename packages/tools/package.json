@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ream/core": "workspace:*",
+    "@ream/image-core": "workspace:*",
     "@ream/pdf-core": "workspace:*"
   },
   "peerDependencies": {
