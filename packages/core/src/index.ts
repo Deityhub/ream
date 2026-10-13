@@ -1,4 +1,5 @@
 export { zip, crc32 } from './zip.ts'
+export { inflate, deflate, pngPredictor } from './flate.ts'
 
 export type Category = 'pdf' | 'image'
 

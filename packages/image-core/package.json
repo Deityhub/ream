@@ -1,0 +1,13 @@
+{
+  "name": "@ream/image-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "dependencies": {
+    "@ream/core": "workspace:*"
+  }
+}

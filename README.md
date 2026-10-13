@@ -16,6 +16,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 |---|---|
 | `packages/core` | Tool manifest types |
 | `packages/pdf-core` | Own PDF parser, writer and page operations (pure TS, no DOM) |
+| `packages/image-core` | RGBA pixel buffer, resize/crop/rotate/flip/stitch, own PNG codec, browser codec |
 | `packages/ui` | Theme tokens and shared React components |
 | `packages/tools` | One folder per tool, plus the registry |
 | `apps/web` | Vite + React + Tailwind v4 |
@@ -28,7 +29,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M0 ✅ | Skeleton | Monorepo, UI shell, registry, Electron |
 | M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
 | M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
-| M2 | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
+| M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
 | M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
 | M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
 | M5 | PDF security | Encrypt/decrypt, visual signature |
@@ -46,3 +47,11 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - Electron save dialog: the Download button relies on Chromium's default download prompt; not yet checked by hand.
 - Streams other than Flate are copied through untouched but can't be decoded yet (only needed for xref/object streams).
 - All objects are parsed up front; make parsing lazy if very large files become a problem.
+
+## Known M2 limits
+
+- JPEG, WebP and GIF go through the browser's codecs (OffscreenCanvas in the worker); our own codec reads and writes PNG only until M4. Animated GIFs lose their animation (first frame only).
+- HEIC, TIFF, RAW and SVG inputs are not accepted yet.
+- Our own PNG decoder rejects interlaced files; the browser codec handles them.
+- Crop is drag-to-select with mouse or touch, plus numeric fields for keyboard use.
+- Checked in Electron (Chromium) only; Safari and Firefox are untested.
