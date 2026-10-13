@@ -1,6 +1,7 @@
 {
   "name": "ream",
   "private": true,
+  "type": "module",
   "packageManager": "yarn@4.16.0",
   "workspaces": [
     "apps/*",
@@ -11,10 +12,12 @@
     "build": "yarn workspace @ream/web build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
+    "pdf": "node scripts/pdf.ts",
     "desktop": "yarn build && yarn workspace @ream/desktop start",
     "desktop:dev": "REAM_DEV_URL=http://localhost:5173 yarn workspace @ream/desktop start"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
