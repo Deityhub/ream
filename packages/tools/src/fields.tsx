@@ -2,7 +2,7 @@ import type { OutputMime } from '@ream/image-core'
 import { FORMATS } from './image-formats.ts'
 
 export const inputClass =
-  'rounded-lg border border-line bg-surface px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent'
+  'rounded-lg border border-field bg-surface px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent'
 
 /** whole number from a text box; empty or invalid becomes 0 */
 export const toInt = (v: string) => Math.max(0, Math.floor(Number(v)) || 0)

@@ -1,11 +1,19 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 @import '@ream/ui/theme.css';
 @source '../../../packages/ui/src';
 @source '../../../packages/tools/src';
 
 body {
   @apply bg-canvas text-ink antialiased;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Tailwind v4 resets buttons to the default cursor */
+button:not(:disabled), [role='tab']:not(:disabled) { cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
 /* shows transparency in image previews */

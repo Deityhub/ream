@@ -70,21 +70,21 @@ export function PasswordDialog({ name, others = 0, onSubmit, onSkip }: Props) {
             aria-label="Password"
             aria-invalid={!!error}
             aria-describedby={error ? errorId : undefined}
-            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent"
+            className="min-w-0 flex-1 rounded-lg border border-field bg-surface px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent"
           />
           <button
             type="button"
             aria-pressed={show}
             aria-label={show ? 'Hide password' : 'Show password'}
             onClick={() => setShow((s) => !s)}
-            className="rounded-lg border border-line px-3 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
+            className="rounded-lg border border-field px-3 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
           >
             <Icon name={show ? 'eye-off' : 'eye'} className="size-4" />
           </button>
         </div>
         {error && (
-          <p id={errorId} role="alert" className="flex items-start gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
-            <Icon name="alert" className="mt-0.5 size-4 shrink-0 text-accent" />
+          <p id={errorId} role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+            <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
             {error}
           </p>
         )}

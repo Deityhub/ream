@@ -192,8 +192,8 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           </>
         )}
         {state.kind === 'error' && (
-          <p role="alert" className="flex items-start gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
-            <Icon name="alert" className="mt-0.5 size-4 shrink-0 text-accent" />
+          <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+            <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
             {state.message}
           </p>
         )}

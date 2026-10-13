@@ -1,4 +1,4 @@
-import { Icon } from '@ream/ui'
+import { Icon, Logo } from '@ream/ui'
 import { findTool } from '@ream/tools'
 import { useHash } from './useHash'
 import { ThemeToggle } from './ThemeToggle'
@@ -13,7 +13,9 @@ export function App() {
   return (
     <div className={`mx-auto px-4 py-6 ${id ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <header className="mb-6 flex items-center gap-3">
-        <a href="#/" className="text-lg font-semibold tracking-tight">Ream</a>
+        <a href="#/" className="flex items-center gap-2 text-xl font-medium tracking-tight focus-visible:outline-2 focus-visible:outline-accent">
+          <Logo size={28} /> Ream
+        </a>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1 text-xs text-accent-ink">
           <Icon name="lock" className="size-3.5" /> Files stay on your device
         </span>

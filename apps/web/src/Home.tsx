@@ -26,7 +26,7 @@ export function Home() {
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search tools, e.g. merge, resize"
           aria-label="Search tools"
-          className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
+          className="w-full rounded-lg border border-field bg-surface py-2 pl-9 pr-3 text-sm placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
         />
       </div>
       <div className="mb-4 flex gap-2" role="group" aria-label="Filter by category">

@@ -78,8 +78,8 @@ function ResultView({ tool, files, preview, onRefresh }: { tool: Tool; files: Fi
   }
   if (preview.kind === 'error') {
     return (
-      <p role="status" className="flex items-start gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
-        <Icon name="alert" className="mt-0.5 size-4 shrink-0 text-accent" />
+      <p role="status" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+        <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
         Can't preview yet: {preview.message}
       </p>
     )
@@ -163,7 +163,7 @@ function PdfView({ file, was }: { file: File; was?: number }) {
           ))}
         </div>
       )}
-      {warnings.length > 0 && <p className="text-xs text-muted">Preview is approximate: {warnings.join('; ').replace(/^./, (c) => c.toLowerCase())}.</p>}
+      {warnings.length > 0 && <p className="rounded-md bg-warning-soft px-2 py-1 text-xs text-warning">Preview is approximate: {warnings.join('; ').replace(/^./, (c) => c.toLowerCase())}.</p>}
       <Facts name={file.name} parts={[pageCount(info) ?? undefined, sizeText(file.size, was)]} />
     </figure>
   )

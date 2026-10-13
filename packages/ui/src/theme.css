@@ -1,35 +1,99 @@
-/* blue-bell scale: usable as Tailwind colours (bg-blue-bell-500, text-blue-bell-700, ...) */
+/* Palette scales: usable as Tailwind colours (bg-cerulean-600, text-jet-black-700, ...).
+   jet-black is the neutral scale and cerulean the accent; the other three tint categories and status. */
 @theme {
-  --color-blue-bell-50: #e7f5fd;
-  --color-blue-bell-100: #d0ebfb;
-  --color-blue-bell-200: #a1d6f7;
-  --color-blue-bell-300: #71c2f4;
-  --color-blue-bell-400: #42adf0;
-  --color-blue-bell-500: #1399ec;
-  --color-blue-bell-600: #0f7abd;
-  --color-blue-bell-700: #0b5c8e;
-  --color-blue-bell-800: #083d5e;
-  --color-blue-bell-900: #041f2f;
-  --color-blue-bell-950: #031521;
+  --color-jet-black-50: #eef4f6;
+  --color-jet-black-100: #ddeaee;
+  --color-jet-black-200: #bbd5dd;
+  --color-jet-black-300: #99c0cc;
+  --color-jet-black-400: #77abbb;
+  --color-jet-black-500: #5596aa;
+  --color-jet-black-600: #447888;
+  --color-jet-black-700: #335a66;
+  --color-jet-black-800: #223c44;
+  --color-jet-black-900: #111e22;
+  --color-jet-black-950: #0c1518;
+
+  --color-cerulean-50: #eef5f7;
+  --color-cerulean-100: #dceaef;
+  --color-cerulean-200: #b9d5df;
+  --color-cerulean-300: #96c1cf;
+  --color-cerulean-400: #73acbf;
+  --color-cerulean-500: #5097af;
+  --color-cerulean-600: #40798c;
+  --color-cerulean-700: #305b69;
+  --color-cerulean-800: #203c46;
+  --color-cerulean-900: #101e23;
+  --color-cerulean-950: #0b1518;
+
+  --color-tropical-teal-50: #eff5f5;
+  --color-tropical-teal-100: #dfecea;
+  --color-tropical-teal-200: #bfd9d5;
+  --color-tropical-teal-300: #9fc6c1;
+  --color-tropical-teal-400: #80b3ac;
+  --color-tropical-teal-500: #609f97;
+  --color-tropical-teal-600: #4d8079;
+  --color-tropical-teal-700: #39605b;
+  --color-tropical-teal-800: #26403c;
+  --color-tropical-teal-900: #13201e;
+  --color-tropical-teal-950: #0d1615;
+
+  --color-muted-teal-50: #eff5f0;
+  --color-muted-teal-100: #e0ebe2;
+  --color-muted-teal-200: #c1d7c4;
+  --color-muted-teal-300: #a2c3a7;
+  --color-muted-teal-400: #83af89;
+  --color-muted-teal-500: #639c6c;
+  --color-muted-teal-600: #507c56;
+  --color-muted-teal-700: #3c5d41;
+  --color-muted-teal-800: #283e2b;
+  --color-muted-teal-900: #141f16;
+  --color-muted-teal-950: #0e160f;
+
+  --color-tea-green-50: #f2f6ee;
+  --color-tea-green-100: #e4eedd;
+  --color-tea-green-200: #c9dcbc;
+  --color-tea-green-300: #aecb9a;
+  --color-tea-green-400: #94ba78;
+  --color-tea-green-500: #79a857;
+  --color-tea-green-600: #618745;
+  --color-tea-green-700: #486534;
+  --color-tea-green-800: #304323;
+  --color-tea-green-900: #182211;
+  --color-tea-green-950: #11180c;
 }
 
-/* Semantic tokens: components use these, never the scale directly. light-dark() picks per colour-scheme;
-   data-theme overrides the system setting. Contrast of every text pair is checked at 4.5:1 or better. */
+/* Semantic tokens: components use these, never the scales directly. light-dark() picks per colour-scheme;
+   data-theme overrides the system setting. `node scripts/contrast.ts` checks every pair below. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(var(--color-blue-bell-50), var(--color-blue-bell-950));
-  --surface: light-dark(#ffffff, var(--color-blue-bell-900));
-  --surface-2: light-dark(var(--color-blue-bell-100), var(--color-blue-bell-800));
-  --border: light-dark(var(--color-blue-bell-200), var(--color-blue-bell-800));
-  --text: light-dark(var(--color-blue-bell-950), var(--color-blue-bell-50));
-  --text-muted: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-300));
+  --bg: light-dark(var(--color-jet-black-50), var(--color-jet-black-950));
+  --surface: light-dark(#ffffff, var(--color-jet-black-900));
+  --surface-2: light-dark(var(--color-jet-black-100), var(--color-jet-black-800));
+  --border: light-dark(var(--color-jet-black-200), var(--color-jet-black-800));
+  /* borders of inputs need 3:1 against the surface, hairlines do not */
+  --border-field: light-dark(var(--color-jet-black-500), var(--color-jet-black-600));
+  --text: light-dark(var(--color-jet-black-950), var(--color-jet-black-50));
+  --text-muted: light-dark(var(--color-jet-black-700), var(--color-jet-black-300));
   /* fills: buttons, progress, selected states */
-  --accent: light-dark(var(--color-blue-bell-600), var(--color-blue-bell-400));
-  --accent-hover: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-300));
-  --accent-soft: light-dark(var(--color-blue-bell-100), var(--color-blue-bell-800));
-  --on-accent: light-dark(#ffffff, var(--color-blue-bell-950));
+  --accent: light-dark(var(--color-cerulean-600), var(--color-cerulean-400));
+  --accent-hover: light-dark(var(--color-cerulean-700), var(--color-cerulean-300));
+  --accent-soft: light-dark(var(--color-cerulean-100), var(--color-cerulean-800));
+  --on-accent: light-dark(#ffffff, var(--color-cerulean-950));
   /* accent-coloured text and links: darker than the fill in light mode so small text stays readable */
-  --accent-ink: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-400));
+  --accent-ink: light-dark(var(--color-cerulean-700), var(--color-cerulean-400));
+  /* second half of the logo */
+  --accent-2: light-dark(var(--color-cerulean-400), var(--color-cerulean-600));
+  /* tool categories */
+  --cat-pdf: light-dark(var(--color-cerulean-700), var(--color-cerulean-400));
+  --cat-pdf-soft: light-dark(var(--color-cerulean-100), var(--color-cerulean-800));
+  --cat-image: light-dark(var(--color-muted-teal-700), var(--color-muted-teal-400));
+  --cat-image-soft: light-dark(var(--color-muted-teal-100), var(--color-muted-teal-800));
+  /* status: the palette has no red or amber, these are Tailwind's red and amber stops */
+  --success: light-dark(var(--color-muted-teal-700), var(--color-muted-teal-400));
+  --danger: light-dark(#b91c1c, #fca5a5);
+  --danger-soft: light-dark(#fef2f2, #450a0a);
+  --warning: light-dark(#92400e, #fcd34d);
+  --warning-soft: light-dark(#fffbeb, #451a03);
 }
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
@@ -39,6 +103,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--border);
+  --color-field: var(--border-field);
   --color-ink: var(--text);
   --color-muted: var(--text-muted);
   --color-accent: var(--accent);
@@ -46,4 +111,14 @@
   --color-accent-soft: var(--accent-soft);
   --color-on-accent: var(--on-accent);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-2: var(--accent-2);
+  --color-cat-pdf: var(--cat-pdf);
+  --color-cat-pdf-soft: var(--cat-pdf-soft);
+  --color-cat-image: var(--cat-image);
+  --color-cat-image-soft: var(--cat-image-soft);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
 }
