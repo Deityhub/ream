@@ -11,5 +11,6 @@ export const convertImage: Tool = {
   action: 'Convert images',
   multiple: true,
   minFiles: 1,
+  preview: 'live',
   status: 'ready',
 }

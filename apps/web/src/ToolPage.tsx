@@ -6,6 +6,9 @@ import { panels, type PanelModule } from '@ream/tools/panels'
 import { runTool, type Running } from './runtime'
 import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
+import { FileMeta, Thumb } from './Thumb'
+import { Preview } from './Preview'
+import { usePreview } from './usePreview'
 
 type State =
   | { kind: 'idle' }
@@ -20,7 +23,10 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [panel, setPanel] = useState<PanelModule | null>(null)
   const [options, setOptions] = useState<unknown>(null)
+  const [active, setActive] = useState(0)
   const job = useRef<Running | null>(null)
+  const showPreview = !!tool && tool.status === 'ready' && tool.preview !== 'none'
+  const preview = usePreview(tool, files, options, showPreview && state.kind !== 'running')
 
   useEffect(() => {
     clearHandoff()
@@ -53,15 +59,22 @@ export function ToolPage({ tool }: { tool?: Tool }) {
 
   const changeFiles = (next: File[]) => {
     setFiles(next)
+    setActive((a) => Math.min(a, Math.max(0, next.length - 1)))
     setState({ kind: 'idle' })
   }
   const move = (i: number, by: number) => {
     const next = [...files]
     ;[next[i], next[i + by]] = [next[i + by], next[i]]
     changeFiles(next)
+    setActive(active === i ? i + by : active === i + by ? i : active)
   }
 
   const run = () => {
+    // a live preview that is up to date already is the result: no need to run the engine twice
+    if (preview.state.kind === 'ready' && !preview.state.stale) {
+      setState({ kind: 'done', outputs: preview.state.outputs })
+      return
+    }
     setState({ kind: 'running', progress: 0 })
     const j = runTool(tool.id, files, options, (progress) => setState((s) => (s.kind === 'running' ? { kind: 'running', progress } : s)))
     job.current = j
@@ -89,6 +102,8 @@ export function ToolPage({ tool }: { tool?: Tool }) {
       <h1 className="text-xl font-semibold">{tool.title}</h1>
       <p className="mb-4 text-sm text-muted">{tool.description}</p>
 
+      <div className={showPreview ? 'lg:grid lg:grid-cols-2 lg:items-start lg:gap-6' : ''}>
+      <div className="min-w-0">
       <Dropzone
         accept={tool.accept}
         multiple={tool.multiple}
@@ -96,11 +111,21 @@ export function ToolPage({ tool }: { tool?: Tool }) {
       />
 
       {files.length > 0 && (
-        <ul className="mt-4 divide-y divide-line rounded-xl border border-line bg-surface">
+        <ul className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex items-center gap-2 px-4 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">{f.name}</span>
-              <span className="text-xs text-muted">{formatBytes(f.size)}</span>
+            <li key={`${f.name}-${i}`} className={`flex items-center gap-2 px-3 py-2 text-sm ${showPreview && i === active ? 'bg-accent-soft' : ''}`}>
+              <button
+                onClick={() => setActive(i)}
+                aria-label={`Preview ${f.name}`}
+                aria-current={showPreview && i === active ? 'true' : undefined}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                <Thumb file={f} />
+                <span className="min-w-0">
+                  <span className="block truncate">{f.name}</span>
+                  <FileMeta file={f} />
+                </span>
+              </button>
               {tool.multiple && files.length > 1 && (
                 <>
                   <IconButton label={`Move ${f.name} up`} icon="arrow-up" disabled={i === 0 || running} onClick={() => move(i, -1)} />
@@ -142,6 +167,13 @@ export function ToolPage({ tool }: { tool?: Tool }) {
       </Card>
 
       {state.kind === 'done' && <Result tool={tool} outputs={state.outputs} onReset={() => changeFiles([])} />}
+      </div>
+      {showPreview && (
+        <aside className="mt-4 min-w-0 lg:sticky lg:top-4 lg:mt-0">
+          <Preview tool={tool} files={files} active={active} preview={preview.state} onRefresh={preview.refresh} />
+        </aside>
+      )}
+      </div>
     </>
   )
 }

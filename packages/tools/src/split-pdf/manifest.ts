@@ -10,5 +10,6 @@ export const splitPdf: Tool = {
   action: 'Split PDF',
   multiple: false,
   minFiles: 1,
+  preview: 'live',
   status: 'ready',
 }

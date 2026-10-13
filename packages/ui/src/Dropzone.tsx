@@ -24,7 +24,7 @@ export function Dropzone({ accept, multiple = true, onFiles }: Props) {
       >
         <Icon name="upload" className="size-6 text-muted" />
         <span className="text-sm">
-          Drop {multiple ? 'files' : 'a file'} here or <span className="text-accent underline">choose {multiple ? 'files' : 'a file'}</span>
+          Drop {multiple ? 'files' : 'a file'} here or <span className="text-accent-ink underline">choose {multiple ? 'files' : 'a file'}</span>
         </span>
         <input
           type="file"

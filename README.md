@@ -30,6 +30,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
 | M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
 | M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
+| M2.5 | Previews | Blue-bell theme, file thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
 | M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
 | M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
 | M5 | PDF security | Encrypt/decrypt, visual signature |

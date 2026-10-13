@@ -11,5 +11,6 @@ export const resizeImage: Tool = {
   action: 'Resize images',
   multiple: true,
   minFiles: 1,
+  preview: 'live',
   status: 'ready',
 }

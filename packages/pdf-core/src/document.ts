@@ -49,6 +49,19 @@ export class PdfDocument {
     return root
   }
 
+  /** displayed size in points: the crop box (or media box) with the page rotation applied */
+  pageSize(page: Page): { width: number; height: number } {
+    const get = (k: string) => this.resolve(page.dict.get(k) ?? page.inherited.get(k))
+    const box = get('CropBox') ?? get('MediaBox')
+    const n = Array.isArray(box) ? box.map((v) => this.resolve(v)) : []
+    const ok = n.length === 4 && n.every((v) => typeof v === 'number')
+    const [x1, y1, x2, y2] = ok ? (n as number[]) : [0, 0, 612, 792] // US Letter when the file gives no usable box
+    const rotate = get('Rotate')
+    const turned = typeof rotate === 'number' && Math.abs(Math.round(rotate / 90)) % 2 === 1
+    const [w, h] = [Math.abs(x2 - x1), Math.abs(y2 - y1)]
+    return turned ? { width: h, height: w } : { width: w, height: h }
+  }
+
   pages(): Page[] {
     const out: Page[] = []
     const seen = new Set<PdfDict>()

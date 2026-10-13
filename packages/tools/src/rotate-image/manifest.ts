@@ -11,5 +11,6 @@ export const rotateImage: Tool = {
   action: 'Apply',
   multiple: true,
   minFiles: 1,
+  preview: 'live',
   status: 'ready',
 }

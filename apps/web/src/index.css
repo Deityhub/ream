@@ -7,3 +7,10 @@ body {
   @apply bg-canvas text-ink antialiased;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
+
+/* shows transparency in image previews */
+.checker {
+  background-color: var(--surface);
+  background-image: conic-gradient(var(--surface-2) 25%, transparent 0 50%, var(--surface-2) 0 75%, transparent 0);
+  background-size: 16px 16px;
+}

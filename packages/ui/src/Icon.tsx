@@ -12,6 +12,7 @@ const paths: Record<string, ReactNode> = {
   refresh: <path d="M21 12a9 9 0 0 0-15-6.7L3 8M3 3v5h5M3 12a9 9 0 0 0 15 6.7L21 16M16 16h5v5" />,
   droplet: <path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.4 0z" />,
   x: <path d="M18 6L6 18M6 6l12 12" />,
+  file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
   rotate: <path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" />,
   crop: <path d="M6 2v14a2 2 0 0 0 2 2h14M18 22V8a2 2 0 0 0-2-2H2" />,
   grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,

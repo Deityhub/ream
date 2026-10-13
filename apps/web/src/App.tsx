@@ -11,10 +11,10 @@ export function App() {
   const tool = id ? findTool(id) : undefined
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
+    <div className={`mx-auto px-4 py-6 ${id ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <header className="mb-6 flex items-center gap-3">
         <a href="#/" className="text-lg font-semibold tracking-tight">Ream</a>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1 text-xs text-accent">
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1 text-xs text-accent-ink">
           <Icon name="lock" className="size-3.5" /> Files stay on your device
         </span>
         <ThemeToggle />

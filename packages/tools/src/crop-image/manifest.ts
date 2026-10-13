@@ -11,5 +11,6 @@ export const cropImage: Tool = {
   action: 'Crop image',
   multiple: false,
   minFiles: 1,
+  preview: 'none',
   status: 'ready',
 }

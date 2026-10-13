@@ -1,16 +1,35 @@
-/* Semantic tokens. light-dark() picks per colour-scheme; data-theme overrides the system setting. */
+/* blue-bell scale: usable as Tailwind colours (bg-blue-bell-500, text-blue-bell-700, ...) */
+@theme {
+  --color-blue-bell-50: #e7f5fd;
+  --color-blue-bell-100: #d0ebfb;
+  --color-blue-bell-200: #a1d6f7;
+  --color-blue-bell-300: #71c2f4;
+  --color-blue-bell-400: #42adf0;
+  --color-blue-bell-500: #1399ec;
+  --color-blue-bell-600: #0f7abd;
+  --color-blue-bell-700: #0b5c8e;
+  --color-blue-bell-800: #083d5e;
+  --color-blue-bell-900: #041f2f;
+  --color-blue-bell-950: #031521;
+}
+
+/* Semantic tokens: components use these, never the scale directly. light-dark() picks per colour-scheme;
+   data-theme overrides the system setting. Contrast of every text pair is checked at 4.5:1 or better. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f4f8fe, #0a1424);
-  --surface: light-dark(#ffffff, #101e36);
-  --surface-2: light-dark(#eaf1fc, #172a48);
-  --border: light-dark(#d3e1f7, #25395c);
-  --text: light-dark(#0b1f3a, #e6eefb);
-  --text-muted: light-dark(#51668a, #8ea3c6);
-  --accent: light-dark(#1f6feb, #5b9bff);
-  --accent-hover: light-dark(#1859c0, #7db1ff);
-  --accent-soft: light-dark(#dce9fd, #1b3566);
-  --on-accent: light-dark(#ffffff, #06142b);
+  --bg: light-dark(var(--color-blue-bell-50), var(--color-blue-bell-950));
+  --surface: light-dark(#ffffff, var(--color-blue-bell-900));
+  --surface-2: light-dark(var(--color-blue-bell-100), var(--color-blue-bell-800));
+  --border: light-dark(var(--color-blue-bell-200), var(--color-blue-bell-800));
+  --text: light-dark(var(--color-blue-bell-950), var(--color-blue-bell-50));
+  --text-muted: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-300));
+  /* fills: buttons, progress, selected states */
+  --accent: light-dark(var(--color-blue-bell-600), var(--color-blue-bell-400));
+  --accent-hover: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-300));
+  --accent-soft: light-dark(var(--color-blue-bell-100), var(--color-blue-bell-800));
+  --on-accent: light-dark(#ffffff, var(--color-blue-bell-950));
+  /* accent-coloured text and links: darker than the fill in light mode so small text stays readable */
+  --accent-ink: light-dark(var(--color-blue-bell-700), var(--color-blue-bell-400));
 }
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
@@ -26,4 +45,5 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
   --color-on-accent: var(--on-accent);
+  --color-accent-ink: var(--accent-ink);
 }

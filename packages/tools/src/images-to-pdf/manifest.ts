@@ -10,5 +10,6 @@ export const imagesToPdf: Tool = {
   action: 'Create PDF',
   multiple: true,
   minFiles: 1,
+  preview: 'live',
   status: 'soon',
 }
