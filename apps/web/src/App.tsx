@@ -11,7 +11,7 @@ export function App() {
   const tool = id ? findTool(id) : undefined
 
   return (
-    <div className={`mx-auto px-4 py-6 ${id ? 'max-w-6xl' : 'max-w-4xl'}`}>
+    <div className={`mx-auto px-4 py-6 ${id ? 'max-w-[1400px]' : 'max-w-5xl'}`}>
       <header className="mb-6 flex items-center gap-3">
         <a href="#/" className="flex items-center gap-2 text-xl font-medium tracking-tight focus-visible:outline-2 focus-visible:outline-accent">
           <Logo size={28} /> Ream

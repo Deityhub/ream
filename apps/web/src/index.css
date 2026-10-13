@@ -9,6 +9,8 @@ body {
   font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+input { accent-color: var(--accent); }
+
 /* Tailwind v4 resets buttons to the default cursor */
 button:not(:disabled), [role='tab']:not(:disabled) { cursor: pointer; }
 

@@ -30,7 +30,8 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
 | M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
 | M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
-| M2.5 ✅ | Previews | Blue-bell theme, file thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
+| M2.5 ✅ | Previews | File thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
+| M2.6 ✅ | Look and feel | Teal palette (jet-black, cerulean, tropical-teal, muted-teal, tea-green), Inter font, split-sheet logo, drop-first home, three-region tool page (files, preview, options) |
 | M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
 | M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
 | M5 | PDF security | Encrypt/decrypt, visual signature |
@@ -74,3 +75,11 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - Not drawn yet: embedded font shapes (stage R3: own TrueType, CFF and Type 1 outline readers), vertical writing, text used as a clipping path, CJK fonts that only have a predefined CMap, tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (a grey box marks where they go).
 - CMYK uses a polynomial fit to a print profile, so it is close to Acrobat and macOS but not identical.
 - `node scripts/render-compare.ts` renders a corpus of feature PDFs (including a text sheet with the standard fonts and every text operator) and the real fixtures with our renderer and with macOS CoreGraphics (`sips`), writes side-by-side sheets with a difference image, and fails if the pixel mismatch grows past the recorded limits. `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so those are checked against Chromium's PDF engine by eye instead.
+
+## Design
+
+- **Palette**: `packages/ui/src/theme.css` holds the five colour scales. Components only use the semantic tokens (`bg-surface`, `text-muted`, `bg-accent`, `border-field`, `text-danger`, ...), which switch between light and dark with `light-dark()`. jet-black is the neutral scale and cerulean the accent; muted-teal tints image tools and success. The palette has no red or amber, so danger and warning use Tailwind's red and amber stops.
+- `node scripts/contrast.ts` checks every token pair (4.5:1 for text, 3:1 for icons and input borders) in both modes and fails if one drops below.
+- **Font**: Inter, bundled through `@fontsource-variable/inter` so it works offline and nothing loads from a CDN.
+- **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` and `apps/desktop/build/icon.{svg,png}` are the static versions. `.icns` and `.ico` packaging belongs to M8.
+- Not done: page thumbnails strip in the tool page (waits for M3 tools whose output keeps one page per input page), sidebar and command palette (when the tool list outgrows the home grid).

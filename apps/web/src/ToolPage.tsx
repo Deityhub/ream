@@ -128,84 +128,101 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const missing = tool.minFiles - files.length
   const running = state.kind === 'running'
 
+  const empty = files.length === 0
+  // three regions at xl (files | preview | options), two at lg, stacked below; tools without a preview (crop) keep the options wide
+  const grid = empty
+    ? 'mx-auto max-w-2xl'
+    : showPreview
+      ? 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] xl:grid-cols-[18rem_minmax(0,1fr)_18rem]'
+      : 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'
+  const railPos = empty ? '' : 'lg:col-start-1 lg:row-start-1'
+  const optionsPos = showPreview ? 'order-2 lg:col-start-1 lg:row-start-2 xl:order-3 xl:col-start-3 xl:row-start-1' : 'lg:col-start-2 lg:row-start-1 lg:row-span-2'
+  const canvasPos = 'order-3 lg:col-start-2 lg:row-start-1 lg:row-span-2 xl:order-2 xl:row-span-1'
+
   return (
     <>
       {back}
-      <h1 className="text-xl font-semibold">{tool.title}</h1>
-      <p className="mb-4 text-sm text-muted">{tool.description}</p>
+      <h1 className="text-2xl font-medium tracking-tight">{tool.title}</h1>
+      <p className="mb-6 text-sm text-muted">{tool.description}</p>
 
-      <div className={showPreview ? 'lg:grid lg:grid-cols-2 lg:items-start lg:gap-6' : ''}>
-      <div className="min-w-0">
-      <Dropzone
-        accept={tool.accept}
-        multiple={tool.multiple}
-        onFiles={(added) => changeFiles(tool.multiple ? [...files, ...added] : added)}
-      />
+      <div className={`${grid} items-start`}>
+        <div className={`min-w-0 space-y-3 ${railPos}`}>
+          <Dropzone
+            accept={tool.accept}
+            multiple={tool.multiple}
+            compact={!empty}
+            onFiles={(added) => changeFiles(tool.multiple ? [...files, ...added] : added)}
+          />
+          {!empty && (
+            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} className={`flex items-center gap-1 px-3 py-2 text-sm ${showPreview && i === active ? 'bg-accent-soft' : ''}`}>
+                  <button
+                    onClick={() => setActive(i)}
+                    aria-label={`Preview ${f.name}`}
+                    aria-current={showPreview && i === active ? 'true' : undefined}
+                    title={f.name}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-accent"
+                  >
+                    <Thumb file={f} />
+                    <span className="min-w-0">
+                      <span className="block truncate">{f.name}</span>
+                      <FileMeta file={f} />
+                    </span>
+                  </button>
+                  {tool.multiple && files.length > 1 && (
+                    <>
+                      <IconButton label={`Move ${f.name} up`} icon="arrow-up" disabled={i === 0 || running} onClick={() => move(i, -1)} />
+                      <IconButton label={`Move ${f.name} down`} icon="arrow-down" disabled={i === files.length - 1 || running} onClick={() => move(i, 1)} />
+                    </>
+                  )}
+                  <IconButton label={`Remove ${f.name}`} icon="x" disabled={running} onClick={() => changeFiles(files.filter((_, j) => j !== i))} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {empty && soon && <p className="mt-3 text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>}
+        </div>
 
-      {files.length > 0 && (
-        <ul className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-          {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className={`flex items-center gap-2 px-3 py-2 text-sm ${showPreview && i === active ? 'bg-accent-soft' : ''}`}>
-              <button
-                onClick={() => setActive(i)}
-                aria-label={`Preview ${f.name}`}
-                aria-current={showPreview && i === active ? 'true' : undefined}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-accent"
-              >
-                <Thumb file={f} />
-                <span className="min-w-0">
-                  <span className="block truncate">{f.name}</span>
-                  <FileMeta file={f} />
-                </span>
-              </button>
-              {tool.multiple && files.length > 1 && (
+        {!empty && (
+          <div className={`min-w-0 space-y-4 ${optionsPos}`}>
+            <Card className="space-y-4">
+              {soon ? (
+                <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
+              ) : (
                 <>
-                  <IconButton label={`Move ${f.name} up`} icon="arrow-up" disabled={i === 0 || running} onClick={() => move(i, -1)} />
-                  <IconButton label={`Move ${f.name} down`} icon="arrow-down" disabled={i === files.length - 1 || running} onClick={() => move(i, 1)} />
+                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} />}
+                  {running ? (
+                    <Progress value={state.progress} onCancel={cancel} />
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
+                      {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
+                      {!asking && missing > 0 && (
+                        <span className="text-sm text-muted">
+                          {files.length === 0 ? `Add ${tool.minFiles === 1 ? 'a file' : `at least ${tool.minFiles} files`} to start.` : `Add ${missing} more ${missing === 1 ? 'file' : 'files'} to start.`}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
-              <IconButton label={`Remove ${f.name}`} icon="x" disabled={running} onClick={() => changeFiles(files.filter((_, j) => j !== i))} />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <Card className="mt-4 space-y-4">
-        {soon ? (
-          <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
-        ) : (
-          <>
-            {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} />}
-            {running ? (
-              <Progress value={state.progress} onCancel={cancel} />
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
-                {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
-                {!asking && missing > 0 && (
-                  <span className="text-sm text-muted">
-                    {files.length === 0 ? `Add ${tool.minFiles === 1 ? 'a file' : `at least ${tool.minFiles} files`} to start.` : `Add ${missing} more ${missing === 1 ? 'file' : 'files'} to start.`}
-                  </span>
-                )}
-              </div>
-            )}
-          </>
+              {state.kind === 'error' && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+                  <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
+                  {state.message}
+                </p>
+              )}
+            </Card>
+            {state.kind === 'done' && <Result tool={tool} outputs={state.outputs} onReset={() => changeFiles([])} />}
+          </div>
         )}
-        {state.kind === 'error' && (
-          <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-            <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
-            {state.message}
-          </p>
-        )}
-      </Card>
 
-      {state.kind === 'done' && <Result tool={tool} outputs={state.outputs} onReset={() => changeFiles([])} />}
-      </div>
-      {showPreview && (
-        <aside className="mt-4 min-w-0 lg:sticky lg:top-4 lg:mt-0">
-          <Preview tool={tool} files={files} active={active} preview={preview.state} onRefresh={preview.refresh} />
-        </aside>
-      )}
+        {!empty && showPreview && (
+          <aside className={`min-w-0 xl:sticky xl:top-4 ${canvasPos}`}>
+            <Preview tool={tool} files={files} active={active} preview={preview.state} onRefresh={preview.refresh} />
+          </aside>
+        )}
       </div>
       {asking && (
         <PasswordDialog
@@ -252,7 +269,7 @@ function Result({ tool, outputs, onReset }: { tool: Tool; outputs: FileData[]; o
   )
   const total = outputs.reduce((n, o) => n + o.bytes.length, 0)
   return (
-    <Card className="mt-4 space-y-4" aria-label="Result">
+    <Card className="space-y-4" aria-label="Result">
       <p role="status" className="flex items-center gap-2 text-sm font-medium">
         <Icon name="check" className="size-4 text-accent" />
         Done: {outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}

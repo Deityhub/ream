@@ -78,7 +78,7 @@ function ResultView({ tool, files, preview, onRefresh }: { tool: Tool; files: Fi
   }
   if (preview.kind === 'error') {
     return (
-      <p role="status" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+      <p role="status" className="flex items-start gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-ink">
         <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
         Can't preview yet: {preview.message}
       </p>
@@ -136,7 +136,7 @@ function ImageView({ file, was }: { file: File; was?: number }) {
             src={url}
             alt={`Preview of ${file.name}`}
             onLoad={(e) => setDims(`${e.currentTarget.naturalWidth} × ${e.currentTarget.naturalHeight} px`)}
-            className="checker max-h-[60vh] max-w-full object-contain"
+            className="checker max-h-[calc(100vh-14rem)] max-w-full object-contain"
           />
         )}
       </div>
@@ -157,7 +157,7 @@ function PdfView({ file, was }: { file: File; was?: number }) {
       {info !== 'loading' && info.kind === 'error' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">{info.message}</p>}
       {info !== 'loading' && info.kind === 'encrypted' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">This PDF is password protected.</p>}
       {info !== 'loading' && info.kind === 'ok' && (
-        <div className="max-h-[70vh] space-y-3 overflow-auto rounded-lg border border-line bg-surface-2 p-3">
+        <div className="max-h-[calc(100vh-10rem)] space-y-3 overflow-auto rounded-lg border border-line bg-surface-2 p-3">
           {info.pages.map((size, i) => (
             <LazyPdfPage key={i} file={file} page={i} size={size} renderWidth={PAGE_WIDTH} onWarnings={noteWarnings} />
           ))}
