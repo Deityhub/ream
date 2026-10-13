@@ -19,7 +19,7 @@ export function App() {
         </span>
         <ThemeToggle />
       </header>
-      {id ? <ToolPage tool={tool} /> : <Home />}
+      {id ? <ToolPage key={id} tool={tool} /> : <Home />}
     </div>
   )
 }

@@ -1,28 +1,36 @@
-import { useEffect, useState } from 'react'
-import { Icon } from '@ream/ui'
+import { useEffect, useState } from "react";
+import { Icon } from "@ream/ui";
 
-const modes = ['system', 'light', 'dark'] as const
-type Mode = (typeof modes)[number]
-const icon: Record<Mode, string> = { system: 'monitor', light: 'sun', dark: 'moon' }
+const modes = ["system", "light", "dark"] as const;
+type Mode = (typeof modes)[number];
+const icon: Record<Mode, string> = {
+  system: "monitor",
+  light: "sun",
+  dark: "moon",
+};
 
 const saved = (): Mode => {
   try {
-    const v = localStorage.getItem('ream-theme')
-    return modes.includes(v as Mode) ? (v as Mode) : 'system'
+    const v = localStorage.getItem("ream-theme") as Mode;
+    return modes.includes(v) ? v : "system";
   } catch {
-    return 'system'
+    return "system";
   }
-}
+};
 
 export function ThemeToggle() {
-  const [mode, setMode] = useState<Mode>(saved)
+  const [mode, setMode] = useState<Mode>(saved);
   useEffect(() => {
-    const root = document.documentElement
-    if (mode === 'system') root.removeAttribute('data-theme')
-    else root.dataset.theme = mode
-    try { localStorage.setItem('ream-theme', mode) } catch { /* storage blocked */ }
-  }, [mode])
-  const next = modes[(modes.indexOf(mode) + 1) % modes.length]
+    const root = document.documentElement;
+    if (mode === "system") root.removeAttribute("data-theme");
+    else root.dataset.theme = mode;
+    try {
+      localStorage.setItem("ream-theme", mode);
+    } catch {
+      /* storage blocked */
+    }
+  }, [mode]);
+  const next = modes[(modes.indexOf(mode) + 1) % modes.length];
   return (
     <button
       onClick={() => setMode(next)}
@@ -31,5 +39,5 @@ export function ThemeToggle() {
     >
       <Icon name={icon[mode]} className="size-4" />
     </button>
-  )
+  );
 }

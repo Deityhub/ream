@@ -527,17 +527,30 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ream/pdf-core@workspace:*, @ream/pdf-core@workspace:packages/pdf-core":
+  version: 0.0.0-use.local
+  resolution: "@ream/pdf-core@workspace:packages/pdf-core"
+  dependencies:
+    "@ream/core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ream/tools@workspace:*, @ream/tools@workspace:packages/tools":
   version: 0.0.0-use.local
   resolution: "@ream/tools@workspace:packages/tools"
   dependencies:
     "@ream/core": "workspace:*"
+    "@ream/pdf-core": "workspace:*"
+  peerDependencies:
+    react: "*"
   languageName: unknown
   linkType: soft
 
 "@ream/ui@workspace:*, @ream/ui@workspace:packages/ui":
   version: 0.0.0-use.local
   resolution: "@ream/ui@workspace:packages/ui"
+  dependencies:
+    "@ream/core": "workspace:*"
   peerDependencies:
     react: "*"
   languageName: unknown

@@ -7,5 +7,8 @@ export const mergePdf: Tool = {
   category: 'pdf',
   icon: 'files',
   accept: ['.pdf'],
-  status: 'soon',
+  action: 'Merge PDFs',
+  multiple: true,
+  minFiles: 2,
+  status: 'ready',
 }

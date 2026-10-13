@@ -49,7 +49,10 @@ export function Home() {
             <a key={t.id} href={`#/tool/${t.id}`} className="rounded-xl focus-visible:outline-2 focus-visible:outline-accent">
               <Card className="h-full hover:bg-surface-2">
                 <Icon name={t.icon} className="mb-2 size-5 text-accent" />
-                <p className="text-sm font-medium">{t.title}</p>
+                <p className="text-sm font-medium">
+                  {t.title}
+                  {t.status === 'soon' && <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-normal text-muted">Soon</span>}
+                </p>
                 <p className="text-xs text-muted">{t.description}</p>
               </Card>
             </a>

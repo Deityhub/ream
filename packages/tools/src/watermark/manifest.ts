@@ -7,5 +7,8 @@ export const watermark: Tool = {
   category: 'pdf',
   icon: 'droplet',
   accept: ['.pdf'],
+  action: 'Add watermark',
+  multiple: false,
+  minFiles: 1,
   status: 'soon',
 }

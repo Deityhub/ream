@@ -7,5 +7,8 @@ export const imagesToPdf: Tool = {
   category: 'pdf',
   icon: 'image',
   accept: ['image/jpeg', 'image/png'],
+  action: 'Create PDF',
+  multiple: true,
+  minFiles: 1,
   status: 'soon',
 }

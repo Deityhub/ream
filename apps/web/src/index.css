@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '@ream/ui/theme.css';
 @source '../../../packages/ui/src';
+@source '../../../packages/tools/src';
 
 body {
   @apply bg-canvas text-ink antialiased;

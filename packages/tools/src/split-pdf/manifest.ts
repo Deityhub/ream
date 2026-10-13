@@ -7,5 +7,8 @@ export const splitPdf: Tool = {
   category: 'pdf',
   icon: 'scissors',
   accept: ['.pdf'],
-  status: 'soon',
+  action: 'Split PDF',
+  multiple: false,
+  minFiles: 1,
+  status: 'ready',
 }

@@ -7,6 +7,9 @@
     ".": "./src/index.ts",
     "./theme.css": "./src/theme.css"
   },
+  "dependencies": {
+    "@ream/core": "workspace:*"
+  },
   "peerDependencies": {
     "react": "*"
   }

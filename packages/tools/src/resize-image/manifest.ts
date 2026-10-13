@@ -7,5 +7,8 @@ export const resizeImage: Tool = {
   category: 'image',
   icon: 'resize',
   accept: ['image/*'],
+  action: 'Resize images',
+  multiple: true,
+  minFiles: 1,
   status: 'soon',
 }

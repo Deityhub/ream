@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./runners": "./src/runners.ts",
+    "./panels": "./src/panels.ts"
   },
   "dependencies": {
-    "@ream/core": "workspace:*"
+    "@ream/core": "workspace:*",
+    "@ream/pdf-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "*"
   }
 }

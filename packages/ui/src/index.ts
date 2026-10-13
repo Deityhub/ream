@@ -1,4 +1,4 @@
-export { Icon } from './Icon'
-export { Button } from './Button'
-export { Card } from './Card'
-export { Dropzone } from './Dropzone'
+export { Icon } from './Icon.tsx'
+export { Button } from './Button.tsx'
+export { Card } from './Card.tsx'
+export { Dropzone } from './Dropzone.tsx'

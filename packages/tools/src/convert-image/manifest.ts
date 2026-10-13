@@ -7,5 +7,8 @@ export const convertImage: Tool = {
   category: 'image',
   icon: 'refresh',
   accept: ['image/*'],
+  action: 'Convert images',
+  multiple: true,
+  minFiles: 1,
   status: 'soon',
 }
