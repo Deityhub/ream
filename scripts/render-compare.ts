@@ -126,6 +126,31 @@ q 0.866 0.5 -0.5 0.866 120 30 cm /F1 Do Q`,
       12: '<< /Type /Annot /Subtype /Square /Rect [140 100 190 150] /F 2 /AP << /N 11 0 R >> >>', // hidden: not drawn
     },
   },
+  text: {
+    content: `
+BT /F1 18 Tf 10 180 Td (Helvetica 18pt) Tj ET
+BT /F2 14 Tf 10 160 Td (Bold: The quick brown fox) Tj ET
+BT /F3 14 Tf 10 142 Td (Times Roman jumps over) Tj ET
+BT /F4 14 Tf 10 125 Td (Times Italic the lazy dog) Tj ET
+BT /F5 12 Tf 10 108 Td (Courier 0123456789) Tj ET
+BT /F6 12 Tf 10 94 Td (Courier Bold) Tj ET
+BT /F1 10 Tf 10 78 Td 3 Tc (Char spacing) Tj 0 Tc ET
+BT /F1 10 Tf 10 66 Td 8 Tw (Word spacing here ok) Tj 0 Tw ET
+BT /F1 10 Tf 10 54 Td 60 Tz (Horizontal scale 60) Tj 100 Tz ET
+BT /F1 10 Tf 10 42 Td [(K) 120 (e) -80 (rn) 60 (ing)] TJ ET
+BT /F1 10 Tf 10 30 Td (Rise ) Tj 4 Ts (up) Tj -4 Ts (down) Tj 0 Ts ET
+1 0 0 rg BT /F2 12 Tf 110 30 Td (Red text) Tj ET
+0 0 1 RG 0.5 w BT /F2 22 Tf 1 Tr 100 6 Td (Outline) Tj ET
+0 g BT /F1 12 Tf 0.866 0.5 -0.5 0.866 150 90 Tm (Rotated 30) Tj ET
+BT /F1 11 Tf 10 14 Td (Caf\\351 na\\357ve \\200 \\223quotes\\224) Tj ET`,
+    resources: `/Font <<
+ /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+ /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+ /F3 << /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>
+ /F4 << /Type /Font /Subtype /Type1 /BaseFont /Times-Italic /Encoding /WinAnsiEncoding >>
+ /F5 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+ /F6 << /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >> >>`,
+  },
   cropOffset: {
     content: '0.9 0.9 1 rg 0 0 300 300 re f 1 0 0 rg 100 100 50 50 re f 0 g 2 w 80 80 90 90 re S',
     box: '[0 0 300 300]',
@@ -168,10 +193,10 @@ async function main() {
   console.log(`\nsheets (ours | reference | difference) are in ${out}`)
 
   // Regression guard: the most pixels that may differ noticeably from CoreGraphics, with a little headroom over today's
-  // numbers. Not checked: `annotation` and `cropOffset` (sips draws those wrongly; ours matches Chromium's engine), and the
-  // real fixtures (their text isn't drawn until stage R2). The remaining `shapes` gap is CMYK: macOS and our fit use
-  // different print profiles.
-  const limits: Record<string, number> = { shapes: 5.5, starFill: 1, clip: 1, alpha: 2, shading: 1, images: 1.5, form: 1, jpeg: 1 }
+  // numbers. Not checked: `annotation` and `cropOffset` (sips draws those wrongly; ours matches Chromium's engine). The
+  // remaining `shapes` gap is CMYK (macOS and our fit use different print profiles); text and the fixtures differ only in
+  // letter shapes, since embedded fonts are drawn with similar system fonts.
+  const limits: Record<string, number> = { shapes: 5.5, starFill: 1, clip: 1, alpha: 2, shading: 1, images: 1.5, form: 1, jpeg: 1, text: 8, 'fixture-cups': 4, 'fixture-chromium': 3 }
   const over = results.filter((x) => limits[x.name] !== undefined && (x.error || x.badPercent > limits[x.name]))
   for (const x of over) console.error(`FAIL ${x.name}: ${x.error ?? `${x.badPercent}% differ, limit ${limits[x.name]}%`}`)
   if (over.length) process.exitCode = 1

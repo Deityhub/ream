@@ -22,6 +22,13 @@ export function fakeCtx() {
     {},
     {
       get: (_t, name: string) => {
+        // every character is half an em wide at whatever size the last `font` assignment set
+        if (name === 'measureText') {
+          return (text: string) => {
+            const font = [...calls].reverse().find((c) => c[0] === 'set' && c[1] === 'font')?.[2]
+            return { width: text.length * 0.5 * parseFloat(/(\d+(?:\.\d+)?)px/.exec(String(font))?.[1] ?? '10') }
+          }
+        }
         if (name === 'createLinearGradient' || name === 'createRadialGradient') {
           return (...a: unknown[]) => (calls.push([name, ...a]), gradient())
         }

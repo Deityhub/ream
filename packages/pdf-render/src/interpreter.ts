@@ -3,6 +3,7 @@ import {
   PdfKeyword,
   PdfName,
   PdfStream,
+  PdfString,
   decodeStream,
   isDict,
   type Page,
@@ -11,6 +12,7 @@ import {
   type PdfObj,
 } from '@ream/pdf-core'
 import { DeviceCMYK, DeviceGray, DeviceRGB, css, loadColorSpace, type ColorSpace, type RGB } from './color.ts'
+import { fallbackFont, loadFont, type Font, type Glyph } from './font.ts'
 import { numbers } from './function.ts'
 import { rasterizeImage, type Raster } from './image.ts'
 import { IDENTITY, apply, mul, scaleOf, type Matrix } from './matrix.ts'
@@ -44,6 +46,15 @@ class GState {
   fillAlpha = 1
   strokeAlpha = 1
   blend: GlobalCompositeOperation = 'source-over'
+  // text state (saved and restored by q and Q like the rest)
+  charSpace = 0
+  wordSpace = 0
+  hScale = 1
+  leading = 0
+  rise = 0
+  renderMode = 0
+  font: Font | null = null
+  fontSize = 0
 
   clone(): GState {
     const g = new GState()
@@ -70,6 +81,11 @@ export class Interpreter {
   private cur: [number, number] = [0, 0]
   private start: [number, number] = [0, 0]
   private formDepth = 0
+  // the text object: current text matrix and line matrix (not part of the graphics state)
+  private tm: Matrix = IDENTITY
+  private tlm: Matrix = IDENTITY
+  private fontString = ''
+  private measured = new Map<string, number>()
   private images = new Map<PdfStream, Promise<Raster | 'unsupported'>>()
 
   constructor(doc: PdfDocument, ctx: Ctx2D, platform: Platform, base: Matrix, signal?: AbortSignal) {
@@ -98,6 +114,7 @@ export class Interpreter {
     const prev = this.stack.pop()
     if (!prev) return // an unbalanced Q: ignore it
     this.ctx.restore()
+    this.fontString = '' // the canvas font is part of the state that was just restored, so it must be set again
     this.state = prev
   }
 
@@ -105,6 +122,7 @@ export class Interpreter {
   reset(ctm: Matrix) {
     this.state = new GState()
     this.state.ctm = ctm
+    this.fontString = ''
     this.applyCtm()
     this.ctx.beginPath()
   }
@@ -206,9 +224,43 @@ export class Interpreter {
       // things drawn by name
       case 'Do': await this.xobject(a[0], res); break
 
-      // text arrives with the font engine (stage R2); until then say the page is incomplete
-      case 'Tj': case 'TJ': case "'": case '"': this.warn("Text isn't drawn yet"); break
-      default: break // BT ET Tf Td ... marked content, compatibility and other operators have no drawing effect here
+      // text
+      case 'BT': this.tm = this.tlm = IDENTITY; break
+      case 'ET': break
+      case 'Tc': s.charSpace = n(0); break
+      case 'Tw': s.wordSpace = n(0); break
+      case 'Tz': s.hScale = n(0) / 100; break
+      case 'TL': s.leading = n(0); break
+      case 'Ts': s.rise = n(0); break
+      case 'Tr': s.renderMode = n(0); break
+      case 'Tf': {
+        const f = a[0] instanceof PdfName ? this.lookup(res, 'Font', a[0].value) : null
+        s.font = f === null ? fallbackFont : await loadFont(this.doc, f)
+        s.fontSize = n(1)
+        break
+      }
+      case 'Td': this.moveLine(n(0), n(1)); break
+      case 'TD': s.leading = -n(1); this.moveLine(n(0), n(1)); break
+      case 'Tm': this.tm = this.tlm = [n(0), n(1), n(2), n(3), n(4), n(5)]; break
+      case 'T*': this.moveLine(0, -s.leading); break
+      case 'Tj': if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
+      case "'": this.moveLine(0, -s.leading); if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
+      case '"':
+        s.wordSpace = n(0)
+        s.charSpace = n(1)
+        this.moveLine(0, -s.leading)
+        if (a[2] instanceof PdfString) await this.show(a[2].bytes, res)
+        break
+      case 'TJ':
+        if (Array.isArray(a[0])) {
+          for (const item of a[0]) {
+            if (item instanceof PdfString) await this.show(item.bytes, res)
+            // a number moves the text position back (positive) or forward, in thousandths of the font size
+            else if (typeof item === 'number') this.tm = mul([1, 0, 0, 1, (-item / 1000) * s.fontSize * s.hScale, 0], this.tm)
+          }
+        }
+        break
+      default: break // marked content, compatibility and other operators have no drawing effect here
     }
   }
 
@@ -322,6 +374,106 @@ export class Interpreter {
     ctx.fillStyle = makeGradient(ctx, shading)
     ctx.fillRect(-1e7, -1e7, 2e7, 2e7)
     ctx.restore()
+  }
+
+  // ---------- text ----------
+
+  private moveLine(tx: number, ty: number) {
+    this.tlm = mul([1, 0, 0, 1, tx, ty], this.tlm)
+    this.tm = this.tlm
+  }
+
+  /** width in pixels of `text` in the given canvas font, measured once */
+  private measure(font: string, text: string): number {
+    const key = `${font}|${text}`
+    let w = this.measured.get(key)
+    if (w === undefined) this.measured.set(key, (w = this.ctx.measureText(text).width))
+    return w
+  }
+
+  /**
+   * Draw a shown string glyph by glyph. Each glyph goes where the PDF puts it, and the position advances by the PDF's
+   * own width for it, so layout is exact even though the letter shapes come from a similar system font.
+   */
+  private async show(bytes: Uint8Array, res: PdfDict) {
+    const { ctx, state: s } = this
+    const font = s.font
+    if (!font) return
+    const sign = s.fontSize < 0 ? -1 : 1
+    const size = Math.abs(s.fontSize) || 1
+    // Canvas text misrenders at tiny sizes (Quartz writes "1 Tf" and scales with the text matrix), so draw at a
+    // comfortable size and let the transform scale it back: k is that scale.
+    const drawSize = Math.min(100, Math.max(16, size))
+    const k = size / drawSize
+    const glyphs = font.decode(bytes)
+    for (const note of font.notes) this.warn(note)
+    const mode = s.renderMode
+    if (mode >= 4) this.warn("Text used as a clipping path isn't applied")
+    const fillIt = mode === 0 || mode === 2 || mode === 4 || mode === 6
+    const strokeIt = mode === 1 || mode === 2 || mode === 5 || mode === 6
+
+    for (const g of glyphs) {
+      let advance = g.width ?? 0
+      if (font.type3) {
+        if (mode !== 3) await this.type3Glyph(font, g, res)
+      } else if (g.text) {
+        const fontString = `${font.italic ? 'italic ' : ''}${font.bold ? 'bold ' : ''}${drawSize}px ${font.family}`
+        if (this.fontString !== fontString) {
+          ctx.font = fontString
+          this.fontString = fontString
+        }
+        const natural = this.measure(fontString, g.text)
+        if (g.width === null) advance = (natural / drawSize) * 1000
+        if ((fillIt || strokeIt) && g.text.trim() !== '') {
+          // a stand-in font's letters are rarely as wide as the original's: squeeze or stretch each to its slot
+          let fit = 1
+          if (g.width !== null && natural > 0) fit = Math.min(2, Math.max(0.5, ((g.width / 1000) * drawSize) / natural))
+          if (Math.abs(fit - 1) < 0.02) fit = 1
+          // canvas text is y-down, PDF space is y-up: the glyph carries its own vertical flip
+          const glyph: Matrix = [s.hScale * sign * fit * k, 0, 0, -sign * k, 0, s.rise]
+          const m = mul(glyph, mul(this.tm, mul(s.ctm, this.base)))
+          ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5])
+          ctx.globalCompositeOperation = s.blend
+          if (fillIt) {
+            ctx.globalAlpha = s.fillAlpha
+            ctx.fillStyle = css(s.fill.rgb)
+            ctx.fillText(g.text, 0, 0)
+          }
+          if (strokeIt) {
+            ctx.globalAlpha = s.strokeAlpha
+            ctx.strokeStyle = css(s.stroke.rgb)
+            ctx.lineWidth = (s.lineWidth * scaleOf(mul(s.ctm, this.base))) / (scaleOf(m) || 1)
+            ctx.strokeText(g.text, 0, 0)
+          }
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+          this.applyCtm()
+        }
+      }
+      const tx = ((advance / 1000) * s.fontSize + s.charSpace + (g.space ? s.wordSpace : 0)) * s.hScale
+      this.tm = mul([1, 0, 0, 1, tx, 0], this.tm)
+    }
+  }
+
+  /** a Type 3 glyph is a little content stream, drawn in glyph space scaled up by the font matrix and size */
+  private async type3Glyph(font: Font, g: Glyph, res: PdfDict) {
+    const t3 = font.type3!
+    const proc = g.name === undefined ? null : this.doc.resolve(t3.procs.get(g.name) ?? null)
+    if (!(proc instanceof PdfStream) || this.formDepth >= MAX_FORM_DEPTH) return
+    const { tm, tlm } = this
+    this.formDepth++
+    this.save()
+    try {
+      const s = this.state
+      s.ctm = mul(t3.matrix, mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(tm, s.ctm)))
+      this.applyCtm()
+      await this.run(await decodeStream(proc), t3.resources ?? res)
+    } finally {
+      this.restore()
+      this.formDepth--
+      this.tm = tm
+      this.tlm = tlm
+    }
   }
 
   // ---------- XObjects ----------

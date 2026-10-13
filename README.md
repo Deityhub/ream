@@ -30,7 +30,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
 | M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
 | M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
-| M2.5 | Previews | Blue-bell theme, file thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
+| M2.5 ✅ | Previews | Blue-bell theme, file thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
 | M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
 | M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
 | M5 | PDF security | Encrypt/decrypt, visual signature |
@@ -67,9 +67,10 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 
 ## PDF previews (our own renderer)
 
-`packages/pdf-render` draws PDF pages onto a canvas (OffscreenCanvas in the preview worker): paths, fills, strokes, dashes, clipping, colour spaces (gray, RGB, CMYK, ICC by component count, Lab, Indexed, Separation, DeviceN), PDF functions (types 0, 2, 3, 4), images (raw, Flate, LZW, JPEG, with soft masks, colour-key masks and stencil masks), inline images, Form XObjects, axial and radial shadings and shading patterns, transparency and blend modes, and annotation appearances. Text is stage R2 and until then pages show a "Preview is approximate" note.
+`packages/pdf-render` draws PDF pages onto a canvas (OffscreenCanvas in the preview worker): paths, fills, strokes, dashes, clipping, colour spaces (gray, RGB, CMYK, ICC by component count, Lab, Indexed, Separation, DeviceN), PDF functions (types 0, 2, 3, 4), images (raw, Flate, LZW, JPEG, with soft masks, colour-key masks and stencil masks), inline images, Form XObjects, axial and radial shadings and shading patterns (honouring /Extend), transparency and blend modes, annotation appearances, and text.
 
-- Not drawn yet: text (R2), embedded font shapes (R3), tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (a grey box marks where they go).
+**Text** is drawn glyph by glyph at the exact positions the PDF gives, advancing by the PDF's own widths, so lines break where the original breaks. Characters come from the font's encoding and `/Differences`, falling back to its ToUnicode CMap (this is what makes subset CID fonts from Word, Chrome and Quartz readable). The letter shapes come from a similar system font: the document's own font name is tried first, so an installed copy is used as is, then a serif, sans or monospace stack. Because the real glyph outlines aren't used yet, the preview carries a "Preview is approximate" note whenever fonts are substituted.
+
+- Not drawn yet: embedded font shapes (stage R3: own TrueType, CFF and Type 1 outline readers), vertical writing, text used as a clipping path, CJK fonts that only have a predefined CMap, tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (a grey box marks where they go).
 - CMYK uses a polynomial fit to a print profile, so it is close to Acrobat and macOS but not identical.
-- `node scripts/render-compare.ts` renders a corpus of feature PDFs and the real fixtures with our renderer and with macOS CoreGraphics (`sips`), writes side-by-side sheets with a difference image, and fails if the pixel mismatch grows past the recorded limits. `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so those are checked against Chromium's PDF engine by eye instead.
-
+- `node scripts/render-compare.ts` renders a corpus of feature PDFs (including a text sheet with the standard fonts and every text operator) and the real fixtures with our renderer and with macOS CoreGraphics (`sips`), writes side-by-side sheets with a difference image, and fails if the pixel mismatch grows past the recorded limits. `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so those are checked against Chromium's PDF engine by eye instead.

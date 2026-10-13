@@ -377,9 +377,10 @@ describe('forms, shadings, annotations', () => {
 })
 
 describe('robustness', () => {
-  test('text is not drawn yet and says so', async () => {
-    const { result } = await draw({ content: 'BT /F1 12 Tf 10 10 Td (Hello) Tj ET' })
-    expect(result.warnings).toContain("Text isn't drawn yet")
+  test('text with a font the page does not define still draws, with a default font', async () => {
+    const { result, all } = await draw({ content: 'BT /F1 12 Tf 10 10 Td (Hi) Tj ET' })
+    expect(all('fillText').map((c) => c[0])).toEqual(['H', 'i'])
+    expect(result.warnings).toContain('A font is missing; a default one is used')
   })
 
   test('unknown operators and garbage bytes do not stop the rest of the page', async () => {
