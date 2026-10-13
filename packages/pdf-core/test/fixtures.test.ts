@@ -5,7 +5,8 @@ import { PdfDocument, extract, merge, remove, rotate, split } from '../src/index
 
 // real files from real producers (Chromium/Skia, macOS Quartz); add more PDFs to test/fixtures to widen coverage
 const dir = join(import.meta.dirname, 'fixtures')
-const files = readdirSync(dir).filter((f) => f.endsWith('.pdf'))
+// files locked with a user password need a password; security.test.ts covers those
+const files = readdirSync(dir).filter((f) => f.endsWith('.pdf') && (!f.startsWith('enc-') || f === 'enc-owner-only.pdf'))
 
 test('fixtures exist', () => expect(files.length).toBeGreaterThanOrEqual(2))
 

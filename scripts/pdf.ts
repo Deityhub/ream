@@ -1,7 +1,7 @@
 // Dev CLI for trying pdf-core on real files:  yarn pdf <command> ...   (see usage below)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { PdfDocument, chunks, extract, isName, merge, parseRanges, remove, rotate, split } from '../packages/pdf-core/src/index.ts'
+import { PdfDocument, chunks, decryptPdf, extract, isName, merge, parseRanges, remove, rotate, split } from '../packages/pdf-core/src/index.ts'
 
 const usage = `usage:
   yarn pdf info <in.pdf>
@@ -9,13 +9,20 @@ const usage = `usage:
   yarn pdf extract <in.pdf> <pages> -o <out.pdf>      pages like 1-3,5,8-
   yarn pdf remove  <in.pdf> <pages> -o <out.pdf>
   yarn pdf rotate  <in.pdf> <90|180|270|-90> [pages] -o <out.pdf>
-  yarn pdf split   <in.pdf> <pages | every:N> -o <outdir>   one file per comma item`
+  yarn pdf split   <in.pdf> <pages | every:N> -o <outdir>   one file per comma item
+  yarn pdf decrypt <in.pdf> -p <password> -o <out.pdf>
 
-const load = (path: string) => PdfDocument.load(new Uint8Array(readFileSync(path)))
+Add -p <password> to any command to open a password protected PDF.`
+
 const argv = process.argv.slice(2)
-const oAt = argv.indexOf('-o')
-const out = oAt >= 0 ? argv[oAt + 1] : undefined
-const args = oAt >= 0 ? argv.filter((_, i) => i !== oAt && i !== oAt + 1) : argv
+const flag = (name: string) => {
+  const at = argv.indexOf(name)
+  return at >= 0 ? argv[at + 1] : undefined
+}
+const out = flag('-o')
+const password = flag('-p') ?? ''
+const args = argv.filter((a, i) => !['-o', '-p'].includes(a) && !['-o', '-p'].includes(argv[i - 1]))
+const load = (path: string) => PdfDocument.load(new Uint8Array(readFileSync(path)), { password })
 const [cmd, ...rest] = args
 
 function need(v: string | undefined, what: string): string {
@@ -37,6 +44,8 @@ try {
       const rot = doc.resolve(p.dict.get('Rotate') ?? p.inherited.get('Rotate')) ?? 0
       console.log(`  ${i + 1}: MediaBox ${JSON.stringify(box)} rotate ${rot}${isName(p.dict.get('Type'), 'Page') ? '' : ' (untyped)'}`)
     })
+  } else if (cmd === 'decrypt') {
+    save(await decryptPdf(new Uint8Array(readFileSync(need(rest[0], 'input file'))), password))
   } else if (cmd === 'merge') {
     save(merge(await Promise.all(rest.map(async (f) => ({ doc: await load(f) })))))
   } else if (cmd === 'extract' || cmd === 'remove') {

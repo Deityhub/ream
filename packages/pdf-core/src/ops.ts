@@ -1,6 +1,7 @@
 import { PdfRef, PdfStream, PdfString, name, type PdfDict, type PdfObj } from './objects.ts'
 import type { Page, PdfDocument } from './document.ts'
-import { PdfBuilder } from './writer.ts'
+import { PdfBuilder, serializeDocument } from './writer.ts'
+import { PdfDocument as Doc } from './document.ts'
 import { PdfRangeError } from './errors.ts'
 import { ascii } from './bytes.ts'
 
@@ -121,4 +122,13 @@ export function rotate(doc: PdfDocument, angle: number, pages?: number[]): Uint8
   if (!Number.isInteger(angle) || angle % 90 !== 0) throw new PdfRangeError('Rotation must be a multiple of 90 degrees')
   const only = pages ? new Set(pages) : null
   return compose([{ doc, pages: range(doc.pages().length), rotate: (i) => (!only || only.has(i) ? angle : 0) }])
+}
+
+/**
+ * The same PDF without its password protection. Throws PdfPasswordError for a missing or wrong password; a file that
+ * wasn't protected comes back unchanged.
+ */
+export async function decryptPdf(bytes: Uint8Array, password: string): Promise<Uint8Array> {
+  const doc = await Doc.load(bytes, { password })
+  return doc.encrypted ? serializeDocument(doc) : bytes
 }

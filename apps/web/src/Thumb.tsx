@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from '@ream/ui'
 import { formatBytes } from '@ream/core'
 import { isPdf, pageCount, usePdfInfo } from './usePdfInfo'
+import { wasUnlocked } from './previewClient'
 
 export function useObjectUrl(blob: Blob | undefined): string | undefined {
   const [url, setUrl] = useState<string>()
@@ -37,7 +38,7 @@ function PdfMeta({ file }: { file: File }) {
   const pages = pageCount(info)
   return (
     <span className="text-xs text-muted">
-      {[pages, formatBytes(file.size)].filter(Boolean).join(' · ')}
+      {[pages, formatBytes(file.size), wasUnlocked(file) ? 'unlocked' : null].filter(Boolean).join(' · ')}
       {info !== 'loading' && info.kind === 'error' && ` · ${info.message}`}
     </span>
   )

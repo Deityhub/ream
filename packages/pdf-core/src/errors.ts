@@ -8,10 +8,21 @@ export class PdfParseError extends UserError {
   }
 }
 
+/** A kind of protection we can't open (not the standard password handler, or a damaged encryption entry). */
 export class PdfEncryptedError extends UserError {
   constructor() {
-    super('This PDF is password protected. Unlock it first.')
+    super("This PDF uses protection Ream can't open yet.")
     this.name = 'PdfEncryptedError'
+  }
+}
+
+/** The PDF needs a password. `incorrect` is true when one was given and it didn't work. */
+export class PdfPasswordError extends UserError {
+  incorrect: boolean
+  constructor(incorrect: boolean) {
+    super(incorrect ? "That password isn't right." : 'This PDF is password protected.')
+    this.name = 'PdfPasswordError'
+    this.incorrect = incorrect
   }
 }
 

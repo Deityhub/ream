@@ -7,6 +7,9 @@ import { runTool, type Running } from './runtime'
 import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
+import { PasswordDialog } from './PasswordDialog'
+import { inspectPdf, markUnlocked, unlockPdf } from './previewClient'
+import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
 import { usePreview } from './usePreview'
 
@@ -26,7 +29,24 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const [active, setActive] = useState(0)
   const job = useRef<Running | null>(null)
   const showPreview = !!tool && tool.status === 'ready' && tool.preview !== 'none'
-  const preview = usePreview(tool, files, options, showPreview && state.kind !== 'running')
+  // password protected PDFs found among the files, in the order they were added
+  const [locked, setLocked] = useState<File[]>([])
+  const waiting = files.filter((f) => locked.includes(f)) // in the order the files are listed, not the order they were inspected
+  const asking = waiting[0]
+  const preview = usePreview(tool, files, options, showPreview && state.kind !== 'running' && !asking)
+
+  useEffect(() => {
+    let live = true
+    for (const f of files.filter(isPdf)) {
+      inspectPdf(f).then(
+        (info) => live && info.kind === 'encrypted' && setLocked((l) => (l.includes(f) ? l : [...l, f])),
+        () => {},
+      )
+    }
+    return () => {
+      live = false
+    }
+  }, [files])
 
   useEffect(() => {
     clearHandoff()
@@ -67,6 +87,18 @@ export function ToolPage({ tool }: { tool?: Tool }) {
     ;[next[i], next[i + by]] = [next[i + by], next[i]]
     changeFiles(next)
     setActive(active === i ? i + by : active === i + by ? i : active)
+  }
+
+  /** try a password; on success the locked file is swapped for a decrypted in-memory copy (the original File is untouched) */
+  const tryUnlock = async (file: File, password: string): Promise<string | null> => {
+    const r = await unlockPdf(file, password)
+    if (r.kind === 'wrong') return password ? "That password isn't right. Try again." : 'Enter the password to open this PDF.'
+    if (r.kind === 'error') return r.message
+    const copy = new File([r.bytes as BlobPart], file.name, { type: 'application/pdf' })
+    markUnlocked(copy)
+    setFiles((fs) => fs.map((f) => (f === file ? copy : f)))
+    setState({ kind: 'idle' })
+    return null
   }
 
   const run = () => {
@@ -148,8 +180,9 @@ export function ToolPage({ tool }: { tool?: Tool }) {
               <Progress value={state.progress} onCancel={cancel} />
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={run} disabled={missing > 0}>{tool.action}</Button>
-                {missing > 0 && (
+                <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
+                {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
+                {!asking && missing > 0 && (
                   <span className="text-sm text-muted">
                     {files.length === 0 ? `Add ${tool.minFiles === 1 ? 'a file' : `at least ${tool.minFiles} files`} to start.` : `Add ${missing} more ${missing === 1 ? 'file' : 'files'} to start.`}
                   </span>
@@ -174,6 +207,15 @@ export function ToolPage({ tool }: { tool?: Tool }) {
         </aside>
       )}
       </div>
+      {asking && (
+        <PasswordDialog
+          key={`${asking.name}-${asking.size}-${asking.lastModified}`}
+          name={asking.name}
+          others={waiting.length - 1}
+          onSubmit={(pw) => tryUnlock(asking, pw)}
+          onSkip={() => changeFiles(files.filter((f) => f !== asking))}
+        />
+      )}
     </>
   )
 }

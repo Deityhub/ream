@@ -1,7 +1,8 @@
-import { PdfKeyword, PdfRef, PdfStream, isDict, isName, type PdfDict, type PdfObj } from './objects.ts'
+import { PdfKeyword, PdfRef, PdfStream, PdfString, isDict, isName, type PdfDict, type PdfObj } from './objects.ts'
 import { Parser, parseIndirectAt } from './parser.ts'
 import { decodeStream } from './flate.ts'
-import { PdfEncryptedError, PdfParseError } from './errors.ts'
+import { PdfEncryptedError, PdfParseError, PdfPasswordError } from './errors.ts'
+import { decryptObjects, openSecurity } from './security.ts'
 import { ascii, indexOfBytes } from './bytes.ts'
 
 type Entry = { kind: 'free' } | { kind: 'direct'; offset: number } | { kind: 'compressed'; stm: number }
@@ -17,22 +18,30 @@ const INHERITED = ['Resources', 'MediaBox', 'CropBox', 'Rotate']
 const unknownLength = () => NaN
 
 // ponytail: every object is parsed up front; fine for normal files, make it lazy if huge PDFs hurt
+export type LoadOptions = {
+  /** user or owner password; the empty password is tried by default, which opens files that only restrict editing */
+  password?: string
+}
+
 export class PdfDocument {
   objects: Map<number, PdfObj>
   trailer: PdfDict
-  constructor(objects: Map<number, PdfObj>, trailer: PdfDict) {
+  /** the file was encrypted; everything in `objects` is already decrypted */
+  encrypted: boolean
+  constructor(objects: Map<number, PdfObj>, trailer: PdfDict, encrypted = false) {
     this.objects = objects
     this.trailer = trailer
+    this.encrypted = encrypted
   }
 
-  static async load(bytes: Uint8Array): Promise<PdfDocument> {
+  static async load(bytes: Uint8Array, { password = '' }: LoadOptions = {}): Promise<PdfDocument> {
     const head = indexOfBytes(bytes.subarray(0, 1024), ascii('%PDF-'))
     if (head < 0) throw new PdfParseError("This file isn't a PDF.")
     try {
-      return validate(await loadFromXref(bytes))
+      return validate(await loadFromXref(bytes, password))
     } catch (e) {
-      if (e instanceof PdfEncryptedError) throw e
-      return validate(await rebuild(bytes))
+      if (e instanceof PdfEncryptedError || e instanceof PdfPasswordError) throw e
+      return validate(await rebuild(bytes, password))
     }
   }
 
@@ -84,16 +93,29 @@ export class PdfDocument {
 }
 
 function validate(doc: PdfDocument): PdfDocument {
-  if (doc.trailer.has('Encrypt')) throw new PdfEncryptedError()
   if (!isDict(doc.resolve(doc.catalog().get('Pages')))) throw new PdfParseError("Couldn't find the pages in this PDF.")
   return doc
 }
 
+/** if the trailer names an /Encrypt dictionary, work out the key from the password and decrypt every object in place */
+async function unlock(trailer: PdfDict, objects: Map<number, PdfObj>, gens: Map<number, number>, password: string): Promise<boolean> {
+  if (!trailer.has('Encrypt')) return false
+  const resolve = (o: PdfObj): PdfObj => (o instanceof PdfRef ? objects.get(o.num) ?? null : o)
+  const ref = trailer.get('Encrypt') ?? null
+  const enc = resolve(ref)
+  if (!isDict(enc)) throw new PdfEncryptedError()
+  const id = resolve(trailer.get('ID') ?? null)
+  const id0 = Array.isArray(id) && id[0] instanceof PdfString ? id[0].bytes : new Uint8Array(0)
+  const dec = await openSecurity(enc, id0, password, resolve)
+  decryptObjects(objects, gens, dec, ref instanceof PdfRef ? ref.num : -1)
+  trailer.delete('Encrypt')
+  return true
+}
+
 // ---------- normal path: follow startxref ----------
 
-async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
+async function loadFromXref(bytes: Uint8Array, password: string): Promise<PdfDocument> {
   const { entries, trailer } = await readXrefChain(bytes, findStartXref(bytes))
-  if (trailer.has('Encrypt')) throw new PdfEncryptedError()
 
   const directLength = (num: number) => {
     const e = entries.get(num)
@@ -108,12 +130,16 @@ async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
   const lengthOf = (o: PdfObj) => (typeof o === 'number' ? o : o instanceof PdfRef ? directLength(o.num) : NaN)
 
   const objects = new Map<number, PdfObj>()
+  const gens = new Map<number, number>()
   for (const [num, e] of entries) {
     if (e.kind !== 'direct') continue
     const r = parseIndirectAt(bytes, e.offset, lengthOf)
     if (r.num !== num) throw new PdfParseError('The cross-reference table is wrong')
     objects.set(num, r.obj)
+    gens.set(num, r.gen)
   }
+  // decrypt before object streams are opened: their contents are plain only once the stream itself is decrypted
+  const encrypted = await unlock(trailer, objects, gens, password)
   const stms = new Set<number>()
   for (const e of entries.values()) if (e.kind === 'compressed') stms.add(e.stm)
   for (const stm of stms) {
@@ -124,7 +150,7 @@ async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
       return e?.kind === 'compressed' && e.stm === stm
     }, objects)
   }
-  return new PdfDocument(objects, trailer)
+  return new PdfDocument(objects, trailer, encrypted)
 }
 
 function findStartXref(bytes: Uint8Array): number {
@@ -240,14 +266,16 @@ async function expandObjStm(stm: PdfStream, accept: (num: number) => boolean, ou
 
 // ---------- fallback: scan the whole file for "n g obj" ----------
 
-async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
+async function rebuild(bytes: Uint8Array, password: string): Promise<PdfDocument> {
   const text = new TextDecoder('latin1').decode(bytes)
   const objects = new Map<number, PdfObj>()
+  const gens = new Map<number, number>()
   const re = /(?<![\w.])(\d+)\s+(\d+)\s+obj\b/g
   for (let m = re.exec(text); m; m = re.exec(text)) {
     try {
       const r = parseIndirectAt(bytes, m.index, unknownLength)
       objects.set(r.num, r.obj)
+      gens.set(r.num, r.gen)
       re.lastIndex = Math.max(re.lastIndex, r.end)
     } catch {
       // skip objects we can't read
@@ -264,8 +292,17 @@ async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
       // ignore
     }
   }
-  for (const o of [...objects.values()]) {
+  for (const o of objects.values()) {
     if (o instanceof PdfStream && isName(o.dict.get('Type'), 'XRef') && o.dict.has('Root')) trailer = o.dict
+  }
+  if (!trailer) {
+    for (const [num, o] of objects) if (isDict(o) && isName(o.get('Type'), 'Catalog')) trailer = new Map([['Root', new PdfRef(num)]])
+  }
+  if (!trailer) throw new PdfParseError("Couldn't read this PDF; the file may be damaged.")
+
+  // decrypt first, then open object streams: their contents are plain only once the stream itself is decrypted
+  const encrypted = await unlock(trailer, objects, gens, password)
+  for (const o of [...objects.values()]) {
     if (o instanceof PdfStream && isName(o.dict.get('Type'), 'ObjStm')) {
       try {
         await expandObjStm(o, (n) => !objects.has(n), objects)
@@ -274,9 +311,5 @@ async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
       }
     }
   }
-  if (!trailer) {
-    for (const [num, o] of objects) if (isDict(o) && isName(o.get('Type'), 'Catalog')) trailer = new Map([['Root', new PdfRef(num)]])
-  }
-  if (!trailer) throw new PdfParseError("Couldn't read this PDF; the file may be damaged.")
-  return new PdfDocument(objects, trailer)
+  return new PdfDocument(objects, trailer, encrypted)
 }

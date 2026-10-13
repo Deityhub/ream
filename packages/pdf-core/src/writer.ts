@@ -1,4 +1,5 @@
-import { PdfName, PdfRef, PdfStream, PdfString, type PdfObj } from './objects.ts'
+import { PdfName, PdfRef, PdfStream, PdfString, isName, type PdfObj } from './objects.ts'
+import type { PdfDocument } from './document.ts'
 import { ascii, concat } from './bytes.ts'
 
 class Sink {
@@ -112,4 +113,35 @@ export class PdfBuilder {
     s.push(` >>\nstartxref\n${xref}\n%%EOF\n`)
     return concat(s.chunks)
   }
+}
+
+/** every ref points at generation 0 in a file we write */
+const zeroGen = (o: PdfObj): PdfObj =>
+  o instanceof PdfRef
+    ? new PdfRef(o.num, 0)
+    : Array.isArray(o)
+      ? o.map(zeroGen)
+      : o instanceof Map
+        ? new Map([...o].map(([k, v]) => [k, zeroGen(v)] as [string, PdfObj]))
+        : o instanceof PdfStream
+          ? new PdfStream(zeroGen(o.dict) as Map<string, PdfObj>, o.data)
+          : o
+
+/**
+ * Write a loaded document back out as it is: same objects, same numbers, but a plain classic-xref file. For an
+ * encrypted source the objects are already decrypted, so this is the decrypted copy. Object and xref streams are
+ * dropped (their contents are ordinary objects now).
+ */
+export function serializeDocument(doc: PdfDocument): Uint8Array {
+  const root = doc.trailer.get('Root')
+  if (!(root instanceof PdfRef)) throw new Error('The document has no catalog')
+  const b = new PdfBuilder()
+  const max = Math.max(0, ...doc.objects.keys())
+  for (let n = 1; n <= max; n++) {
+    const o = doc.objects.get(n) ?? null
+    const container = o instanceof PdfStream && (isName(o.dict.get('Type'), 'XRef') || isName(o.dict.get('Type'), 'ObjStm'))
+    b.add(container ? null : zeroGen(o))
+  }
+  const info = doc.trailer.get('Info')
+  return b.serialize(new PdfRef(root.num), info instanceof PdfRef ? new PdfRef(info.num) : undefined)
 }

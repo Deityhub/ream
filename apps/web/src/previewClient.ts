@@ -1,6 +1,6 @@
-import type { PdfInfo } from './previewWorker'
+import type { PdfInfo, UnlockResult } from './previewWorker'
 
-export type { PdfInfo }
+export type { PdfInfo, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -42,4 +42,15 @@ export function inspectPdf(file: Blob): Promise<PdfInfo> {
     cache.set(file, p)
   }
   return p
+}
+
+const unlocked = new WeakSet<Blob>()
+/** true for a decrypted copy made by unlockPdf, so the file list can say so */
+export const wasUnlocked = (file: Blob) => unlocked.has(file)
+export const markUnlocked = (file: Blob) => unlocked.add(file)
+
+/** a decrypted copy of a password protected PDF; the password is used once here and not kept */
+export async function unlockPdf(file: Blob, password: string): Promise<UnlockResult> {
+  const buf = await file.arrayBuffer()
+  return send<UnlockResult>({ op: 'unlock', bytes: new Uint8Array(buf), password }, [buf])
 }

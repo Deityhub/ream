@@ -56,3 +56,12 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - Our own PNG decoder rejects interlaced files; the browser codec handles them.
 - Crop is drag-to-select with mouse or touch, plus numeric fields for keyboard use.
 - Checked in Electron (Chromium) only; Safari and Firefox are untested.
+
+## Password-protected PDFs
+
+- Opening works for the standard password handler: RC4 40/128-bit, AES-128 and AES-256 (revisions 2 to 6), with either the user or the owner password. Files that only restrict editing (empty user password) open without asking.
+- Adding a locked file shows a password popup; on success the file is replaced in the list by a decrypted in-memory copy. The original file is untouched and the password is never stored. Output PDFs are not encrypted (encrypting and the Protect/Unlock tools are M5).
+- Owner restrictions (no printing, no copying) are not enforced on the working copy.
+- Certificate (public-key) encryption is not supported and reports "This PDF uses protection Ream can't open yet."
+- `node scripts/pdf.ts decrypt in.pdf -p <password> -o out.pdf` does the same from the command line. The encrypted test fixtures come from `scripts/make-encrypted-fixtures.py` (pypdf, an independent implementation; not a project dependency).
+
