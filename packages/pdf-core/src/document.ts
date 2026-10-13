@@ -1,6 +1,6 @@
 import { PdfKeyword, PdfRef, PdfStream, PdfString, isDict, isName, type PdfDict, type PdfObj } from './objects.ts'
 import { Parser, parseIndirectAt } from './parser.ts'
-import { decodeStream } from './flate.ts'
+import { decodeStream } from './filters.ts'
 import { PdfEncryptedError, PdfParseError, PdfPasswordError } from './errors.ts'
 import { decryptObjects, openSecurity } from './security.ts'
 import { ascii, indexOfBytes } from './bytes.ts'

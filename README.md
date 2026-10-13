@@ -65,3 +65,11 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - Certificate (public-key) encryption is not supported and reports "This PDF uses protection Ream can't open yet."
 - `node scripts/pdf.ts decrypt in.pdf -p <password> -o out.pdf` does the same from the command line. The encrypted test fixtures come from `scripts/make-encrypted-fixtures.py` (pypdf, an independent implementation; not a project dependency).
 
+## PDF previews (our own renderer)
+
+`packages/pdf-render` draws PDF pages onto a canvas (OffscreenCanvas in the preview worker): paths, fills, strokes, dashes, clipping, colour spaces (gray, RGB, CMYK, ICC by component count, Lab, Indexed, Separation, DeviceN), PDF functions (types 0, 2, 3, 4), images (raw, Flate, LZW, JPEG, with soft masks, colour-key masks and stencil masks), inline images, Form XObjects, axial and radial shadings and shading patterns, transparency and blend modes, and annotation appearances. Text is stage R2 and until then pages show a "Preview is approximate" note.
+
+- Not drawn yet: text (R2), embedded font shapes (R3), tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (a grey box marks where they go).
+- CMYK uses a polynomial fit to a print profile, so it is close to Acrobat and macOS but not identical.
+- `node scripts/render-compare.ts` renders a corpus of feature PDFs and the real fixtures with our renderer and with macOS CoreGraphics (`sips`), writes side-by-side sheets with a difference image, and fails if the pixel mismatch grows past the recorded limits. `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so those are checked against Chromium's PDF engine by eye instead.
+

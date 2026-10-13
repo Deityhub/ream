@@ -1,6 +1,6 @@
-import type { PdfInfo, UnlockResult } from './previewWorker'
+import type { PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
 
-export type { PdfInfo, UnlockResult }
+export type { PdfInfo, RenderedPage, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -9,11 +9,11 @@ const waiting = new Map<number, { resolve: (v: any) => void; reject: (e: Error) 
 function start(): Worker {
   const w = new Worker(new URL('./previewWorker.ts', import.meta.url), { type: 'module' })
   w.onmessage = (e) => {
-    const { id, ok, result, message } = e.data
+    const { id, ok, result, message, code } = e.data
     const p = waiting.get(id)
     waiting.delete(id)
     if (ok) p?.resolve(result)
-    else p?.reject(new Error(message))
+    else p?.reject(Object.assign(new Error(message), { code }))
   }
   w.onerror = () => {
     for (const p of waiting.values()) p.reject(new Error("Couldn't start the preview worker"))
@@ -32,14 +32,56 @@ function send<T>(msg: object, transfer: Transferable[] = []): Promise<T> {
   })
 }
 
-const cache = new WeakMap<Blob, Promise<PdfInfo>>()
+// Each file gets an id; the worker keeps the parsed document under it. The first request after the worker has
+// forgotten (or never saw) a document fails with code "missing", and we resend with the file's bytes.
+const ids = new WeakMap<Blob, number>()
+let nextId = 0
+function idOf(file: Blob): number {
+  let id = ids.get(file)
+  if (id === undefined) ids.set(file, (id = ++nextId))
+  return id
+}
+
+async function withDoc<T>(file: Blob, msg: object): Promise<T> {
+  const docId = idOf(file)
+  try {
+    return await send<T>({ ...msg, docId })
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'missing') throw e
+    const buf = await file.arrayBuffer()
+    return send<T>({ ...msg, docId, bytes: new Uint8Array(buf) }, [buf])
+  }
+}
+
+const infoCache = new WeakMap<Blob, Promise<PdfInfo>>()
 
 /** page count and sizes of a PDF, read in the worker; cached per file */
 export function inspectPdf(file: Blob): Promise<PdfInfo> {
-  let p = cache.get(file)
-  if (!p) {
-    p = file.arrayBuffer().then((buf) => send<PdfInfo>({ op: 'inspect', bytes: new Uint8Array(buf) }, [buf]))
-    cache.set(file, p)
+  let p = infoCache.get(file)
+  if (!p) infoCache.set(file, (p = withDoc<PdfInfo>(file, { op: 'inspect' })))
+  return p
+}
+
+// Rendered pages are kept briefly so a thumbnail and a bigger preview of the same page, or a re-mounted component,
+// don't render twice. Oldest entries are closed to give the memory back.
+const MAX_RENDERS = 48
+const renders = new Map<string, Promise<RenderedPage>>()
+
+/** page `page` (0-based) of a PDF drawn `width` pixels wide, as a bitmap to paint on a canvas */
+export function renderPdfPage(file: Blob, page: number, width: number): Promise<RenderedPage> {
+  const key = `${idOf(file)}:${page}:${width}`
+  let p = renders.get(key)
+  if (p) {
+    renders.delete(key) // refresh recency
+  } else {
+    p = withDoc<RenderedPage>(file, { op: 'render', page, width })
+    p.catch(() => renders.delete(key))
+  }
+  renders.set(key, p)
+  while (renders.size > MAX_RENDERS) {
+    const [oldKey, old] = renders.entries().next().value!
+    renders.delete(oldKey)
+    old.then((r) => r.bitmap.close(), () => {})
   }
   return p
 }

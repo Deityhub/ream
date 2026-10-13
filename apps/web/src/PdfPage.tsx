@@ -1,0 +1,70 @@
+import { useEffect, useRef, useState } from 'react'
+import { Icon } from '@ream/ui'
+import { renderPdfPage } from './previewClient'
+
+type Props = {
+  file: Blob
+  /** 0-based */
+  page: number
+  /** pixels the page is rendered across (the canvas is then scaled by CSS) */
+  renderWidth: number
+  className?: string
+  onWarnings?: (warnings: string[]) => void
+}
+
+/** One page of a PDF, drawn by our own renderer in the preview worker. */
+export function PdfPage({ file, page, renderWidth, className = '', onWarnings }: Props) {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
+  const report = useRef(onWarnings)
+  report.current = onWarnings
+
+  useEffect(() => {
+    let live = true
+    setState('loading')
+    renderPdfPage(file, page, renderWidth).then(
+      ({ bitmap, warnings }) => {
+        const c = canvas.current
+        if (!live || !c) return
+        c.width = bitmap.width
+        c.height = bitmap.height
+        c.getContext('2d')!.drawImage(bitmap, 0, 0)
+        setState('ok')
+        report.current?.(warnings)
+      },
+      () => live && setState('error'),
+    )
+    return () => {
+      live = false
+    }
+  }, [file, page, renderWidth])
+
+  return (
+    <div className="relative size-full">
+      <canvas ref={canvas} aria-label={`Page ${page + 1}`} role="img" className={`size-full ${state === 'ok' ? '' : 'invisible'} ${className}`} />
+      {state !== 'ok' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface-2 text-muted">
+          {state === 'error' ? <Icon name="file" className="size-5" /> : <span className="size-4 animate-pulse rounded-full bg-line" />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A page that reserves its space up front and only renders once it scrolls near the viewport. */
+export function LazyPdfPage({ file, page, size, renderWidth, onWarnings }: { file: Blob; page: number; size: { width: number; height: number }; renderWidth: number; onWarnings?: (w: string[]) => void }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { rootMargin: '400px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <div ref={box} style={{ aspectRatio: `${size.width} / ${size.height}` }} className="w-full overflow-hidden bg-white shadow-sm ring-1 ring-line">
+      {near && <PdfPage file={file} page={page} renderWidth={renderWidth} onWarnings={onWarnings} />}
+    </div>
+  )
+}

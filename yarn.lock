@@ -543,6 +543,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ream/pdf-render@workspace:*, @ream/pdf-render@workspace:packages/pdf-render":
+  version: 0.0.0-use.local
+  resolution: "@ream/pdf-render@workspace:packages/pdf-render"
+  dependencies:
+    "@ream/core": "workspace:*"
+    "@ream/pdf-core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ream/tools@workspace:*, @ream/tools@workspace:packages/tools":
   version: 0.0.0-use.local
   resolution: "@ream/tools@workspace:packages/tools"
@@ -571,6 +580,8 @@ __metadata:
   dependencies:
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
+    "@ream/pdf-core": "workspace:*"
+    "@ream/pdf-render": "workspace:*"
     "@ream/tools": "workspace:*"
     "@ream/ui": "workspace:*"
     "@tailwindcss/vite": "npm:^4.1.0"

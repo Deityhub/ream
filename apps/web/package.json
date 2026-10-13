@@ -11,6 +11,8 @@
   "dependencies": {
     "@ream/core": "workspace:*",
     "@ream/image-core": "workspace:*",
+    "@ream/pdf-core": "workspace:*",
+    "@ream/pdf-render": "workspace:*",
     "@ream/tools": "workspace:*",
     "@ream/ui": "workspace:*",
     "react": "^19.0.0",

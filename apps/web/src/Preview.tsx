@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Icon } from '@ream/ui'
 import { formatBytes, type FileData, type Tool } from '@ream/core'
 import type { PreviewState } from './previewController'
 import { toFile } from './download'
 import { useObjectUrl } from './Thumb'
 import { isPdf, pageCount, usePdfInfo } from './usePdfInfo'
+import { LazyPdfPage } from './PdfPage'
 
 type Props = {
   tool: Tool
@@ -144,27 +145,31 @@ function ImageView({ file, was }: { file: File; was?: number }) {
   )
 }
 
+/** every page of a PDF, drawn lazily as it scrolls into view, with a note when the drawing is approximate */
 function PdfView({ file, was }: { file: File; was?: number }) {
   const info = usePdfInfo(file)
-  const first = info !== 'loading' && info.kind === 'ok' ? info.pages[0] : undefined
+  const [warnings, setWarnings] = useState<string[]>([])
+  const noteWarnings = useCallback((w: string[]) => w.length && setWarnings((prev) => [...new Set([...prev, ...w])]), [])
+  useEffect(() => setWarnings([]), [file])
   return (
     <figure className="space-y-2">
-      <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-lg border border-line bg-surface-2 p-6 text-center">
-        <Icon name="file" className="size-8 text-muted" />
-        {info === 'loading' && <p className="text-sm text-muted">Reading…</p>}
-        {info !== 'loading' && info.kind === 'error' && <p className="text-sm">{info.message}</p>}
-        {info !== 'loading' && info.kind === 'encrypted' && <p className="text-sm">This PDF is password protected.</p>}
-        {first && (
-          <p className="text-sm">
-            {pageCount(info)}
-            <span className="text-muted"> · first page {Math.round(first.width)} × {Math.round(first.height)} pt</span>
-          </p>
-        )}
-      </div>
-      <Facts name={file.name} parts={[sizeText(file.size, was)]} />
+      {info === 'loading' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm text-muted">Reading…</p>}
+      {info !== 'loading' && info.kind === 'error' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">{info.message}</p>}
+      {info !== 'loading' && info.kind === 'encrypted' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">This PDF is password protected.</p>}
+      {info !== 'loading' && info.kind === 'ok' && (
+        <div className="max-h-[70vh] space-y-3 overflow-auto rounded-lg border border-line bg-surface-2 p-3">
+          {info.pages.map((size, i) => (
+            <LazyPdfPage key={i} file={file} page={i} size={size} renderWidth={PAGE_WIDTH} onWarnings={noteWarnings} />
+          ))}
+        </div>
+      )}
+      {warnings.length > 0 && <p className="text-xs text-muted">Preview is approximate: {warnings.join('; ').replace(/^./, (c) => c.toLowerCase())}.</p>}
+      <Facts name={file.name} parts={[pageCount(info) ?? undefined, sizeText(file.size, was)]} />
     </figure>
   )
 }
+
+const PAGE_WIDTH = 800
 
 const sizeText = (size: number, was?: number) => (was !== undefined && was !== size ? `${formatBytes(size)} (was ${formatBytes(was)})` : formatBytes(size))
 

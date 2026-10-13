@@ -1,0 +1,13 @@
+{
+  "name": "@ream/pdf-render",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ream/core": "workspace:*",
+    "@ream/pdf-core": "workspace:*"
+  }
+}
