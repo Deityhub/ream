@@ -11,6 +11,7 @@ import { PasswordDialog } from './PasswordDialog'
 import { inspectPdf, markUnlocked, readPdfMetadata, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
+import { PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 
 type State =
@@ -18,6 +19,16 @@ type State =
   | { kind: 'running'; progress: number }
   | { kind: 'done'; outputs: FileData[] }
   | { kind: 'error'; message: string }
+
+// what option panels may ask of the app (kept outside the component so its identity is stable)
+const pdfHost = {
+  pages: async (file: File) => {
+    const info = await inspectPdf(file)
+    if (info.kind !== 'ok') throw new Error('unreadable')
+    return info.pages
+  },
+  PdfPage,
+}
 
 const GENERIC = 'Something went wrong while processing your files. Nothing was uploaded. Try again, or try a different file.'
 
@@ -191,7 +202,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
                 <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
               ) : (
                 <>
-                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} />}
+                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} pdfHost={pdfHost} />}
                   {running ? (
                     <Progress value={state.progress} onCancel={cancel} />
                   ) : (

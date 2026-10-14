@@ -12,6 +12,8 @@ type Part = {
   pages: number[]
   /** degrees to add to a page's rotation, by its index in the source document */
   rotate?: (index: number) => number
+  /** change a page's dictionary in the source's terms, before anything it refers to is copied: what it no longer names is left out of the output */
+  prepare?: (index: number, dict: PdfDict, source: Page) => void
   /** change a page's dictionary after it was copied into the builder (`out` already points at builder objects) */
   edit?: (index: number, out: PdfDict, b: PdfBuilder, source: Page) => void
 }
@@ -60,7 +62,7 @@ class Importer {
     return o
   }
 
-  copyPages(pages: { page: Page; index: number }[], parent: PdfRef, part: Pick<Part, 'rotate' | 'edit'>): PdfRef[] {
+  copyPages(pages: { page: Page; index: number }[], parent: PdfRef, part: Pick<Part, 'rotate' | 'edit' | 'prepare'>): PdfRef[] {
     const refs = pages.map(() => this.b.reserve())
     pages.forEach(({ page }, i) => {
       if (page.ref) this.chosen.set(page.ref.num, refs[i])
@@ -74,6 +76,7 @@ class Importer {
         const cur = this.doc.resolve(d.get('Rotate'))
         d.set('Rotate', ((((typeof cur === 'number' ? cur : 0) + delta) % 360) + 360) % 360)
       }
+      part.prepare?.(index, d, page)
       const out = this.copy(d) as PdfDict
       out.set('Parent', parent)
       part.edit?.(index, out, this.b, page)

@@ -7,6 +7,7 @@ import { compose } from './ops.ts'
 import { PdfRangeError } from './errors.ts'
 import { INFO_KEYS, pdfDate, readInfo } from './info.ts'
 import { ascii } from './bytes.ts'
+import type { UsedResources } from './content.ts'
 import { fontResource } from './text.ts'
 
 /** what a stamp is told about the page it draws on; sizes are as displayed (rotation applied), in points */
@@ -107,29 +108,99 @@ export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null
 /** margins in points, as displayed: top, right, bottom, left */
 export type Margins = [top: number, right: number, bottom: number, left: number]
 
+/** page user space [x1, y1, x2, y2] */
+export type Box4 = [number, number, number, number]
+
+/** the visible box once the displayed margins are taken off, in the page's own (unrotated) space */
+function croppedBox(box: Box4, rotate: number, [t, r, bo, l]: Margins, index: number): Box4 {
+  // displayed margins -> user space sides [left, bottom, right, top]
+  const [uL, uB, uR, uT] = rotate === 90 ? [t, l, bo, r] : rotate === 180 ? [r, t, l, bo] : rotate === 270 ? [bo, r, t, l] : [l, bo, r, t]
+  const next: Box4 = [box[0] + uL, box[1] + uB, box[2] - uR, box[3] - uT]
+  if (next[2] - next[0] < 1 || next[3] - next[1] < 1) throw new PdfRangeError(`Those margins leave nothing of page ${index + 1}.`)
+  return next
+}
+
+/** the new visible box of every page the margins apply to (keyed by page index), in page user space */
+export function cropBoxes(doc: PdfDocument, margins: (page: PageInfo) => Margins | null): Map<number, Box4> {
+  const pages = doc.pages()
+  const out = new Map<number, Box4>()
+  pages.forEach((page, index) => {
+    const { box, rotate } = doc.pageBox(page)
+    const [w, h] = [box[2] - box[0], box[3] - box[1]]
+    const turned = rotate % 180 === 90
+    const m = margins({ index, count: pages.length, width: turned ? h : w, height: turned ? w : h })
+    if (m) out.set(index, croppedBox(box, rotate, m, index))
+  })
+  return out
+}
+
+/** a page whose drawing instructions were rewritten to leave out what falls outside the crop */
+export type PageRewrite = {
+  /** the new content stream, already Flate-compressed */
+  content: Uint8Array
+  /** the resources the new content names; null keeps all of them */
+  used: UsedResources | null
+}
+
+const BOXES_DROPPED = ['TrimBox', 'BleedBox', 'ArtBox', 'Thumb']
+
+/** annotations whose rectangle lies entirely outside the box are dropped (links to something that can't be seen) */
+function visibleAnnots(doc: PdfDocument, annots: PdfObj | undefined, keep: Box4): PdfObj[] | null {
+  const list = doc.resolve(annots)
+  if (!Array.isArray(list)) return null
+  return list.filter((a) => {
+    const d = doc.resolve(a)
+    const r = isDict(d) ? doc.resolve(d.get('Rect')) : null
+    const n = Array.isArray(r) ? r.map((v) => doc.resolve(v)) : []
+    if (n.length !== 4 || !n.every((v) => typeof v === 'number')) return true
+    const [x1, y1, x2, y2] = n as number[]
+    return !(Math.max(x1, x2) < keep[0] || Math.min(x1, x2) > keep[2] || Math.max(y1, y2) < keep[1] || Math.min(y1, y2) > keep[3])
+  })
+}
+
 /**
- * Hide the outer margins of every page by setting its crop box. The page content outside the box is still in the
- * file (the same as most PDF crop tools), it just isn't shown or printed.
+ * Show only the area left after taking the displayed margins off every page (return null for a page to leave it
+ * alone). By default the rest is only hidden: the crop box is set and everything stays in the file. Pages named in
+ * `rewrite` are cut for real: their page box becomes the new area, their content is the rewritten stream, resources
+ * and annotations that only served the removed parts are not copied.
  */
-export function crop(doc: PdfDocument, margins: (page: PageInfo) => Margins | null): Uint8Array {
-  const count = doc.pages().length
+export function crop(doc: PdfDocument, margins: (page: PageInfo) => Margins | null, options: { rewrite?: Map<number, PageRewrite> } = {}): Uint8Array {
+  const boxes = cropBoxes(doc, margins)
   return compose(
     [
       {
         doc,
-        pages: range(count),
-        edit(index, out, _b, source) {
-          const { box, rotate } = doc.pageBox(source)
-          const [w, h] = [box[2] - box[0], box[3] - box[1]]
-          const turned = rotate % 180 === 90
-          const m = margins({ index, count, width: turned ? h : w, height: turned ? w : h })
-          if (!m) return
-          const [t, r, bo, l] = m
-          // displayed margins -> user space sides [left, bottom, right, top]
-          const [uL, uB, uR, uT] = rotate === 90 ? [t, l, bo, r] : rotate === 180 ? [r, t, l, bo] : rotate === 270 ? [bo, r, t, l] : [l, bo, r, t]
-          const next = [box[0] + uL, box[1] + uB, box[2] - uR, box[3] - uT]
-          if (next[2] - next[0] < 1 || next[3] - next[1] < 1) throw new PdfRangeError(`Those margins leave nothing of page ${index + 1}.`)
-          out.set('CropBox', next)
+        pages: range(doc.pages().length),
+        prepare(index, d) {
+          const keep = boxes.get(index)
+          const rw = options.rewrite?.get(index)
+          if (!keep || !rw) return
+          d.set('MediaBox', keep)
+          d.set('CropBox', keep)
+          for (const k of BOXES_DROPPED) d.delete(k)
+          d.delete('Contents')
+          const annots = visibleAnnots(doc, d.get('Annots'), keep)
+          if (annots) d.set('Annots', annots)
+          const res = doc.resolve(d.get('Resources'))
+          if (rw.used && isDict(res)) {
+            const pruned: PdfDict = new Map()
+            for (const [kind, names] of Object.entries(rw.used.names)) {
+              const sub = doc.resolve(res.get(kind))
+              if (!isDict(sub)) continue
+              const only: PdfDict = new Map()
+              for (const n of names) if (sub.has(n)) only.set(n, sub.get(n) ?? null)
+              pruned.set(kind, only)
+            }
+            if (rw.used.inlineImages && res.has('ColorSpace')) pruned.set('ColorSpace', res.get('ColorSpace') ?? null)
+            d.set('Resources', pruned)
+          }
+        },
+        edit(index, out, b) {
+          const keep = boxes.get(index)
+          if (!keep) return
+          const rw = options.rewrite?.get(index)
+          if (rw) out.set('Contents', b.add(new PdfStream(new Map<string, PdfObj>([['Filter', name('FlateDecode')]]), rw.content)))
+          else out.set('CropBox', keep)
         },
       },
     ],

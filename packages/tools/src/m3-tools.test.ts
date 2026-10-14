@@ -8,9 +8,11 @@ import { run as imagesToPdf, type ImagesToPdfOptions } from './images-to-pdf/run
 import { run as watermark, type WatermarkOptions } from './watermark/run.ts'
 import { label, run as pageNumbers, type PageNumbersOptions } from './page-numbers/run.ts'
 import { run as cropPdf, type CropPdfOptions } from './crop-pdf/run.ts'
+import { defaultOptions as cropDefaults, marginsOf, pagesToCrop } from './crop-pdf/margins.ts'
 import { run as metadata } from './metadata/run.ts'
 import { run as extractImages } from './extract-images/run.ts'
 import { rgb, spotCentre } from './pdf-common.ts'
+import { assemble } from '../../pdf-core/test/helpers.ts'
 import { MM, maxMarginMm } from './images-to-pdf/sizes.ts'
 
 beforeAll(() => setCodec(ownCodec))
@@ -188,20 +190,107 @@ describe('page-numbers', () => {
 })
 
 describe('crop-pdf', () => {
-  const o: CropPdfOptions = { unit: 'pt', top: 36, right: 36, bottom: 36, left: 36 }
-  test('units', async () => {
+  const rect = (x: number, y: number, w: number, h: number) => ({ x, y, w, h })
+  const opts = (o: Partial<CropPdfOptions> = {}): CropPdfOptions => ({ ...cropDefaults, remove: false, ...o })
+  const near = (s: { width: number; height: number }, [ew, eh]: number[]) => {
+    expect(s.width).toBeCloseTo(ew, 1)
+    expect(s.height).toBeCloseTo(eh, 1)
+  }
+
+  test('one selection becomes the same proportions on every page', async () => {
     const [{ width: w, height: h }] = await sizes(fx('chromium.pdf'))
-    const cropped = async (opts: Partial<CropPdfOptions>) => (await sizes((await cropPdf([fx('chromium.pdf')], { ...o, ...opts }, ctx))[0]))[0]
-    const near = (s: { width: number; height: number }, [ew, eh]: number[]) => {
-      expect(s.width).toBeCloseTo(ew, 1)
-      expect(s.height).toBeCloseTo(eh, 1)
-    }
-    near(await cropped({}), [w - 72, h - 72])
-    near(await cropped({ unit: '%', top: 10, right: 10, bottom: 10, left: 10 }), [w * 0.8, h * 0.8])
-    near(await cropped({ unit: 'mm', top: 25.4, right: 0, bottom: 0, left: 0 }), [w, h - 72])
+    const out = await sizes((await cropPdf([fx('chromium.pdf')], opts({ rect: rect(0.1, 0.2, 0.5, 0.25) }), ctx))[0])
+    expect(out).toHaveLength(3)
+    for (const s of out) near(s, [w * 0.5, h * 0.25])
   })
-  test('too much is an error', async () => {
-    await expect(cropPdf([fx('cups.pdf')], { ...o, top: 500, bottom: 500 }, ctx)).rejects.toThrow(/leave nothing of page 1/)
+  test('per-page selections leave the other pages alone', async () => {
+    const [{ width: w, height: h }] = await sizes(fx('chromium.pdf'))
+    const out = await sizes((await cropPdf([fx('chromium.pdf')], opts({ scope: 'page', rects: { 1: rect(0, 0, 0.5, 0.5) } }), ctx))[0])
+    near(out[0], [w, h])
+    near(out[1], [w / 2, h / 2])
+    near(out[2], [w, h])
+  })
+  test('the margins left by a selection put the kept area where it was dragged', () => {
+    const m = marginsOf(rect(0.1, 0.2, 0.5, 0.25), { width: 200, height: 400 })
+    expect(m.map((v) => Math.round(v * 1000) / 1000)).toEqual([80, 80, 220, 20]) // top, right, bottom, left
+    expect(pagesToCrop(opts({ scope: 'page', rects: { 0: rect(0, 0, 1, 1), 2: rect(0, 0, 0.5, 1) } }), 4)).toEqual([2]) // a whole-page selection means no crop
+  })
+  test('nothing selected is a readable error', async () => {
+    await expect(cropPdf([fx('cups.pdf')], opts(), ctx)).rejects.toThrow('Drag on the page to choose the area to keep.')
+    await expect(cropPdf([fx('cups.pdf')], opts({ scope: 'page' }), ctx)).rejects.toThrow('Drag on the page')
+  })
+})
+
+describe('crop-pdf delete', () => {
+  // a 200 x 200 page: text, a rectangle and a picture in the top-left quarter (kept) and the same kinds of things elsewhere (cut)
+  const IMG_MARKER = 'OUTSIDE_IMAGE_MK' // 16 bytes: a 4 x 4 grey picture whose pixels are this text
+  const font = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 32 /LastChar 126 /Widths [${Array(95).fill(500).join(' ')}] >>`
+  const content = [
+    'BT /F1 12 Tf 10 150 Td (KEEP THIS TEXT) Tj ET',
+    '0 0 1 rg 10 110 30 30 re f',
+    'BT /F1 12 Tf 10 20 Td (SECRET OUTSIDE) Tj ET',
+    'q 40 0 0 40 120 20 cm /Pic Do Q',
+    '1 0 0 rg 120 120 30 30 re f',
+  ].join('\n')
+  const make = () =>
+    assemble([
+      [1, '<< /Type /Catalog /Pages 2 0 R >>'],
+      [2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'],
+      [3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> /XObject << /Pic 6 0 R >> >> /Contents 4 0 R /Annots [7 0 R 8 0 R] >>'],
+      [4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`],
+      [5, font],
+      [6, `<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 16 >>\nstream\n${IMG_MARKER}\nendstream`],
+      [7, '<< /Type /Annot /Subtype /Link /Rect [10 150 80 165] /Border [0 0 0] >>'],
+      [8, '<< /Type /Annot /Subtype /Link /Rect [120 20 160 60] /Border [0 0 0] >>'],
+    ]).bytes
+  const input: FileData = { name: 'p.pdf', type: 'application/pdf', bytes: make() }
+  const topLeft = { scope: 'all' as const, rect: { x: 0, y: 0, w: 0.5, h: 0.5 }, rects: {} }
+  const raw = (f: FileData) => new TextDecoder('latin1').decode(f.bytes)
+
+  test('delete removes what is outside, from the content, the resources and the annotations', async () => {
+    const out = (await cropPdf([input], { ...topLeft, remove: true }, ctx))[0]
+    const doc = await PdfDocument.load(out.bytes)
+    const [page] = doc.pages()
+    expect(doc.pageSize(page)).toEqual({ width: 100, height: 100 })
+    expect(doc.pageBox(page).box).toEqual([0, 100, 100, 200])
+    const [c] = await contents(out)
+    expect(c).toContain('(KEEP THIS TEXT) Tj')
+    expect(c).toContain('10 110 30 30 re f')
+    expect(c).not.toContain('SECRET OUTSIDE')
+    expect(c).not.toContain('/Pic Do')
+    expect(c).toContain('120 120 30 30 re n') // painted outside: no longer painted
+    expect(raw(out)).not.toContain(IMG_MARKER) // the picture's pixels are not in the file at all
+    expect(raw(out)).not.toContain('120 20 160') // nor the link over it
+    expect(raw(out)).toContain('10 150 80 165') // the link on the kept text stays
+    expect(raw(out)).not.toContain('/Pic') // and its resource entry is gone
+  })
+
+  test('hide keeps everything in the file and only shrinks the page', async () => {
+    const out = (await cropPdf([input], { ...topLeft, remove: false }, ctx))[0]
+    const doc = await PdfDocument.load(out.bytes)
+    expect(doc.pageSize(doc.pages()[0])).toEqual({ width: 100, height: 100 })
+    expect(raw(out)).toContain(IMG_MARKER)
+    expect((await contents(out))[0]).toContain('SECRET OUTSIDE')
+    expect(out.bytes.length).toBeGreaterThan((await cropPdf([input], { ...topLeft, remove: true }, ctx))[0].bytes.length)
+  })
+
+  test('a deleted page is still a valid document and does not change what is seen', async () => {
+    const out = (await cropPdf([input], { ...topLeft, remove: true }, ctx))[0]
+    const doc = await PdfDocument.load(out.bytes)
+    // the kept text is where it was, in the same page space
+    expect((await contents(out))[0]).toContain('10 150 Td')
+    expect(doc.pages()).toHaveLength(1)
+  })
+
+  test('delete on a rotated page cuts what is outside the displayed selection', async () => {
+    const rotated = { ...input, bytes: new TextEncoder().encode(raw(input).replace('/MediaBox [0 0 200 200]', '/MediaBox [0 0 200 200] /Rotate 90')) }
+    // displayed top-left quarter of a page turned 90 degrees clockwise is the page's own bottom-left quarter
+    const out = (await cropPdf([rotated], { ...topLeft, remove: true }, ctx))[0]
+    const doc = await PdfDocument.load(out.bytes)
+    expect(doc.pageBox(doc.pages()[0]).box).toEqual([0, 0, 100, 100])
+    const [c] = await contents(out)
+    expect(c).toContain('SECRET OUTSIDE') // the text at the bottom-left is inside that quarter
+    expect(c).not.toContain('(KEEP THIS TEXT)')
   })
 })
 

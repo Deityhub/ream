@@ -66,6 +66,23 @@ class GState {
 
 const isWs = (c: number | undefined) => c === 32 || c === 10 || c === 13 || c === 9 || c === 12 || c === 0
 
+/** what `onOp` is told about one top-level operator of a recorded content stream */
+export type OpInfo = {
+  op: string
+  args: PdfObj[]
+  /** byte range of the operands and operator in the stream, [start, end) */
+  start: number
+  end: number
+  /** the text matrix before and after the operator */
+  tmBefore: Matrix
+  tmAfter: Matrix
+  fontSize: number
+  hScale: number
+  renderMode: number
+  /** a glyph shown by this operator had no width in its font, so the text advance is only an estimate */
+  unknownWidth: boolean
+}
+
 /** Runs PDF content streams against a 2D canvas context. One instance draws one page. */
 export class Interpreter {
   doc: PdfDocument
@@ -75,6 +92,11 @@ export class Interpreter {
   base: Matrix
   signal?: AbortSignal
   warnings = new Set<string>()
+  /** told about every top-level operator when `run` is called with `record` (used to find where things are painted) */
+  onOp?: (info: OpInfo) => void
+  /** analysis only: pictures are not decoded and count as their unit square */
+  analysis = false
+  private unknownWidth = false
   state = new GState()
   private stack: GState[] = []
   private pendingClip: CanvasFillRule | null = null
@@ -134,27 +156,35 @@ export class Interpreter {
 
   // ---------- the operator loop ----------
 
-  async run(content: Uint8Array, res: PdfDict) {
+  /** `record`: report each operator of this stream to `onOp` (only for the page's own stream, not forms or glyph procedures) */
+  async run(content: Uint8Array, res: PdfDict, record = false) {
     const p = new Parser(content)
     const depth = this.stack.length
     const args: PdfObj[] = []
+    let argStart = -1
     let ops = 0
     for (;;) {
       p.skipWs()
       if (p.pos >= content.length) break
+      const before = p.pos
       let v: PdfObj | PdfKeyword
       try {
         v = p.readValue()
       } catch {
         p.pos++ // unreadable bytes: skip one and carry on
         args.length = 0
+        argStart = -1
         continue
       }
       if (!(v instanceof PdfKeyword)) {
+        if (!args.length) argStart = before
         if (args.length < MAX_OPERANDS) args.push(v)
         continue
       }
       if (++ops % 512 === 0) this.signal?.throwIfAborted()
+      const start = args.length ? argStart : before
+      const tmBefore = this.tm
+      this.unknownWidth = false
       try {
         if (v.value === 'BI') await this.inlineImage(p, res)
         else await this.exec(v.value, args, res)
@@ -162,7 +192,12 @@ export class Interpreter {
         if (e instanceof DOMException && e.name === 'AbortError') throw e
         this.warn("Some drawing instructions couldn't be read")
       }
+      if (record) {
+        const s = this.state
+        this.onOp?.({ op: v.value, args: args.slice(), start, end: p.pos, tmBefore, tmAfter: this.tm, fontSize: s.fontSize, hScale: s.hScale, renderMode: s.renderMode, unknownWidth: this.unknownWidth })
+      }
       args.length = 0
+      argStart = -1
     }
     while (this.stack.length > depth) this.restore()
   }
@@ -423,7 +458,10 @@ export class Interpreter {
           this.fontString = fontString
         }
         const natural = this.measure(fontString, g.text)
-        if (g.width === null) advance = (natural / drawSize) * 1000
+        if (g.width === null) {
+          advance = (natural / drawSize) * 1000
+          this.unknownWidth = true
+        }
         if ((fillIt || strokeIt) && g.text.trim() !== '') {
           // a stand-in font's letters are rarely as wide as the original's: squeeze or stretch each to its slot
           let fit = 1
@@ -516,6 +554,7 @@ export class Interpreter {
   }
 
   private async drawImage(img: PdfStream, res: PdfDict) {
+    if (this.analysis) return this.paintRaster('unsupported')
     const isMask = this.doc.resolve(img.dict.get('ImageMask') ?? img.dict.get('IM')) === true
     // stencil masks take the current fill colour, so they can't be shared between uses
     let r = isMask ? undefined : this.images.get(img)
@@ -591,6 +630,7 @@ export class Interpreter {
     }
     const dataEnd = filtered ? (isWs(d[found - 1]) ? found - 1 : found) : Math.min(end, found)
     p.pos = found + 2
+    if (this.analysis) return this.paintRaster('unsupported')
     this.paintRaster(await rasterizeImage({ doc: this.doc, platform: this.platform, resources: res, fill: this.state.fill.rgb, warn: (m) => this.warn(m) }, new PdfStream(dict, d.subarray(start, dataEnd))))
   }
 

@@ -1,5 +1,11 @@
 import type { ComponentType } from 'react'
 
+/** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
+export type PdfHost = {
+  pages(file: File): Promise<{ width: number; height: number }[]>
+  PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number }>
+}
+
 /** `files` are the inputs chosen so far, for panels that preview them (crop) */
 export type PanelProps<O = any> = {
   options: O
@@ -7,6 +13,7 @@ export type PanelProps<O = any> = {
   files: File[]
   /** the document information of a PDF, read off the main thread (for the metadata tool) */
   readMetadata?: (file: File) => Promise<Record<string, string>>
+  pdfHost?: PdfHost
 }
 export type PanelModule = { Panel: ComponentType<PanelProps<any>>; defaultOptions: unknown }
 

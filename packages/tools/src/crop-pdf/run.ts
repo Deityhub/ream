@@ -1,25 +1,33 @@
 import type { RunFn } from '@ream/core'
-import { crop } from '@ream/pdf-core'
+import { deflate } from '@ream/core'
+import { crop, cropBoxes, type PageRewrite } from '@ream/pdf-core'
+import { removeOutside } from '@ream/pdf-render'
 import { baseName, loadPdf, pdfFile } from '../pdf-common.ts'
+import { NOTHING, marginsOf, pagesToCrop, rectFor, type CropPdfOptions } from './margins.ts'
 
-export type CropPdfOptions = {
-  unit: 'mm' | 'in' | 'pt' | '%'
-  top: number
-  right: number
-  bottom: number
-  left: number
-}
-
-const PER_UNIT = { mm: 72 / 25.4, in: 72, pt: 1 } as const
+export type { CropPdfOptions }
 
 export const run: RunFn<CropPdfOptions> = async (files, o, { progress }) => {
   const doc = await loadPdf(files[0])
-  const amount = (v: number) => Math.max(0, Number(v) || 0)
-  const bytes = crop(doc, (page) => {
-    progress((page.index + 1) / page.count)
-    // percentages are of the page's own width (left, right) and height (top, bottom)
-    const along = (v: number, of: number) => (o.unit === '%' ? (amount(v) / 100) * of : amount(v) * PER_UNIT[o.unit])
-    return [along(o.top, page.height), along(o.right, page.width), along(o.bottom, page.height), along(o.left, page.width)]
-  })
+  if (!pagesToCrop(o, doc.pages().length).length) throw NOTHING
+  const margins = (page: { index: number; width: number; height: number }) => {
+    const r = rectFor(o, page.index)
+    return r && marginsOf(r, page)
+  }
+
+  // deleting: rewrite each cropped page's drawing instructions without what lies entirely outside the kept area
+  let rewrite: Map<number, PageRewrite> | undefined
+  if (o.remove) {
+    rewrite = new Map()
+    const boxes = cropBoxes(doc, margins)
+    let done = 0
+    for (const [index, keep] of boxes) {
+      const cut = await removeOutside(doc, index, keep)
+      rewrite.set(index, { content: await deflate(cut.content), used: cut.used })
+      progress((++done / boxes.size) * 0.9)
+    }
+  }
+  const bytes = crop(doc, margins, { rewrite })
+  progress(1)
   return [pdfFile(`${baseName(files[0].name)}-cropped.pdf`, bytes)]
 }
