@@ -1,13 +1,16 @@
 import { type Page, type PdfDocument, decodeStream, isDict, PdfStream } from '@ream/pdf-core'
 import { Interpreter } from './interpreter.ts'
-import { IDENTITY, pageMatrix } from './matrix.ts'
+import { IDENTITY } from './matrix.ts'
+import { pageBase } from './geometry.ts'
 import { browserPlatform, type Ctx2D, type Platform } from './platform.ts'
-import { numbers } from './function.ts'
 
 export type { Ctx2D, Platform } from './platform.ts'
 export { browserPlatform } from './platform.ts'
 export { Interpreter } from './interpreter.ts'
 export { rasterizeImage, type Raster } from './image.ts'
+export { extractText, type ExtractOptions } from './extract.ts'
+export { pageChars, type TextChar, type PageChars } from './textchars.ts'
+export { layoutPage, cleanText, type LayoutOptions } from './textlayout.ts'
 export { analyzePage, imagePlacements, removeOutside, BoundsCtx, type Box, type PaintedOp, type Removal, type Placement } from './bounds.ts'
 
 export type PageGeometry = { page: Page; width: number; height: number; scale: number }
@@ -24,21 +27,13 @@ export function pageGeometry(doc: PdfDocument, index: number, widthPx: number): 
 export type RenderOptions = { platform?: Platform; signal?: AbortSignal }
 export type RenderResult = { warnings: string[] }
 
-/** the page's visible box [llx, lly, urx, ury]: the crop box if it has one, else the media box */
-function pageBox(doc: PdfDocument, page: Page): [number, number, number, number] {
-  const get = (k: string) => numbers(doc, page.dict.get(k) ?? page.inherited.get(k))
-  const b = [get('CropBox'), get('MediaBox')].find((x) => x && x.length === 4) ?? [0, 0, 612, 792]
-  return [Math.min(b[0], b[2]), Math.min(b[1], b[3]), Math.max(b[0], b[2]), Math.max(b[1], b[3])]
-}
-
 /**
  * Draw page `index` onto `ctx`, which must belong to a canvas of the size `pageGeometry` returned for `widthPx`.
  * Never throws for a page it can only partly draw: what couldn't be drawn is reported in `warnings`.
  */
 export async function renderPage(doc: PdfDocument, index: number, ctx: Ctx2D, widthPx: number, options: RenderOptions = {}): Promise<RenderResult> {
   const { page, width, height, scale } = pageGeometry(doc, index, widthPx)
-  const rotate = doc.resolve(page.dict.get('Rotate') ?? page.inherited.get('Rotate'))
-  const base = pageMatrix(pageBox(doc, page), typeof rotate === 'number' ? rotate : 0, scale)
+  const base = pageBase(doc, page, scale)
   const interp = new Interpreter(doc, ctx, options.platform ?? browserPlatform, base, options.signal)
 
   ctx.save()

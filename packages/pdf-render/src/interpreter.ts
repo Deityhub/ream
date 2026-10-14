@@ -4,7 +4,10 @@ import {
   PdfName,
   PdfStream,
   PdfString,
+  appearanceMatrix,
   decodeStream,
+  isVisibleAnnotation,
+  normalAppearance,
   isDict,
   type Page,
   type PdfDict,
@@ -83,6 +86,20 @@ export type OpInfo = {
   unknownWidth: boolean
 }
 
+/** one shown glyph with where it is, for text extraction: start and end of its baseline in the space `base` maps to */
+export type GlyphInfo = {
+  text: string
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+  /** the font size in that space */
+  size: number
+  bold: boolean
+  italic: boolean
+  renderMode: number
+}
+
 /** Runs PDF content streams against a 2D canvas context. One instance draws one page. */
 export class Interpreter {
   doc: PdfDocument
@@ -94,6 +111,8 @@ export class Interpreter {
   warnings = new Set<string>()
   /** told about every top-level operator when `run` is called with `record` (used to find where things are painted) */
   onOp?: (info: OpInfo) => void
+  /** told about every glyph that has text, at any depth (forms, annotation appearances) */
+  onGlyph?: (glyph: GlyphInfo) => void
   /** analysis only: pictures are not decoded and count as their unit square */
   analysis = false
   /** told about every picture XObject that is painted (at any depth), with the matrix that maps its unit square into the space the page's own content uses */
@@ -491,6 +510,12 @@ export class Interpreter {
         }
       }
       const tx = ((advance / 1000) * s.fontSize + s.charSpace + (g.space ? s.wordSpace : 0)) * s.hScale
+      if (this.onGlyph && g.text) {
+        const to = mul(s.ctm, this.base)
+        const from = mul([1, 0, 0, 1, 0, s.rise], mul(this.tm, to))
+        const next = mul([1, 0, 0, 1, 0, s.rise], mul(mul([1, 0, 0, 1, tx, 0], this.tm), to))
+        this.onGlyph({ text: g.text, x0: from[4], y0: from[5], x1: next[4], y1: next[5], size: Math.abs(s.fontSize) * Math.hypot(from[2], from[3]), bold: font.bold, italic: font.italic, renderMode: mode })
+      }
       this.tm = mul([1, 0, 0, 1, tx, 0], this.tm)
     }
   }
@@ -646,31 +671,13 @@ export class Interpreter {
     for (const ref of annots) {
       const a = this.doc.resolve(ref)
       if (!isDict(a)) continue
-      const flags = this.doc.resolve(a.get('F'))
-      if (typeof flags === 'number' && (flags & 2 || flags & 32)) continue // hidden, or not for viewing
-      const sub = this.doc.resolve(a.get('Subtype'))
-      if (sub instanceof PdfName && sub.value === 'Popup') continue
-      const ap = this.doc.resolve(a.get('AP'))
-      let normal = isDict(ap) ? this.doc.resolve(ap.get('N')) : null
-      if (isDict(normal)) {
-        const state = this.doc.resolve(a.get('AS'))
-        normal = state instanceof PdfName ? this.doc.resolve(normal.get(state.value)) : null
-      }
-      if (!(normal instanceof PdfStream)) continue
-      const rect = numbers(this.doc, a.get('Rect'))
-      const bbox = numbers(this.doc, normal.dict.get('BBox'))
-      if (!rect || rect.length !== 4 || !bbox || bbox.length !== 4) continue
-      const m = (numbers(this.doc, normal.dict.get('Matrix')) as Matrix | null) ?? IDENTITY
-      const corners = [apply(m, bbox[0], bbox[1]), apply(m, bbox[2], bbox[1]), apply(m, bbox[0], bbox[3]), apply(m, bbox[2], bbox[3])]
-      const [bx0, bx1] = [Math.min(...corners.map((c) => c[0])), Math.max(...corners.map((c) => c[0]))]
-      const [by0, by1] = [Math.min(...corners.map((c) => c[1])), Math.max(...corners.map((c) => c[1]))]
-      const [rx0, rx1] = [Math.min(rect[0], rect[2]), Math.max(rect[0], rect[2])]
-      const [ry0, ry1] = [Math.min(rect[1], rect[3]), Math.max(rect[1], rect[3])]
-      const sx = bx1 > bx0 ? (rx1 - rx0) / (bx1 - bx0) : 1
-      const sy = by1 > by0 ? (ry1 - ry0) / (by1 - by0) : 1
+      if (!isVisibleAnnotation(this.doc, a)) continue
+      const normal = normalAppearance(this.doc, a)
+      const matrix = normal && appearanceMatrix(this.doc, a, normal)
+      if (!normal || !matrix) continue
       this.ctx.save()
       try {
-        this.reset([sx, 0, 0, sy, rx0 - bx0 * sx, ry0 - by0 * sy])
+        this.reset(matrix)
         await this.form(normal, new Map())
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') throw e

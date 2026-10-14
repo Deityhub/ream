@@ -117,7 +117,7 @@ describe('images-to-pdf', () => {
 })
 
 describe('watermark', () => {
-  const o: WatermarkOptions = { text: 'DRAFT', size: 60, bold: true, italic: false, color: '#ff0000', opacity: 25, angle: 45, layout: 'single', spot: 'mc', spacing: 60, layer: 'over', pages: '' }
+  const o: WatermarkOptions = { text: 'DRAFT', size: 60, bold: true, italic: false, color: '#ff0000', opacity: 25, angle: 45, layout: 'single', spot: 'mc', spacing: 60, layer: 'over', pages: '', fontFile: null, fontName: '' }
   test('stamps every page, or only the chosen ones', async () => {
     const all = await contents((await watermark([fx('chromium.pdf')], o, ctx))[0])
     expect(all).toHaveLength(3)

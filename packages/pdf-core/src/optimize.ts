@@ -12,6 +12,8 @@ export type OptimizeOptions = {
   replace?: Map<PdfStream, PdfStream>
   /** write PDF 1.5 object streams and a cross-reference stream (default true) */
   objectStreams?: boolean
+  /** only drop what can't be reached and renumber: no recompressing, no merging of identical objects */
+  tidy?: boolean
 }
 
 // page thumbnails and the private data of editing programs (an Illustrator file can sit inside a PDF) show nothing
@@ -193,13 +195,13 @@ export async function optimize(doc: PdfDocument, o: OptimizeOptions = {}): Promi
 
   // 2. streams stored in fewer bytes
   const at: number[] = []
-  objects.forEach((x, i) => x instanceof PdfStream && at.push(i))
+  if (!o.tidy) objects.forEach((x, i) => x instanceof PdfStream && at.push(i))
   await inBatches(at, async (i) => {
     objects[i] = await recompress(objects[i] as PdfStream)
   })
 
   // 3. identical streams and fonts stored once
-  const canon = findDuplicates(objects)
+  const canon = o.tidy ? Array.from({ length: objects.length + 1 }, (_, i) => i) : findDuplicates(objects)
   const kept: number[] = []
   objects.forEach((_, i) => canon[i + 1] === i + 1 && kept.push(i + 1))
   const final = new Map(kept.map((old, i) => [old, i + 1]))

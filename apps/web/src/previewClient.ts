@@ -1,6 +1,6 @@
-import type { ImageMetadata, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
+import type { ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
 
-export type { ImageMetadata, PdfInfo, RenderedPage, UnlockResult }
+export type { ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -65,9 +65,12 @@ export function inspectPdf(file: Blob): Promise<PdfInfo> {
 /** the document information (title, author, ...) of a PDF, read in the worker */
 export const readPdfMetadata = (file: Blob) => withDoc<Record<string, string>>(file, { op: 'metadata' })
 
+/** the bookmarks of a PDF, read in the worker */
+export const readPdfOutline = (file: Blob) => withDoc<OutlineItem[]>(file, { op: 'outline' })
+
 // Rendered pages are kept briefly so a thumbnail and a bigger preview of the same page, or a re-mounted component,
 // don't render twice. Oldest entries are closed to give the memory back.
-const MAX_RENDERS = 48
+const MAX_RENDERS = 200 // enough for a grid of page thumbnails
 const renders = new Map<string, Promise<RenderedPage>>()
 
 /** page `page` (0-based) of a PDF drawn `width` pixels wide, as a bitmap to paint on a canvas */

@@ -8,10 +8,10 @@ import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
 import { PasswordDialog } from './PasswordDialog'
-import { inspectPdf, markUnlocked, readImageMetadata, readPdfMetadata, unlockPdf } from './previewClient'
+import { inspectPdf, markUnlocked, readImageMetadata, readPdfMetadata, readPdfOutline, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
-import { PdfPage } from './PdfPage'
+import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 
 type State =
@@ -27,7 +27,13 @@ const pdfHost = {
     if (info.kind !== 'ok') throw new Error('unreadable')
     return info.pages
   },
+  outline: readPdfOutline,
+  check: async (file: File) => {
+    const info = await inspectPdf(file)
+    return info.kind === 'ok' ? { ok: true, pages: info.pages.length, rebuilt: info.rebuilt } : { ok: false, pages: 0, rebuilt: false, message: info.kind === 'error' ? info.message : undefined }
+  },
   PdfPage,
+  LazyPage: LazyPdfPage,
 }
 
 const GENERIC = 'Something went wrong while processing your files. Nothing was uploaded. Try again, or try a different file.'

@@ -1,5 +1,5 @@
 import { UserError } from '@ream/core'
-import { PdfDocument, PdfPasswordError, decryptPdf, readInfo } from '@ream/pdf-core'
+import { PdfDocument, PdfPasswordError, decryptPdf, readInfo, readOutline, type OutlineItem } from '@ream/pdf-core'
 import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
 import { pageGeometry, renderPage } from '@ream/pdf-render'
 
@@ -8,17 +8,19 @@ import { pageGeometry, renderPage } from '@ream/pdf-render'
 // page renders of the same file don't parse it again.
 
 export type PdfInfo =
-  | { kind: 'ok'; pages: { width: number; height: number }[] }
+  | { kind: 'ok'; pages: { width: number; height: number }[]; /** the file's index was wrong and the objects were found by scanning */ rebuilt: boolean }
   | { kind: 'encrypted' }
   | { kind: 'error'; message: string }
 
 export type UnlockResult = { kind: 'unlocked'; bytes: Uint8Array } | { kind: 'wrong' } | { kind: 'error'; message: string }
+export type { OutlineItem }
 export type ImageMetadata = MetadataSummary | null
 export type RenderedPage = { bitmap: ImageBitmap; width: number; height: number; warnings: string[] }
 
 type Request =
   | { id: number; op: 'inspect'; docId: number; bytes?: Uint8Array }
   | { id: number; op: 'metadata'; docId: number; bytes?: Uint8Array }
+  | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; page: number; width: number }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
   | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
@@ -43,7 +45,7 @@ function getDoc(docId: number, bytes?: Uint8Array): Promise<PdfDocument> {
 async function inspect(docId: number, bytes?: Uint8Array): Promise<PdfInfo> {
   try {
     const doc = await getDoc(docId, bytes)
-    return { kind: 'ok', pages: doc.pages().map((p) => doc.pageSize(p)) }
+    return { kind: 'ok', pages: doc.pages().map((p) => doc.pageSize(p)), rebuilt: doc.rebuilt }
   } catch (e) {
     if (e instanceof PdfPasswordError) return { kind: 'encrypted' }
     if (e instanceof UserError) return { kind: 'error', message: e.message }
@@ -75,6 +77,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   try {
     if (req.op === 'inspect') post({ id: req.id, ok: true, result: await inspect(req.docId, req.bytes) })
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes)) })
+    else if (req.op === 'outline') post({ id: req.id, ok: true, result: readOutline(await getDoc(req.docId, req.bytes)) })
     else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })
     else if (req.op === 'render') {
       const result = await render(req.docId, req.page, req.width, req.bytes)

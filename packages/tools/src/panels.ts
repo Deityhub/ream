@@ -1,10 +1,17 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { MetadataSummary } from '@ream/image-core'
+import type { OutlineItem } from '@ream/pdf-core'
 
 /** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
 export type PdfHost = {
   pages(file: File): Promise<{ width: number; height: number }[]>
+  /** the bookmarks of a PDF (0-based pages) */
+  outline(file: File): Promise<OutlineItem[]>
+  /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
+  check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
   PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number }>
+  /** like PdfPage but it reserves the page's space first and only draws once it scrolls near the screen (for long grids) */
+  LazyPage: ComponentType<{ file: Blob; page: number; size: { width: number; height: number }; renderWidth: number }>
 }
 
 /** `files` are the inputs chosen so far, for panels that preview them (crop) */
@@ -48,4 +55,9 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'blur-image': () => import('./blur-image/Panel.tsx'),
   'filters-image': () => import('./filters-image/Panel.tsx'),
   'meme': () => import('./meme/Panel.tsx'),
+  'bookmarks-pdf': () => import('./bookmarks-pdf/Panel.tsx'),
+  'organize-pdf': () => import('./organize-pdf/Panel.tsx'),
+  'repair-pdf': () => import('./repair-pdf/Panel.tsx'),
+  'flatten-pdf': () => import('./flatten-pdf/Panel.tsx'),
+  'pdf-to-text': () => import('./pdf-to-text/Panel.tsx'),
 }

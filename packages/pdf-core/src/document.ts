@@ -1,4 +1,4 @@
-import { PdfKeyword, PdfRef, PdfStream, PdfString, isDict, isName, type PdfDict, type PdfObj } from './objects.ts'
+import { PdfKeyword, PdfRef, PdfStream, PdfString, isDict, isName, name, type PdfDict, type PdfObj } from './objects.ts'
 import { Parser, parseIndirectAt } from './parser.ts'
 import { decodeStream } from './filters.ts'
 import { PdfEncryptedError, PdfParseError, PdfPasswordError } from './errors.ts'
@@ -21,6 +21,8 @@ const unknownLength = () => NaN
 export type LoadOptions = {
   /** user or owner password; the empty password is tried by default, which opens files that only restrict editing */
   password?: string
+  /** keep going when the file has no usable catalog or page tree (the repair tool puts that right); normal loading refuses such a file */
+  repair?: boolean
 }
 
 export class PdfDocument {
@@ -28,20 +30,24 @@ export class PdfDocument {
   trailer: PdfDict
   /** the file was encrypted; everything in `objects` is already decrypted */
   encrypted: boolean
+  /** the cross-reference table was missing or wrong, so the objects were found by scanning the file */
+  rebuilt = false
   constructor(objects: Map<number, PdfObj>, trailer: PdfDict, encrypted = false) {
     this.objects = objects
     this.trailer = trailer
     this.encrypted = encrypted
   }
 
-  static async load(bytes: Uint8Array, { password = '' }: LoadOptions = {}): Promise<PdfDocument> {
+  static async load(bytes: Uint8Array, { password = '', repair = false }: LoadOptions = {}): Promise<PdfDocument> {
     const head = indexOfBytes(bytes.subarray(0, 1024), ascii('%PDF-'))
     if (head < 0) throw new PdfParseError("This file isn't a PDF.")
     try {
       return validate(await loadFromXref(bytes, password))
     } catch (e) {
       if (e instanceof PdfEncryptedError || e instanceof PdfPasswordError) throw e
-      return validate(await rebuild(bytes, password))
+      const doc = await rebuild(bytes, password, repair)
+      doc.rebuilt = true
+      return repair ? doc : validate(doc)
     }
   }
 
@@ -272,7 +278,7 @@ async function expandObjStm(stm: PdfStream, accept: (num: number) => boolean, ou
 
 // ---------- fallback: scan the whole file for "n g obj" ----------
 
-async function rebuild(bytes: Uint8Array, password: string): Promise<PdfDocument> {
+async function rebuild(bytes: Uint8Array, password: string, repair: boolean): Promise<PdfDocument> {
   const text = new TextDecoder('latin1').decode(bytes)
   const objects = new Map<number, PdfObj>()
   const gens = new Map<number, number>()
@@ -303,6 +309,12 @@ async function rebuild(bytes: Uint8Array, password: string): Promise<PdfDocument
   }
   if (!trailer) {
     for (const [num, o] of objects) if (isDict(o) && isName(o.get('Type'), 'Catalog')) trailer = new Map([['Root', new PdfRef(num)]])
+  }
+  if (!trailer && repair && [...objects.values()].some((o) => isDict(o) && isName(o.get('Type'), 'Page'))) {
+    // no catalog survived but pages did: a new catalog is made, and the repair gives it a page tree
+    const num = Math.max(0, ...objects.keys()) + 1
+    objects.set(num, new Map<string, PdfObj>([['Type', name('Catalog')]]))
+    trailer = new Map([['Root', new PdfRef(num)]])
   }
   if (!trailer) throw new PdfParseError("Couldn't read this PDF; the file may be damaged.")
 

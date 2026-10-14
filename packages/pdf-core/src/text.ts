@@ -33,6 +33,9 @@ export const baseFont = ({ bold, italic }: StampFont) => (bold || italic ? `Helv
 /** the resource name a stamp's content stream uses for this font */
 export const fontResource = (font: string) => 'Ream' + font.replace('-', '')
 
+/** the resource name a stamp's content stream uses for an embedded font it called `key` */
+export const embeddedResource = (key: string) => 'ReamEmb' + key
+
 /** WinAnsi code of one character, or undefined when Helvetica text can't show it */
 function winAnsi(ch: string): number | undefined {
   const c = ch.codePointAt(0)!

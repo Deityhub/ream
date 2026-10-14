@@ -122,7 +122,31 @@ function Outputs({ outputs, compareTo }: { outputs: FileData[]; compareTo?: numb
 
 /** a picture, or for a PDF its page count and size, with the facts under it */
 function FileView({ file, was }: { file: File; was?: number }) {
-  return file.type.startsWith('image/') ? <ImageView file={file} was={was} /> : isPdf(file) ? <PdfView file={file} was={was} /> : null
+  return file.type.startsWith('image/') ? <ImageView file={file} was={was} /> : isPdf(file) ? <PdfView file={file} was={was} /> : file.type.startsWith('text/') ? <TextView file={file} /> : null
+}
+
+const TEXT_SHOWN = 20_000
+
+/** the start of a text result, as it will be saved */
+function TextView({ file }: { file: File }) {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    file.slice(0, TEXT_SHOWN * 4).text().then((t) => live && setText(t))
+    return () => {
+      live = false
+    }
+  }, [file])
+  const cut = text !== null && (file.size > TEXT_SHOWN * 4 || text.length > TEXT_SHOWN)
+  return (
+    <figure className="space-y-2">
+      <pre tabIndex={0} aria-label={`Text of ${file.name}`} className="max-h-[calc(100vh-14rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-surface-2 p-3 text-sm focus-visible:outline-2 focus-visible:outline-accent">
+        {text === null ? 'Reading…' : text.slice(0, TEXT_SHOWN) || 'No text.'}
+      </pre>
+      {cut && <p className="text-xs text-muted">Showing the start. The saved file has all of it.</p>}
+      <Facts name={file.name} parts={[formatBytes(file.size)]} />
+    </figure>
+  )
 }
 
 function ImageView({ file, was }: { file: File; was?: number }) {

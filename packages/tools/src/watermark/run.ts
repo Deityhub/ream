@@ -1,5 +1,5 @@
 import { UserError, type RunFn } from '@ream/core'
-import { baseFont, fontResource, pdfText, stamp, textWidth } from '@ream/pdf-core'
+import { baseFont, embeddedResource, fontResource, pdfText, prepareFont, stamp, textWidth } from '@ream/pdf-core'
 import { baseName, clampInt, loadPdf, pdfFile, rgb, selectPages, spotCentre, type Spot } from '../pdf-common.ts'
 
 export type WatermarkOptions = {
@@ -20,6 +20,10 @@ export type WatermarkOptions = {
   layer: 'over' | 'under'
   /** page ranges like 1-3,5; empty for every page */
   pages: string
+  /** a TrueType font to draw the text with, instead of Helvetica: lets it be in any script the font has. Bold and italic don't apply to it. */
+  fontFile: Uint8Array | null
+  /** the file's name, for the panel */
+  fontName: string
 }
 
 const EDGE = 36 // points between an edge spot and the page edge
@@ -37,8 +41,11 @@ export const run: RunFn<WatermarkOptions> = async (files, o, { progress }) => {
   const angle = ((Math.round(Number(o.angle)) || 0) * Math.PI) / 180
   const [cos, sin] = [+Math.cos(angle).toFixed(5), +Math.sin(angle).toFixed(5)]
   const colour = rgb(o.color)
-  const string = pdfText(text)
-  const box = { width: textWidth(text, size, font), height: size * CAP_HEIGHT }
+  // an uploaded font is cut down to this text's glyphs and embedded; otherwise Helvetica, which every viewer has
+  const embedded = o.fontFile ? await prepareFont(o.fontFile, text) : null
+  const string = embedded ? embedded.encode(text) : pdfText(text)
+  const resource = embedded ? embeddedResource('Wm') : fontResource(name)
+  const box = embedded ? { width: embedded.width(text, size), height: embedded.capHeight(size) } : { width: textWidth(text, size, font), height: size * CAP_HEIGHT }
 
   const tile = o.layout === 'tile'
   const gap = clampInt(o.spacing, 0, 200)
@@ -69,8 +76,8 @@ export const run: RunFn<WatermarkOptions> = async (files, o, { progress }) => {
     const shows = copies.map(([x, y]) => `1 0 0 1 ${+(x - box.width / 2).toFixed(2)} ${+(y - box.height / 2).toFixed(2)} Tm ${string} Tj`).join('\n')
     return {
       // move to the frame's centre, turn, then draw each copy centred on its spot
-      content: `${colour} rg\nq 1 0 0 1 ${+ox.toFixed(2)} ${+oy.toFixed(2)} cm ${cos} ${sin} ${-sin} ${cos} 0 0 cm\nBT /${fontResource(name)} ${size} Tf\n${shows}\nET\nQ`,
-      fonts: [name],
+      content: `${colour} rg\nq 1 0 0 1 ${+ox.toFixed(2)} ${+oy.toFixed(2)} cm ${cos} ${sin} ${-sin} ${cos} 0 0 cm\nBT /${resource} ${size} Tf\n${shows}\nET\nQ`,
+      ...(embedded ? { embedded: { Wm: embedded } } : { fonts: [name] }),
       alpha: clampInt(o.opacity, 1, 100) / 100,
       under: o.layer === 'under',
     }

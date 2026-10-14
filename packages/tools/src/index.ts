@@ -23,6 +23,11 @@ import { watermarkImage } from './watermark-image/manifest.ts'
 import { blurImage } from './blur-image/manifest.ts'
 import { filtersImage } from './filters-image/manifest.ts'
 import { meme } from './meme/manifest.ts'
+import { bookmarksPdf } from './bookmarks-pdf/manifest.ts'
+import { organizePdf } from './organize-pdf/manifest.ts'
+import { repairPdf } from './repair-pdf/manifest.ts'
+import { flattenPdfTool } from './flatten-pdf/manifest.ts'
+import { pdfToText } from './pdf-to-text/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
@@ -37,6 +42,11 @@ export const tools: Tool[] = [
   protectPdf,
   unlockPdf,
   signPdf,
+  organizePdf,
+  flattenPdfTool,
+  pdfToText,
+  bookmarksPdf,
+  repairPdf,
   resizeImage,
   convertImage,
   rotateImage,

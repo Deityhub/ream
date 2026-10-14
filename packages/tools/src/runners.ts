@@ -26,4 +26,9 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'blur-image': () => import('./blur-image/run.ts'),
   'filters-image': () => import('./filters-image/run.ts'),
   'meme': () => import('./meme/run.ts'),
+  'bookmarks-pdf': () => import('./bookmarks-pdf/run.ts'),
+  'organize-pdf': () => import('./organize-pdf/run.ts'),
+  'repair-pdf': () => import('./repair-pdf/run.ts'),
+  'flatten-pdf': () => import('./flatten-pdf/run.ts'),
+  'pdf-to-text': () => import('./pdf-to-text/run.ts'),
 }

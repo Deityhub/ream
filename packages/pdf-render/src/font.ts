@@ -215,6 +215,7 @@ async function type0(doc: PdfDocument, dict: PdfDict, baseFont: string): Promise
   const lengths = toUni?.codeLengths.length ? toUni.codeLengths : [2]
   const notes = ['Fonts are shown with similar ones']
   let unmapped = false
+
   return {
     ...style, type3: null, substituted: true, notes,
     decode(bytes) {

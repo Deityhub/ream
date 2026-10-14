@@ -8,8 +8,9 @@ import { PdfRangeError } from './errors.ts'
 import { INFO_KEYS, pdfDate, readInfo } from './info.ts'
 import { ascii } from './bytes.ts'
 import type { UsedResources } from './content.ts'
-import { fontResource } from './text.ts'
+import { embeddedResource, fontResource } from './text.ts'
 import { addPrepared, type PreparedImage } from './images.ts'
+import type { PreparedFont } from './ttf.ts'
 
 /** what a stamp is told about the page it draws on; sizes are as displayed (rotation applied), in points */
 export type PageInfo = { index: number; count: number; width: number; height: number }
@@ -22,6 +23,8 @@ export type Overlay = {
   content: string
   /** base fonts the content uses, shown as /Ream<Name> (see fontResource) */
   fonts?: string[]
+  /** fonts made by `prepareFont` that the content draws with, by the name it uses (shown as /ReamEmb<Name>, see `embeddedResource`); one font used on every page is stored once */
+  embedded?: Record<string, PreparedFont>
   /** pictures the content draws with `Do`, by the name it uses (shown as /Ream<Name>); one picture used on several pages is stored once */
   images?: Record<string, PreparedImage>
   /** 0..1; the content is drawn with this opacity */
@@ -52,6 +55,7 @@ export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null
   const fontRefs = new Map<string, PdfRef>()
   const gsRefs = new Map<number, PdfRef>()
   const imageRefs = new Map<PreparedImage, PdfRef>()
+  const embeddedRefs = new Map<PreparedFont, PdfRef>()
   return compose(
     [
       {
@@ -90,6 +94,16 @@ export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null
                   fontRefs.set(f, ref)
                 }
                 return [fontResource(f), ref]
+              }),
+            )
+          }
+          if (overlay.embedded) {
+            addTo(
+              'Font',
+              Object.entries(overlay.embedded).map(([n, f]) => {
+                let ref = embeddedRefs.get(f)
+                if (!ref) embeddedRefs.set(f, (ref = f.write(b)))
+                return [embeddedResource(n), ref]
               }),
             )
           }

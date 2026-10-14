@@ -33,3 +33,11 @@ export class PdfRangeError extends UserError {
     this.name = 'PdfRangeError'
   }
 }
+
+/** a font file we can't use: not TrueType, not allowed to be embedded, or without a letter the text needs */
+export class PdfFontError extends UserError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PdfFontError'
+  }
+}
