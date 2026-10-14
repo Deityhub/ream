@@ -1,18 +1,20 @@
 import type { FileData, RunFn } from '@ream/core'
 import { codec, type ImageBuffer } from '@ream/image-core'
-import { imagesToPdf, jpegInfo, type ImageInput } from '@ream/pdf-core'
+import { imagesToPdf, jpegInfo, type ImageInput, type PageSetup } from '@ream/pdf-core'
 import { pdfFile } from '../pdf-common.ts'
 import { decodeFile } from '../image-common.ts'
 import { baseName } from '../names.ts'
+import { MM, PAGE_SIZES, clampMm, maxMarginMm, type PageSizeChoice } from './sizes.ts'
 
 export type ImagesToPdfOptions = {
-  size: 'fit' | 'a4' | 'letter'
+  size: PageSizeChoice
+  /** millimetres, used when size is 'custom' */
+  customWidth: number
+  customHeight: number
   orientation: 'auto' | 'portrait' | 'landscape'
-  margin: 'none' | 'small' | 'big'
+  /** millimetres of white around the picture */
+  margin: number
 }
-
-const SIZES = { a4: [595, 842], letter: [612, 792] } as const
-const MARGINS = { none: 0, small: 18, big: 36 } as const
 
 const raw = (img: ImageBuffer): ImageInput => ({ width: img.width, height: img.height, rgba: img.data })
 
@@ -33,6 +35,9 @@ async function toInput(f: FileData): Promise<ImageInput> {
   return raw(img)
 }
 
+const pageSize = (o: ImagesToPdfOptions): PageSetup['size'] =>
+  o.size === 'fit' ? 'fit' : o.size === 'custom' ? [clampMm(o.customWidth) * MM, clampMm(o.customHeight) * MM] : [...PAGE_SIZES[o.size].size]
+
 export const run: RunFn<ImagesToPdfOptions> = async (files, options, { progress }) => {
   const inputs: ImageInput[] = []
   for (const [i, f] of files.entries()) {
@@ -41,7 +46,7 @@ export const run: RunFn<ImagesToPdfOptions> = async (files, options, { progress 
   }
   const bytes = await imagesToPdf(
     inputs,
-    { size: options.size === 'fit' ? 'fit' : [...SIZES[options.size]], orientation: options.orientation, margin: MARGINS[options.margin] },
+    { size: pageSize(options), orientation: options.orientation, margin: Math.min(Math.max(0, Number(options.margin) || 0), maxMarginMm(options)) * MM },
     (done) => progress(0.5 + done / (files.length * 2)),
   )
   return [pdfFile(files.length === 1 ? `${baseName(files[0].name)}.pdf` : 'images.pdf', bytes)]

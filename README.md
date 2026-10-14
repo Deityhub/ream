@@ -61,12 +61,16 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 ## Known M3 limits
 
 - **Edits rewrite the file.** Watermark, page numbers, crop and metadata rebuild the PDF from its pages, so bookmarks, form fields, named destinations and XMP metadata are not carried over yet (M7). Page content, fonts, images and the document information are kept.
-- **Text stamps use Helvetica** (regular, bold, italic) with Latin letters, digits and common symbols. Other scripts (Cyrillic, Greek, CJK) give a readable error until TrueType embedding arrives in M7. Text is one line; there is no image watermark yet.
+- **Text stamps use Helvetica** (regular, bold, italic) with Latin letters, digits and common symbols. Other scripts (Cyrillic, Greek, CJK) give a readable error until TrueType embedding arrives in M7. Text is one line; there is no image watermark yet. "Repeat over the page" tiles the text in a brick pattern at the chosen angle and spacing (at most 2000 copies a page).
 - **A stamp behind the page** is hidden wherever the page paints an opaque background.
 - **Crop hides, it doesn't delete:** it sets the page's crop box, so the trimmed part is still in the file. It works in displayed coordinates, so rotated pages trim the edges you see.
-- **Images to PDF:** a JPEG goes in untouched. One stored sideways (EXIF) is decoded and saved again at quality 92 so it comes out upright. PNG, WebP, GIF and BMP go in as Flate-compressed pixels with their transparency, which is larger than a JPEG would be (real PNG and JPEG codecs arrive in M4). A page is at most 200 inches.
+- **Images to PDF:** page sizes are the image's own, A3 to A6, B4, B5, US Letter, Legal, Tabloid, Executive, or a custom size in millimetres (20 to 5080); the margin is a slider in millimetres, up to half the page's short side less 10 mm. A JPEG goes in untouched. One stored sideways (EXIF) is decoded and saved again at quality 92 so it comes out upright. PNG, WebP, GIF and BMP go in as Flate-compressed pixels with their transparency, which is larger than a JPEG would be (real PNG and JPEG codecs arrive in M4). A page is at most 200 inches.
 - **Extract images:** JPEGs come out byte for byte; other pictures are saved as PNG. JPEG 2000, JBIG2 and CCITT pictures (typically scans) are skipped, the same gap as in the preview renderer. A picture used on several pages is saved once.
 - Verified against Chromium's PDF viewer for rotated pages (stamp position, crop edges, page numbers), since our own renderer and the writer could otherwise agree on the same mistake.
+
+## Live preview timing
+
+The result preview waits 600 ms after the last change to any option before it re-runs the tool (`DEBOUNCE_MS` in `apps/web/src/previewController.ts`). Until then the last result stays on screen at full strength, so nothing flickers while someone types or drags a slider; it dims only while the new one is computed. The previous pages stay drawn until their replacements are ready. The Run button never reuses an outdated result (`stale`), whatever the screen shows.
 
 ## Password-protected PDFs
 

@@ -3,7 +3,7 @@ import { FORMATS } from './image-formats.ts'
 import type { Spot } from './pdf-common.ts'
 
 export const inputClass =
-  'rounded-lg border border-field bg-surface px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent'
+  'min-w-0 rounded-lg border border-field bg-surface px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent'
 
 /** whole number from a text box; empty or invalid becomes 0 */
 export const toInt = (v: string) => Math.max(0, Math.floor(Number(v)) || 0)
@@ -67,5 +67,16 @@ export function SpotPicker({ label, value, onChange, allowed }: { label: string;
         )
       })}
     </div>
+  )
+}
+
+/** a labelled slider with its value shown at the end; `unit` is appended to the readout ("30%", "45°") */
+export function RangeField({ label, value, min, max, step = 1, unit = '', onChange }: { label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void }) {
+  return (
+    <label className="flex items-center gap-3 text-sm">
+      <span className="w-16 shrink-0">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="min-w-0 flex-1" />
+      <span className="w-14 shrink-0 text-right tabular-nums text-muted">{value}{unit}</span>
+    </label>
   )
 }

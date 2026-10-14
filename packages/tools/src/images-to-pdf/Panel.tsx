@@ -1,11 +1,18 @@
 import type { PanelProps } from '../panels.ts'
-import { inputClass } from '../fields.tsx'
+import { RangeField, inputClass } from '../fields.tsx'
 import type { ImagesToPdfOptions as O } from './run.ts'
+import { CUSTOM_MM, PAGE_SIZES, maxMarginMm, type PageSizeKey } from './sizes.ts'
 
-export const defaultOptions: O = { size: 'fit', orientation: 'auto', margin: 'none' }
+export const defaultOptions: O = { size: 'fit', customWidth: 210, customHeight: 297, orientation: 'auto', margin: 0 }
+
+const GROUPS = ['ISO', 'North American'] as const
 
 export function Panel({ options, onChange }: PanelProps<O>) {
-  const set = (patch: Partial<O>) => onChange({ ...options, ...patch })
+  // changing the page size can make the current margin too big for it
+  const set = (patch: Partial<O>) => {
+    const next = { ...options, ...patch }
+    onChange({ ...next, margin: Math.min(next.margin, maxMarginMm(next)) })
+  }
   return (
     <fieldset className="space-y-3">
       <legend className="mb-2 text-sm font-medium">Pages</legend>
@@ -13,10 +20,28 @@ export function Panel({ options, onChange }: PanelProps<O>) {
         Page size
         <select value={options.size} onChange={(e) => set({ size: e.target.value as O['size'] })} className={inputClass}>
           <option value="fit">Same as the image</option>
-          <option value="a4">A4</option>
-          <option value="letter">US Letter</option>
+          {GROUPS.map((g) => (
+            <optgroup key={g} label={g}>
+              {(Object.keys(PAGE_SIZES) as PageSizeKey[])
+                .filter((k) => PAGE_SIZES[k].group === g)
+                .map((k) => (
+                  <option key={k} value={k}>
+                    {PAGE_SIZES[k].label}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+          <option value="custom">Custom size</option>
         </select>
       </label>
+      {options.size === 'custom' && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <input type="number" aria-label="Page width in millimetres" min={CUSTOM_MM.min} max={CUSTOM_MM.max} value={options.customWidth} onChange={(e) => set({ customWidth: Number(e.target.value) })} className={`${inputClass} w-24`} />
+          ×
+          <input type="number" aria-label="Page height in millimetres" min={CUSTOM_MM.min} max={CUSTOM_MM.max} value={options.customHeight} onChange={(e) => set({ customHeight: Number(e.target.value) })} className={`${inputClass} w-24`} />
+          mm
+        </div>
+      )}
       {options.size !== 'fit' && (
         <label className="flex flex-wrap items-center gap-2 text-sm">
           Orientation
@@ -27,14 +52,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
           </select>
         </label>
       )}
-      <label className="flex flex-wrap items-center gap-2 text-sm">
-        Margin
-        <select value={options.margin} onChange={(e) => set({ margin: e.target.value as O['margin'] })} className={inputClass}>
-          <option value="none">None</option>
-          <option value="small">Small</option>
-          <option value="big">Big</option>
-        </select>
-      </label>
+      <RangeField label="Margin" value={options.margin} min={0} max={maxMarginMm(options)} unit=" mm" onChange={(margin) => set({ margin })} />
       <p className="text-xs text-muted">One page per image, in the order shown above. JPG files are added as they are, without losing quality.</p>
     </fieldset>
   )

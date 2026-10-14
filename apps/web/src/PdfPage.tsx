@@ -21,7 +21,7 @@ export function PdfPage({ file, page, renderWidth, className = '', onWarnings }:
 
   useEffect(() => {
     let live = true
-    setState('loading')
+    setState((s) => (s === 'ok' ? s : 'loading')) // a page that is already drawn stays on screen until its replacement is ready
     renderPdfPage(file, page, renderWidth).then(
       ({ bitmap, warnings }) => {
         const c = canvas.current

@@ -3,12 +3,16 @@ import { inspectPdf, type PdfInfo } from './previewClient'
 
 export const isPdf = (f: { name: string; type: string }) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
-export function usePdfInfo(file: Blob | undefined): PdfInfo | 'loading' {
+/**
+ * `keepPrevious`: while a new file is being read, keep returning the last readable result instead of 'loading', so a
+ * preview that is refreshed with a new version of the same document doesn't blink.
+ */
+export function usePdfInfo(file: Blob | undefined, keepPrevious = false): PdfInfo | 'loading' {
   const [info, setInfo] = useState<PdfInfo | 'loading'>('loading')
   useEffect(() => {
     if (!file) return
     let live = true
-    setInfo('loading')
+    setInfo((prev) => (keepPrevious && prev !== 'loading' && prev.kind === 'ok' ? prev : 'loading'))
     inspectPdf(file).then(
       (i) => live && setInfo(i),
       () => live && setInfo({ kind: 'error', message: "Couldn't read this PDF." }),
@@ -16,7 +20,7 @@ export function usePdfInfo(file: Blob | undefined): PdfInfo | 'loading' {
     return () => {
       live = false
     }
-  }, [file])
+  }, [file, keepPrevious])
   return info
 }
 

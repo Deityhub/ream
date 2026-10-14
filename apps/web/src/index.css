@@ -11,6 +11,10 @@ body {
 
 input { accent-color: var(--accent); }
 
+/* a fieldset sizes itself to its widest child by default, which pushed wide selects out of their card */
+fieldset { min-width: 0; }
+select, input { max-width: 100%; }
+
 /* Tailwind v4 resets buttons to the default cursor */
 button:not(:disabled), [role='tab']:not(:disabled) { cursor: pointer; }
 

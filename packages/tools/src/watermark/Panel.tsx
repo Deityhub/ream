@@ -1,8 +1,8 @@
 import type { PanelProps } from '../panels.ts'
-import { SpotPicker, inputClass } from '../fields.tsx'
+import { RangeField, SpotPicker, inputClass } from '../fields.tsx'
 import type { WatermarkOptions as O } from './run.ts'
 
-export const defaultOptions: O = { text: 'CONFIDENTIAL', size: 64, bold: true, italic: false, color: '#888888', opacity: 30, angle: 45, spot: 'mc', layer: 'over', pages: '' }
+export const defaultOptions: O = { text: 'CONFIDENTIAL', size: 64, bold: true, italic: false, color: '#888888', opacity: 30, angle: 45, layout: 'single', spot: 'mc', spacing: 60, layer: 'over', pages: '' }
 
 export function Panel({ options, onChange }: PanelProps<O>) {
   const set = (patch: Partial<O>) => onChange({ ...options, ...patch })
@@ -29,22 +29,27 @@ export function Panel({ options, onChange }: PanelProps<O>) {
           <input type="checkbox" checked={options.italic} onChange={(e) => set({ italic: e.target.checked })} /> Italic
         </label>
       </div>
-      <label className="flex items-center gap-3 text-sm">
-        Opacity
-        <input type="range" min={5} max={100} value={options.opacity} onChange={(e) => set({ opacity: Number(e.target.value) })} />
-        <span className="w-10 tabular-nums text-muted">{options.opacity}%</span>
-      </label>
-      <label className="flex items-center gap-3 text-sm">
-        Angle
-        <input type="range" min={-90} max={90} step={5} value={options.angle} onChange={(e) => set({ angle: Number(e.target.value) })} />
-        <span className="w-10 tabular-nums text-muted">{options.angle}°</span>
-      </label>
+      <RangeField label="Opacity" value={options.opacity} min={5} max={100} unit="%" onChange={(opacity) => set({ opacity })} />
+      <RangeField label="Angle" value={options.angle} min={-90} max={90} step={5} unit="°" onChange={(angle) => set({ angle })} />
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="radio" name="watermark-layout" checked={options.layout === 'single'} onChange={() => set({ layout: 'single' })} />
+          One stamp
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="watermark-layout" checked={options.layout === 'tile'} onChange={() => set({ layout: 'tile' })} />
+          Repeat over the page
+        </label>
+      </div>
+      {options.layout === 'tile' && <RangeField label="Spacing" value={options.spacing} min={0} max={200} step={5} unit=" pt" onChange={(spacing) => set({ spacing })} />}
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3 text-sm">
-        <div className="space-y-1">
-          <span className="block">Position</span>
-          <SpotPicker label="Position on the page" value={options.spot} onChange={(spot) => set({ spot })} />
-        </div>
-        <label className="space-y-1">
+        {options.layout === 'single' && (
+          <div className="space-y-1">
+            <span className="block">Position</span>
+            <SpotPicker label="Position on the page" value={options.spot} onChange={(spot) => set({ spot })} />
+          </div>
+        )}
+        <label className="min-w-0 space-y-1">
           <span className="block">Layer</span>
           <select value={options.layer} onChange={(e) => set({ layer: e.target.value as O['layer'] })} className={inputClass}>
             <option value="over">On top of the page</option>

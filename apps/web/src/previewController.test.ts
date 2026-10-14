@@ -69,7 +69,7 @@ describe('preview controller', () => {
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
     jobs[0].resolve(out('a'))
     await settle()
-    expect(last()).toEqual({ kind: 'ready', outputs: out('a'), stale: false })
+    expect(last()).toEqual({ kind: 'ready', outputs: out('a'), stale: false, computing: false })
   })
 
   test('a newer change cancels the running job and its late answer is ignored', async () => {
@@ -84,17 +84,39 @@ describe('preview controller', () => {
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
     jobs[1].resolve(out('new'))
     await settle()
-    expect(last()).toEqual({ kind: 'ready', outputs: out('new'), stale: false })
+    expect(last()).toEqual({ kind: 'ready', outputs: out('new'), stale: false, computing: false })
   })
 
-  test('the last result stays on screen, marked stale, while the next one is computed', async () => {
+  test('the last result stays on screen, outdated but calm, while the user is still changing things', async () => {
+    const { ctl, jobs, update, last } = setup()
+    ctl.schedule(update())
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+    jobs[0].resolve(out('first'))
+    await settle()
+    // keystrokes every 200 ms: the result is outdated (so Run won't reuse it) but nothing visibly changes, no job starts
+    for (let i = 0; i < 4; i++) {
+      ctl.schedule(update())
+      await vi.advanceTimersByTimeAsync(200)
+      expect(last()).toEqual({ kind: 'ready', outputs: out('first'), stale: true, computing: false })
+    }
+    expect(jobs).toHaveLength(1)
+  })
+
+  test('once the user stops, the job starts and only then is the result marked as computing', async () => {
     const { ctl, jobs, update, last } = setup()
     ctl.schedule(update())
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
     jobs[0].resolve(out('first'))
     await settle()
     ctl.schedule(update())
-    expect(last()).toEqual({ kind: 'ready', outputs: out('first'), stale: true })
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS - 1)
+    expect(last()).toEqual({ kind: 'ready', outputs: out('first'), stale: true, computing: false })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(jobs).toHaveLength(2)
+    expect(last()).toEqual({ kind: 'ready', outputs: out('first'), stale: true, computing: true })
+    jobs[1].resolve(out('second'))
+    await settle()
+    expect(last()).toEqual({ kind: 'ready', outputs: out('second'), stale: false, computing: false })
   })
 
   test('user-facing errors are passed on; others get a generic message', async () => {
@@ -122,7 +144,7 @@ describe('preview controller', () => {
     expect(jobs).toHaveLength(1)
     jobs[0].resolve(out('big'))
     await settle()
-    expect(last()).toEqual({ kind: 'ready', outputs: out('big'), stale: false })
+    expect(last()).toEqual({ kind: 'ready', outputs: out('big'), stale: false, computing: false })
   })
 
   test('dispose cancels the job and silences later answers', async () => {

@@ -30,7 +30,7 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
     )
   }
 
-  const stale = preview.kind === 'ready' && preview.stale
+  const busy = preview.kind === 'ready' && preview.computing
   return (
     <section aria-label="Preview" className="space-y-3 rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center gap-2">
@@ -48,7 +48,7 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
             </button>
           ))}
         </div>
-        {stale && (
+        {busy && (
           <span role="status" className="text-xs text-muted">
             Updating…
           </span>
@@ -58,7 +58,7 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
       {shown === 'original' ? (
         <FileView file={original} />
       ) : (
-        <div aria-busy={stale} className={stale ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+        <div aria-busy={busy} className={busy ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
           <ResultView tool={tool} files={files} preview={preview} onRefresh={onRefresh} />
         </div>
       )}
@@ -147,7 +147,7 @@ function ImageView({ file, was }: { file: File; was?: number }) {
 
 /** every page of a PDF, drawn lazily as it scrolls into view, with a note when the drawing is approximate */
 function PdfView({ file, was }: { file: File; was?: number }) {
-  const info = usePdfInfo(file)
+  const info = usePdfInfo(file, true)
   const [warnings, setWarnings] = useState<string[]>([])
   const noteWarnings = useCallback((w: string[]) => w.length && setWarnings((prev) => [...new Set([...prev, ...w])]), [])
   useEffect(() => setWarnings([]), [file])
