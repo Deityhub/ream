@@ -25,6 +25,8 @@ const paths: Record<string, ReactNode> = {
   compress: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
   film: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" /></>,
   tag: <><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
+  sliders: <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />,
+  type: <path d="M4 7V4h16v3M9 20h6M12 4v16" />,
   grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
   'arrow-up':<path d="M12 19V5M5 12l7-7 7 7" />,
   'arrow-down': <path d="M12 5v14M19 12l-7 7-7-7" />,

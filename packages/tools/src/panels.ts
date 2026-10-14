@@ -44,4 +44,8 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'protect-pdf': () => import('./protect-pdf/Panel.tsx'),
   'unlock-pdf': () => import('./unlock-pdf/Panel.tsx'),
   'sign-pdf': () => import('./sign-pdf/Panel.tsx'),
+  'watermark-image': () => import('./watermark-image/Panel.tsx'),
+  'blur-image': () => import('./blur-image/Panel.tsx'),
+  'filters-image': () => import('./filters-image/Panel.tsx'),
+  'meme': () => import('./meme/Panel.tsx'),
 }

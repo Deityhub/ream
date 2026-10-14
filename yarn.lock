@@ -445,6 +445,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/anton@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/anton@npm:5.3.0"
+  checksum: 10c0/7d5a3d961d598b6331c8f0cb17f333a6a4397589b27f6d882617fc42f64a1f93b10d794f33f734ea69705318082fcd84aeb9dca077d88b5688321f293640f88b
+  languageName: node
+  linkType: hard
+
 "@fontsource/caveat@npm:^5.3.0":
   version: 5.3.0
   resolution: "@fontsource/caveat@npm:5.3.0"
@@ -584,6 +591,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ream/tools@workspace:packages/tools"
   dependencies:
+    "@fontsource/anton": "npm:^5.3.0"
     "@fontsource/caveat": "npm:^5.3.0"
     "@fontsource/dancing-script": "npm:^5.3.0"
     "@fontsource/great-vibes": "npm:^5.3.0"

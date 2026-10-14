@@ -1,6 +1,8 @@
 export { createImage, checkPixels, MAX_PIXELS, UnsupportedImage, type ImageBuffer } from './buffer.ts'
 export { codec, setCodec, type Codec, type OutputMime } from './codec.ts'
 export { resize, crop, rotate, flip, flattenOnWhite, orient, stitch, type StitchOptions } from './ops.ts'
+export { overlay } from './compose.ts'
+export { blur, pixelate, fill, adjust, sharpen, NO_ADJUSTMENTS, type Adjustments, type Area } from './filters.ts'
 export { decodePng, encodePng, filterRows as pngFilterRows, type PngOptions } from './png.ts'
 export { ownCodec } from './own.ts'
 export { decodeJpeg, type JpegPixels } from './jpeg/decode.ts'

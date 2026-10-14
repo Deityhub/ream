@@ -19,6 +19,10 @@ import { compressPdf } from './compress-pdf/manifest.ts'
 import { protectPdf } from './protect-pdf/manifest.ts'
 import { unlockPdf } from './unlock-pdf/manifest.ts'
 import { signPdf } from './sign-pdf/manifest.ts'
+import { watermarkImage } from './watermark-image/manifest.ts'
+import { blurImage } from './blur-image/manifest.ts'
+import { filtersImage } from './filters-image/manifest.ts'
+import { meme } from './meme/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
@@ -41,6 +45,10 @@ export const tools: Tool[] = [
   compressImage,
   animatedGif,
   imageMetadata,
+  watermarkImage,
+  blurImage,
+  filtersImage,
+  meme,
 ]
 
 export const findTool = (id: string) => tools.find((t) => t.id === id)

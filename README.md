@@ -35,7 +35,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M3 ✅ | PDF edit | Images → PDF, watermark, page numbers, crop, metadata, extract images |
 | M4 ✅ | Own codecs | Own PNG/GIF/BMP/JPEG codecs (WebP stays with the browser); compress image, compress PDF (structure and pictures), animated GIF, photo metadata (EXIF) |
 | M5 ✅ | PDF security | Protect PDF (AES-256 or AES-128, user and owner passwords, permissions), Unlock PDF, Sign PDF (visual signature) |
-| M6 | Image edit | Watermark, manual blur, filters, meme |
+| M6 ✅ | Image edit | Watermark image, blur or hide parts, filters, meme maker |
 | M7 | PDF advanced | Organize grid, flatten, repair, forms, PDF → text/Markdown, TTF embedding, bookmarks |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: PDF renderer, OCR, Office/HTML → PDF, PDF/A, ML image tools |
@@ -66,6 +66,15 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - **Images to PDF:** page sizes are the image's own, A3 to A6, B4, B5, US Letter, Legal, Tabloid, Executive, or a custom size in millimetres (20 to 5080); the margin is a slider in millimetres, up to half the page's short side less 10 mm. A JPEG goes in untouched. One stored sideways (EXIF) is decoded and saved again at quality 92 so it comes out upright. PNG, WebP, GIF and BMP go in as Flate-compressed pixels with their transparency, which is larger than a JPEG would be. A page is at most 200 inches.
 - **Extract images:** JPEGs come out byte for byte; other pictures are saved as PNG. JPEG 2000, JBIG2 and CCITT pictures (typically scans) are skipped, the same gap as in the preview renderer. A picture used on several pages is saved once.
 - Verified against Chromium's PDF viewer for rotated pages (stamp position, crop edges, page numbers), since our own renderer and the writer could otherwise agree on the same mistake.
+
+## Known M6 limits
+
+- **Text is drawn by the browser.** Watermark text and meme captions are made into a transparent picture in the panel (with Inter and the bundled Anton font) and the engine only places that picture, so the engine has no font code and the tool's `run` can't make text by itself (tests pass a ready-made picture). Anything that can't be typed in those fonts falls back to the system font.
+- **Watermark image:** text or a logo, one mark in one of nine spots or repeated over the picture (rows offset by half a step), any angle from -90 to 90 (the mark is turned before it is placed), size as a share of each picture's width, opacity. Every picture gets the same mark.
+- **Blur or hide parts:** any number of rectangles, all treated the same way (pixelate, blur or a solid box). Strength is relative to each rectangle. The saved file is encoded afresh, so a covered area's pixels and any camera data are gone. A light blur can sometimes be partly undone by sharpening; the panel says so and recommends pixelate or cover for anything sensitive. Rectangles only: no freehand or oval areas, and no automatic face detection.
+- **Filters:** brightness, contrast, colour, warmth, sepia, vignette, blur and sharpen, with a few one-click looks. Adjustments work on the stored (sRGB) values like a browser's CSS filters, not in linear light, and there are no colour curves or LUTs.
+- **Meme maker:** capitals in Anton with a black outline, top and bottom, one size and colour for both, wrapped and shrunk to fit. Captions are made as wide as the picture (up to 4096 px, larger pictures get slightly softer letters).
+- The saved file keeps the input's format (a GIF or BMP becomes PNG); an animated GIF is flattened to its first frame, as in the other image tools.
 
 ## Known M5 limits
 

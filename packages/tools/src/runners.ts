@@ -22,4 +22,8 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'protect-pdf': () => import('./protect-pdf/run.ts'),
   'unlock-pdf': () => import('./unlock-pdf/run.ts'),
   'sign-pdf': () => import('./sign-pdf/run.ts'),
+  'watermark-image': () => import('./watermark-image/run.ts'),
+  'blur-image': () => import('./blur-image/run.ts'),
+  'filters-image': () => import('./filters-image/run.ts'),
+  'meme': () => import('./meme/run.ts'),
 }

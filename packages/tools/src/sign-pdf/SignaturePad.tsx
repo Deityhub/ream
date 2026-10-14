@@ -4,6 +4,7 @@ import '@fontsource/caveat/400.css'
 import '@fontsource/great-vibes/400.css'
 import { Icon } from '@ream/ui'
 import { inputClass } from '../fields.tsx'
+import { trimmedPng } from '../bitmaps.ts'
 
 type Mode = 'draw' | 'type' | 'upload'
 const FONTS = [
@@ -19,30 +20,7 @@ const INKS = [
 const PAD = 8
 const MAX_UPLOAD = 1200
 
-/** the picture cut down to the box around what was drawn, as a PNG; null when nothing is drawn */
-async function trimmed(canvas: HTMLCanvasElement): Promise<Uint8Array | null> {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  const { width, height } = canvas
-  const d = ctx.getImageData(0, 0, width, height).data
-  let [x0, y0, x1, y1] = [width, height, -1, -1]
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (d[(y * width + x) * 4 + 3] > 8) {
-        if (x < x0) x0 = x
-        if (x > x1) x1 = x
-        if (y < y0) y0 = y
-        if (y > y1) y1 = y
-      }
-    }
-  }
-  if (x1 < 0) return null
-  const out = document.createElement('canvas')
-  out.width = x1 - x0 + 1 + 2 * PAD
-  out.height = y1 - y0 + 1 + 2 * PAD
-  out.getContext('2d')!.drawImage(canvas, x0, y0, x1 - x0 + 1, y1 - y0 + 1, PAD, PAD, x1 - x0 + 1, y1 - y0 + 1)
-  const blob = await new Promise<Blob | null>((r) => out.toBlob(r, 'image/png'))
-  return blob ? new Uint8Array(await blob.arrayBuffer()) : null
-}
+const trimmed = (canvas: HTMLCanvasElement) => trimmedPng(canvas, PAD)
 
 /** Make a signature three ways; `onChange` gets it as a PNG with a transparent background, or null. */
 export function SignaturePad({ onChange }: { onChange: (png: Uint8Array | null) => void }) {

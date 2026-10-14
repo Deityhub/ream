@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
-import { between, clamp, isWhole, type Point, type Rect } from './rect.ts'
+import { WHOLE, between, clamp, isWhole, type Point, type Rect } from './rect.ts'
 
 const pct = (v: number) => `${v * 100}%`
 type Drag = { mode: 'draw' | 'move' | 'nw' | 'ne' | 'sw' | 'se'; start: Point; orig: Rect }
@@ -16,7 +16,7 @@ const CORNERS: { id: 'nw' | 'ne' | 'sw' | 'se'; style: CSSProperties }[] = [
  * The children (a picture, a rendered page) fill the surface and decide its size.
  */
 export function CropSurface({
-  rect: o,
+  rect,
   onChange,
   children,
   inside,
@@ -24,7 +24,8 @@ export function CropSurface({
   style,
   className = '',
 }: {
-  rect: Rect
+  /** null: nothing chosen yet, so no selection is drawn (a drag starts one) */
+  rect: Rect | null
   onChange: (r: Rect) => void
   children: ReactNode
   /** drawn inside the selection (a signature being placed); the pointer passes through it */
@@ -34,6 +35,7 @@ export function CropSurface({
   style?: CSSProperties
   className?: string
 }) {
+  const o = rect ?? WHOLE
   const box = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
 
@@ -45,7 +47,7 @@ export function CropSurface({
     e.currentTarget.setPointerCapture(e.pointerId)
     const p = at(e)
     const handle = (e.target as HTMLElement).dataset.handle as Drag['mode'] | undefined
-    const inside = !isWhole(o) && p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h
+    const inside = rect !== null && !isWhole(o) && p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h
     drag.current = { mode: handle ?? (inside ? 'move' : 'draw'), start: p, orig: o }
   }
   const move = (e: PointerEvent) => {
@@ -72,15 +74,17 @@ export function CropSurface({
       style={{ cursor: 'crosshair', ...style }}
     >
       {children}
-      <div
-        className="absolute border-2 border-accent"
-        style={{ left: pct(o.x), top: pct(o.y), width: pct(o.w), height: pct(o.h), boxShadow: dim ? '0 0 0 9999px rgba(0,0,0,0.5)' : undefined, cursor: 'move' }}
-      >
-        {inside && <div className="pointer-events-none absolute inset-0">{inside}</div>}
-        {CORNERS.map((c) => (
-          <span key={c.id} data-handle={c.id} className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-accent bg-surface" style={c.style} />
-        ))}
-      </div>
+      {rect && (
+        <div
+          className="absolute border-2 border-accent"
+          style={{ left: pct(o.x), top: pct(o.y), width: pct(o.w), height: pct(o.h), boxShadow: dim ? '0 0 0 9999px rgba(0,0,0,0.5)' : undefined, cursor: 'move' }}
+        >
+          {inside && <div className="pointer-events-none absolute inset-0">{inside}</div>}
+          {CORNERS.map((c) => (
+            <span key={c.id} data-handle={c.id} className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-accent bg-surface" style={c.style} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

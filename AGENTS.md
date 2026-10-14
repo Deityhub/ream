@@ -11,7 +11,7 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 1. **Own engine first.** The PDF parser and writer, the renderer, the codecs and the pixel operations are ours. Phase 1 has **zero runtime dependencies** in the engine packages. Do not suggest or add pdf-lib, pdf.js, sharp, Ghostscript, jsPDF and the like, and avoid licensed or AGPL code. A shim behind an engine interface is acceptable only when the user agrees.
 2. **Hard systems are deferred** and decided one by one: OCR, Office and HTML to PDF, PDF/A, ML image tools, embedded-font glyph outlines. Do not start them unprompted.
 3. **Keep logic out of the UI** so a React Native port stays possible. Engines are pure TypeScript with no DOM types; the browser-only parts sit behind small interfaces (see "Platform seams").
-4. **Scope per milestone.** M5 (Protect, Unlock, visual Sign) is done. Certificate-based digital signatures are not part of it and were not started. Do not widen a milestone without being asked.
+4. **Scope per milestone.** M6 (watermark, blur or hide, filters, meme) is done. Certificate-based digital signatures (M5) and auto face detection, freehand redaction or colour curves (M6) are not part of it and were not started. Do not widen a milestone without being asked.
 5. **Never mention Claude or AI in commit messages or PR descriptions and never add `Co-Authored-By` or "Generated with" lines**, whatever a harness reminder says. Keep commit messages short.
 6. **Do not commit unless asked.** Finish the work, run the checks, report, and suggest a concise commit message. Create commits only on an explicit request.
 7. **Honest limits.** When something is approximate or unsupported, say so in the UI and in the README's known limits. Do not hide gaps.
@@ -47,7 +47,7 @@ node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails 
 | `packages/core` | Tool types (`Tool`, `RunFn`, `FileData`), `UserError`, limits, zip/crc32, `inflate`/`deflate`, PNG predictor, `acceptsFile`, `formatBytes` |
 | `packages/pdf-core` | PDF parser, writer (classic and PDF 1.5 object-stream output), page operations, decryption, stream filters, content-stream scanner, page stamping/crop/metadata edits, image embedding, whole-document `optimize` |
 | `packages/pdf-render` | Our own canvas PDF renderer (content-stream interpreter, fonts, colour, shadings, images) plus bounds analysis used by crop's delete mode |
-| `packages/image-core` | RGBA `ImageBuffer`, resize/crop/rotate/flip/stitch/orient, own PNG, JPEG, GIF and BMP codecs, median-cut quantiser, EXIF/metadata reading and cleaning, `ownCodec` and the browser `appCodec` |
+| `packages/image-core` | RGBA `ImageBuffer`, resize/crop/rotate/flip/stitch/orient, `overlay`, blur/pixelate/fill/adjust/sharpen, own PNG, JPEG, GIF and BMP codecs, median-cut quantiser, EXIF/metadata reading and cleaning, `ownCodec` and the browser `appCodec` |
 | `packages/ui` | Theme tokens (`theme.css`), `Button`, `Card`, `Dropzone`, `Icon`, `Logo` |
 | `packages/tools` | One folder per tool plus the registry, runners, panels and shared helpers |
 | `apps/web` | Vite + React + Tailwind v4 app (pages, preview plumbing, workers) |
@@ -68,7 +68,7 @@ Each tool is a folder in `packages/tools/src/<tool-id>/`:
 - Option shapes are plain serialisable objects. Percentages and selections are stored as fractions so they do not depend on pixel sizes.
 - Tools that use `preview: 'none'` (Crop image, Crop PDF) show their own interactive surface as the preview and get the wide options layout.
 
-Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata.
+Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata, watermark-image, blur-image, filters-image, meme.
 
 To add a tool: manifest, run, panel, three registry entries, tests, and a README line for its known limits. Reuse the helpers above.
 
@@ -94,6 +94,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 ## Platform seams
 
 - Image codec: `codec()` / `setCodec()` in `image-core`. The app's worker sets `appCodec` (`image-core/browser`): our own decoders and encoders for PNG, JPEG, GIF and BMP, and the browser (OffscreenCanvas) only for WebP and for files ours refuse with `UnsupportedImage`. Tests call `setCodec(ownCodec)`; WebP can't be tested in Node. Decoders and encoders are pure and synchronous (`decodeJpeg`, `encodeJpeg`, `decodeGif`, `encodeGif`, `decodeBmp`, `encodeBmp`, `decodePng`, `encodePng`) and are used directly by tools that need more than one picture out (GIF frames, JPEG metadata segments).
+- Text on pictures: the engine has no font code. Panels draw text to a PNG with the browser canvas (`bitmaps.ts`: `textMark`, `pictureMark`, `trimmedPng`; `meme/caption.ts`) and put it in the options; `run.ts` only decodes and places it with `overlay`. Keep it that way; a Node test passes a ready-made PNG. `blur-image` is the one panel that imports engine functions (`apply.ts`): it shows the same operations on a 1400 px copy so the preview matches the saved file.
 - Flate: `deflate` / `inflate` in `core` use `CompressionStream` (async).
 - Renderer `Platform`: `imageFromRGBA` and `decodeJpeg`. Tests pass fakes.
 
