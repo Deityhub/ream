@@ -9,4 +9,10 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'rotate-image': () => import('./rotate-image/run.ts'),
   'crop-image': () => import('./crop-image/run.ts'),
   'merge-images': () => import('./merge-images/run.ts'),
+  'images-to-pdf': () => import('./images-to-pdf/run.ts'),
+  watermark: () => import('./watermark/run.ts'),
+  'page-numbers': () => import('./page-numbers/run.ts'),
+  'crop-pdf': () => import('./crop-pdf/run.ts'),
+  metadata: () => import('./metadata/run.ts'),
+  'extract-images': () => import('./extract-images/run.ts'),
 }

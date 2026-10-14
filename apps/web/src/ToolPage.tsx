@@ -8,7 +8,7 @@ import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
 import { PasswordDialog } from './PasswordDialog'
-import { inspectPdf, markUnlocked, unlockPdf } from './previewClient'
+import { inspectPdf, markUnlocked, readPdfMetadata, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
 import { usePreview } from './usePreview'
@@ -191,7 +191,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
                 <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
               ) : (
                 <>
-                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} />}
+                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} />}
                   {running ? (
                     <Progress value={state.progress} onCancel={cancel} />
                   ) : (

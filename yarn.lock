@@ -566,6 +566,7 @@ __metadata:
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
     "@ream/pdf-core": "workspace:*"
+    "@ream/pdf-render": "workspace:*"
   peerDependencies:
     react: "*"
   languageName: unknown

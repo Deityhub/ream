@@ -4,6 +4,7 @@ import { PdfBuilder, serializeDocument } from './writer.ts'
 import { PdfDocument as Doc } from './document.ts'
 import { PdfRangeError } from './errors.ts'
 import { ascii } from './bytes.ts'
+import { encodeTextString } from './info.ts'
 
 type Part = {
   doc: PdfDocument
@@ -11,6 +12,13 @@ type Part = {
   pages: number[]
   /** degrees to add to a page's rotation, by its index in the source document */
   rotate?: (index: number) => number
+  /** change a page's dictionary after it was copied into the builder (`out` already points at builder objects) */
+  edit?: (index: number, out: PdfDict, b: PdfBuilder, source: Page) => void
+}
+
+export type ComposeOptions = {
+  /** string entries for the output's /Info; Producer defaults to "Ream" */
+  info?: Record<string, string>
 }
 
 /** Deep-copies objects from one source document into a builder, renumbering references. */
@@ -52,7 +60,7 @@ class Importer {
     return o
   }
 
-  copyPages(pages: { page: Page; index: number }[], parent: PdfRef, rotate?: (index: number) => number): PdfRef[] {
+  copyPages(pages: { page: Page; index: number }[], parent: PdfRef, part: Pick<Part, 'rotate' | 'edit'>): PdfRef[] {
     const refs = pages.map(() => this.b.reserve())
     pages.forEach(({ page }, i) => {
       if (page.ref) this.chosen.set(page.ref.num, refs[i])
@@ -61,13 +69,14 @@ class Importer {
       const d: PdfDict = new Map(page.dict)
       d.delete('Parent')
       for (const [k, v] of page.inherited) if (!d.has(k)) d.set(k, v)
-      const delta = rotate?.(index) ?? 0
+      const delta = part.rotate?.(index) ?? 0
       if (delta) {
         const cur = this.doc.resolve(d.get('Rotate'))
         d.set('Rotate', ((((typeof cur === 'number' ? cur : 0) + delta) % 360) + 360) % 360)
       }
       const out = this.copy(d) as PdfDict
       out.set('Parent', parent)
+      part.edit?.(index, out, this.b, page)
       this.b.set(refs[i], out)
     })
     return refs
@@ -75,7 +84,7 @@ class Importer {
 }
 
 /** Build a new PDF from page selections of one or more documents. Everything below is a thin wrapper over this. */
-export function compose(parts: Part[]): Uint8Array {
+export function compose(parts: Part[], options: ComposeOptions = {}): Uint8Array {
   const b = new PdfBuilder()
   const catalog = b.reserve()
   const pagesRef = b.reserve()
@@ -86,13 +95,15 @@ export function compose(parts: Part[]): Uint8Array {
       if (!Number.isInteger(index) || index < 0 || index >= all.length) throw new PdfRangeError(`Page ${index + 1} doesn't exist`)
       return { page: all[index], index }
     })
-    kids.push(...new Importer(part.doc, b, all).copyPages(picked, pagesRef, part.rotate))
+    kids.push(...new Importer(part.doc, b, all).copyPages(picked, pagesRef, part))
   }
   if (!kids.length) throw new PdfRangeError("That would leave a PDF with no pages")
   b.set(pagesRef, new Map<string, PdfObj>([['Type', name('Pages')], ['Kids', kids], ['Count', kids.length]]))
   // ponytail: bookmarks, AcroForm and named destinations are not carried over yet (M7)
   b.set(catalog, new Map<string, PdfObj>([['Type', name('Catalog')], ['Pages', pagesRef]]))
-  const info = b.add(new Map<string, PdfObj>([['Producer', new PdfString(ascii('Ream'))]]))
+  const entries: [string, PdfObj][] = [['Producer', new PdfString(ascii('Ream'))]]
+  for (const [k, v] of Object.entries(options.info ?? {})) entries.push([k, encodeTextString(v)])
+  const info = b.add(new Map<string, PdfObj>(entries))
   return b.serialize(catalog, info)
 }
 

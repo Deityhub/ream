@@ -58,17 +58,23 @@ export class PdfDocument {
     return root
   }
 
-  /** displayed size in points: the crop box (or media box) with the page rotation applied */
-  pageSize(page: Page): { width: number; height: number } {
+  /** the visible box (crop box, else media box) as [x1, y1, x2, y2] with x1 < x2 and y1 < y2, and the page rotation (0, 90, 180 or 270) */
+  pageBox(page: Page): { box: [number, number, number, number]; rotate: number } {
     const get = (k: string) => this.resolve(page.dict.get(k) ?? page.inherited.get(k))
-    const box = get('CropBox') ?? get('MediaBox')
-    const n = Array.isArray(box) ? box.map((v) => this.resolve(v)) : []
+    const raw = get('CropBox') ?? get('MediaBox')
+    const n = Array.isArray(raw) ? raw.map((v) => this.resolve(v)) : []
     const ok = n.length === 4 && n.every((v) => typeof v === 'number')
     const [x1, y1, x2, y2] = ok ? (n as number[]) : [0, 0, 612, 792] // US Letter when the file gives no usable box
-    const rotate = get('Rotate')
-    const turned = typeof rotate === 'number' && Math.abs(Math.round(rotate / 90)) % 2 === 1
-    const [w, h] = [Math.abs(x2 - x1), Math.abs(y2 - y1)]
-    return turned ? { width: h, height: w } : { width: w, height: h }
+    const r = get('Rotate')
+    const rotate = typeof r === 'number' ? ((Math.round(r / 90) * 90) % 360 + 360) % 360 : 0
+    return { box: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)], rotate }
+  }
+
+  /** displayed size in points: the crop box (or media box) with the page rotation applied */
+  pageSize(page: Page): { width: number; height: number } {
+    const { box, rotate } = this.pageBox(page)
+    const [w, h] = [box[2] - box[0], box[3] - box[1]]
+    return rotate % 180 === 90 ? { width: h, height: w } : { width: w, height: h }
   }
 
   pages(): Page[] {
