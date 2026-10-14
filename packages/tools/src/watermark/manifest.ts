@@ -11,5 +11,5 @@ export const watermark: Tool = {
   multiple: false,
   minFiles: 1,
   preview: 'live',
-  status: 'soon',
+  status: 'ready',
 }

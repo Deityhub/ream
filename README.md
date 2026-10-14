@@ -32,7 +32,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
 | M2.5 ✅ | Previews | File thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
 | M2.6 ✅ | Look and feel | Teal palette (jet-black, cerulean, tropical-teal, muted-teal, tea-green), Inter font, split-sheet logo, drop-first home, three-region tool page (files, preview, options) |
-| M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
+| M3 ✅ | PDF edit | Images → PDF, watermark, page numbers, crop, metadata, extract images |
 | M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
 | M5 | PDF security | Encrypt/decrypt, visual signature |
 | M6 | Image edit | Watermark, manual blur, filters, meme |
@@ -57,6 +57,16 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - Our own PNG decoder rejects interlaced files; the browser codec handles them.
 - Crop is drag-to-select with mouse or touch, plus numeric fields for keyboard use.
 - Checked in Electron (Chromium) only; Safari and Firefox are untested.
+
+## Known M3 limits
+
+- **Edits rewrite the file.** Watermark, page numbers, crop and metadata rebuild the PDF from its pages, so bookmarks, form fields, named destinations and XMP metadata are not carried over yet (M7). Page content, fonts, images and the document information are kept.
+- **Text stamps use Helvetica** (regular, bold, italic) with Latin letters, digits and common symbols. Other scripts (Cyrillic, Greek, CJK) give a readable error until TrueType embedding arrives in M7. Text is one line; there is no image watermark yet.
+- **A stamp behind the page** is hidden wherever the page paints an opaque background.
+- **Crop hides, it doesn't delete:** it sets the page's crop box, so the trimmed part is still in the file. It works in displayed coordinates, so rotated pages trim the edges you see.
+- **Images to PDF:** a JPEG goes in untouched. One stored sideways (EXIF) is decoded and saved again at quality 92 so it comes out upright. PNG, WebP, GIF and BMP go in as Flate-compressed pixels with their transparency, which is larger than a JPEG would be (real PNG and JPEG codecs arrive in M4). A page is at most 200 inches.
+- **Extract images:** JPEGs come out byte for byte; other pictures are saved as PNG. JPEG 2000, JBIG2 and CCITT pictures (typically scans) are skipped, the same gap as in the preview renderer. A picture used on several pages is saved once.
+- Verified against Chromium's PDF viewer for rotated pages (stamp position, crop edges, page numbers), since our own renderer and the writer could otherwise agree on the same mistake.
 
 ## Password-protected PDFs
 

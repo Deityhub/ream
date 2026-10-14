@@ -1,5 +1,5 @@
 import { UserError } from '@ream/core'
-import { PdfDocument, PdfPasswordError, decryptPdf } from '@ream/pdf-core'
+import { PdfDocument, PdfPasswordError, decryptPdf, readInfo } from '@ream/pdf-core'
 import { pageGeometry, renderPage } from '@ream/pdf-render'
 
 // One worker for everything that looks at a file without changing it: page counts, thumbnails, page renders and
@@ -16,6 +16,7 @@ export type RenderedPage = { bitmap: ImageBitmap; width: number; height: number;
 
 type Request =
   | { id: number; op: 'inspect'; docId: number; bytes?: Uint8Array }
+  | { id: number; op: 'metadata'; docId: number; bytes?: Uint8Array }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; page: number; width: number }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
 
@@ -70,6 +71,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   const req = e.data
   try {
     if (req.op === 'inspect') post({ id: req.id, ok: true, result: await inspect(req.docId, req.bytes) })
+    else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes)) })
     else if (req.op === 'render') {
       const result = await render(req.docId, req.page, req.width, req.bytes)
       post({ id: req.id, ok: true, result }, [result.bitmap])

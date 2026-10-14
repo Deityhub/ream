@@ -62,6 +62,9 @@ export function inspectPdf(file: Blob): Promise<PdfInfo> {
   return p
 }
 
+/** the document information (title, author, ...) of a PDF, read in the worker */
+export const readPdfMetadata = (file: Blob) => withDoc<Record<string, string>>(file, { op: 'metadata' })
+
 // Rendered pages are kept briefly so a thumbnail and a bigger preview of the same page, or a re-mounted component,
 // don't render twice. Oldest entries are closed to give the memory back.
 const MAX_RENDERS = 48

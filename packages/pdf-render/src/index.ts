@@ -7,6 +7,7 @@ import { numbers } from './function.ts'
 export type { Ctx2D, Platform } from './platform.ts'
 export { browserPlatform } from './platform.ts'
 export { Interpreter } from './interpreter.ts'
+export { rasterizeImage, type Raster } from './image.ts'
 
 export type PageGeometry = { page: Page; width: number; height: number; scale: number }
 

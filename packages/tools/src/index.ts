@@ -8,12 +8,20 @@ import { convertImage } from './convert-image/manifest.ts'
 import { rotateImage } from './rotate-image/manifest.ts'
 import { cropImage } from './crop-image/manifest.ts'
 import { mergeImages } from './merge-images/manifest.ts'
+import { pageNumbers } from './page-numbers/manifest.ts'
+import { cropPdf } from './crop-pdf/manifest.ts'
+import { metadata } from './metadata/manifest.ts'
+import { extractImages } from './extract-images/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
   splitPdf,
-  watermark,
   imagesToPdf,
+  watermark,
+  pageNumbers,
+  cropPdf,
+  metadata,
+  extractImages,
   resizeImage,
   convertImage,
   rotateImage,

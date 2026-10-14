@@ -6,10 +6,10 @@ export const imagesToPdf: Tool = {
   description: 'JPG and PNG into one PDF',
   category: 'pdf',
   icon: 'image',
-  accept: ['image/jpeg', 'image/png'],
+  accept: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp'],
   action: 'Create PDF',
   multiple: true,
   minFiles: 1,
   preview: 'live',
-  status: 'soon',
+  status: 'ready',
 }
