@@ -19,4 +19,7 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'animated-gif': () => import('./animated-gif/run.ts'),
   'image-metadata': () => import('./image-metadata/run.ts'),
   'compress-pdf': () => import('./compress-pdf/run.ts'),
+  'protect-pdf': () => import('./protect-pdf/run.ts'),
+  'unlock-pdf': () => import('./unlock-pdf/run.ts'),
+  'sign-pdf': () => import('./sign-pdf/run.ts'),
 }

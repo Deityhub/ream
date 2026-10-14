@@ -16,6 +16,9 @@ import { compressImage } from './compress-image/manifest.ts'
 import { animatedGif } from './animated-gif/manifest.ts'
 import { imageMetadata } from './image-metadata/manifest.ts'
 import { compressPdf } from './compress-pdf/manifest.ts'
+import { protectPdf } from './protect-pdf/manifest.ts'
+import { unlockPdf } from './unlock-pdf/manifest.ts'
+import { signPdf } from './sign-pdf/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
@@ -27,6 +30,9 @@ export const tools: Tool[] = [
   metadata,
   extractImages,
   compressPdf,
+  protectPdf,
+  unlockPdf,
+  signPdf,
   resizeImage,
   convertImage,
   rotateImage,

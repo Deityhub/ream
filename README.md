@@ -34,7 +34,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M2.6 ✅ | Look and feel | Teal palette (jet-black, cerulean, tropical-teal, muted-teal, tea-green), Inter font, split-sheet logo, drop-first home, three-region tool page (files, preview, options) |
 | M3 ✅ | PDF edit | Images → PDF, watermark, page numbers, crop, metadata, extract images |
 | M4 ✅ | Own codecs | Own PNG/GIF/BMP/JPEG codecs (WebP stays with the browser); compress image, compress PDF (structure and pictures), animated GIF, photo metadata (EXIF) |
-| M5 | PDF security | Encrypt/decrypt, visual signature |
+| M5 ✅ | PDF security | Protect PDF (AES-256 or AES-128, user and owner passwords, permissions), Unlock PDF, Sign PDF (visual signature) |
 | M6 | Image edit | Watermark, manual blur, filters, meme |
 | M7 | PDF advanced | Organize grid, flatten, repair, forms, PDF → text/Markdown, TTF embedding, bookmarks |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
@@ -45,7 +45,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 ## Known M1 limits
 
 - Merge and page operations drop bookmarks, AcroForm fields and named destinations; links to dropped pages become dead (M7).
-- Encrypted PDFs are refused with a clear message (M5).
+- Encrypted PDFs need their password to be opened (see "Password-protected PDFs").
 - Electron save dialog: the Download button relies on Chromium's default download prompt; not yet checked by hand.
 - Streams other than Flate are copied through untouched but can't be decoded yet (only needed for xref/object streams).
 - All objects are parsed up front; make parsing lazy if very large files become a problem.
@@ -67,6 +67,12 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - **Extract images:** JPEGs come out byte for byte; other pictures are saved as PNG. JPEG 2000, JBIG2 and CCITT pictures (typically scans) are skipped, the same gap as in the preview renderer. A picture used on several pages is saved once.
 - Verified against Chromium's PDF viewer for rotated pages (stamp position, crop edges, page numbers), since our own renderer and the writer could otherwise agree on the same mistake.
 
+## Known M5 limits
+
+- **Protect PDF** writes the standard security handler: AES-256 (revision 6, the default) or AES-128 (revision 4, "compatibility mode"). Everything is encrypted when the file is written, with fresh random keys and salts; bookmarks, forms, links and information are kept. Passwords may contain any characters. The permission limits (print, copy, edit) are a request that well-behaved readers respect, not a lock; with a restriction set and no owner password a random one is made up that nobody knows. RC4 is not offered. Checked with pypdf 6 and `cryptography` (an independent reader): a wrong password is refused, the right one opens the file, text extracts, the permissions read back as set, and the owner password works. Two small files made this way are fixtures (`enc-ream-aes*.pdf`, user password `pässword1`, owner `own-pw`).
+- **Unlock PDF** saves a copy with no password and no limits. A locked file is opened with its password when it is added (the password is used once and not kept), so the tool receives the plain copy; a file with only an owner password opens without asking. Owner restrictions are not enforced on the working copy, as before. Signatures stop validating once a file is rewritten.
+- **Sign PDF** puts a picture of a signature (drawn, typed in one of three bundled handwriting fonts, or uploaded with the paper made see-through) in a box you place on the last page, one page or every page, in the same place. It works on displayed coordinates, so rotated pages are right (checked in Chromium's viewer). It is a *visual* signature, like signing a printout: there is no certificate, nothing proves who signed, and later changes are not detected. Certificate-based digital signatures are not done.
+
 ## Known M4 limits
 
 - **Codecs.** JPEG: baseline, extended-sequential and progressive Huffman files, 8 bits, grey, YCbCr and Adobe CMYK/YCCK, any sampling, restart markers (a damaged stretch costs only its own interval); arithmetic-coded, lossless and 12-bit JPEGs are refused with a clear message (the browser is tried first when it is available). The encoder writes baseline JFIF, 4:4:4, 4:2:2 or 4:2:0, with Huffman tables built for the picture. PNG: all bit depths and colour types, Adam7; the encoder picks the smallest exact form (palette, grey, RGB) and the best filter per row, deflate is the platform's. GIF: every frame, disposal modes, interlace, transparency; the encoder gives each frame its own palette and stores only what changed when nothing is transparent. BMP: 1 to 32 bits, bitfields, RLE; no JPEG or PNG inside a BMP. WebP: browser only (not in Node, and only where the browser can write it).
@@ -84,7 +90,7 @@ The result preview waits 600 ms after the last change to any option before it re
 ## Password-protected PDFs
 
 - Opening works for the standard password handler: RC4 40/128-bit, AES-128 and AES-256 (revisions 2 to 6), with either the user or the owner password. Files that only restrict editing (empty user password) open without asking.
-- Adding a locked file shows a password popup; on success the file is replaced in the list by a decrypted in-memory copy. The original file is untouched and the password is never stored. Output PDFs are not encrypted (encrypting and the Protect/Unlock tools are M5).
+- Adding a locked file shows a password popup; on success the file is replaced in the list by a decrypted in-memory copy. The original file is untouched and the password is never stored. Output PDFs are not encrypted unless made with Protect PDF.
 - Owner restrictions (no printing, no copying) are not enforced on the working copy.
 - Certificate (public-key) encryption is not supported and reports "This PDF uses protection Ream can't open yet."
 - `node scripts/pdf.ts decrypt in.pdf -p <password> -o out.pdf` does the same from the command line. The encrypted test fixtures come from `scripts/make-encrypted-fixtures.py` (pypdf, an independent implementation; not a project dependency).

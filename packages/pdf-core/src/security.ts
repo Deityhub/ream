@@ -7,7 +7,7 @@ import { md5 } from './crypto/md5.ts'
 import { rc4 } from './crypto/rc4.ts'
 import { aesCbcDecrypt, aesCbcEncrypt } from './crypto/aes.ts'
 
-const PAD = Uint8Array.of(
+export const PAD = Uint8Array.of(
   0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
   0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
 )
@@ -36,12 +36,12 @@ const sha = async (algo: 'SHA-256' | 'SHA-384' | 'SHA-512', data: Uint8Array) =>
   new Uint8Array(await crypto.subtle.digest(algo, data as BufferSource))
 
 /** revisions up to 4 take the password as PDFDocEncoding (approximated by Latin-1), 5 and 6 as UTF-8 */
-const passwordBytes = (pw: string, utf8Mode: boolean) =>
+export const passwordBytes = (pw: string, utf8Mode: boolean) =>
   utf8Mode ? utf8(pw).subarray(0, 127) : Uint8Array.from(Array.from(pw).flatMap((c) => (c.charCodeAt(0) <= 255 ? [c.charCodeAt(0)] : [...utf8(c)])))
-const padPassword = (pw: Uint8Array) => concat(pw, PAD).subarray(0, 32)
+export const padPassword = (pw: Uint8Array) => concat(pw, PAD).subarray(0, 32)
 
 /** ISO 32000-2 algorithm 2.B: the revision 6 password hash */
-async function hash2B(password: Uint8Array, salt: Uint8Array, udata: Uint8Array): Promise<Uint8Array> {
+export async function hash2B(password: Uint8Array, salt: Uint8Array, udata: Uint8Array): Promise<Uint8Array> {
   let k = await sha('SHA-256', concat(password, salt, udata))
   let e: Uint8Array = EMPTY
   for (let i = 0; i < 64 || e[e.length - 1] > i - 32; i++) {

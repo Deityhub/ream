@@ -15,7 +15,25 @@ const CORNERS: { id: 'nw' | 'ne' | 'sw' | 'se'; style: CSSProperties }[] = [
  * Drag on the content to choose the area to keep; drag inside the selection to move it, or a corner to resize.
  * The children (a picture, a rendered page) fill the surface and decide its size.
  */
-export function CropSurface({ rect: o, onChange, children, style, className = '' }: { rect: Rect; onChange: (r: Rect) => void; children: ReactNode; style?: CSSProperties; className?: string }) {
+export function CropSurface({
+  rect: o,
+  onChange,
+  children,
+  inside,
+  dim = true,
+  style,
+  className = '',
+}: {
+  rect: Rect
+  onChange: (r: Rect) => void
+  children: ReactNode
+  /** drawn inside the selection (a signature being placed); the pointer passes through it */
+  inside?: ReactNode
+  /** darken everything outside the selection (default); a placement box leaves the page as it is */
+  dim?: boolean
+  style?: CSSProperties
+  className?: string
+}) {
   const box = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
 
@@ -56,8 +74,9 @@ export function CropSurface({ rect: o, onChange, children, style, className = ''
       {children}
       <div
         className="absolute border-2 border-accent"
-        style={{ left: pct(o.x), top: pct(o.y), width: pct(o.w), height: pct(o.h), boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)', cursor: 'move' }}
+        style={{ left: pct(o.x), top: pct(o.y), width: pct(o.w), height: pct(o.h), boxShadow: dim ? '0 0 0 9999px rgba(0,0,0,0.5)' : undefined, cursor: 'move' }}
       >
+        {inside && <div className="pointer-events-none absolute inset-0">{inside}</div>}
         {CORNERS.map((c) => (
           <span key={c.id} data-handle={c.id} className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-accent bg-surface" style={c.style} />
         ))}

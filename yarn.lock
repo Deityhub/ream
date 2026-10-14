@@ -445,6 +445,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/caveat@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/caveat@npm:5.3.0"
+  checksum: 10c0/90b25e1c23783f8a2e11b245518447aaf6704ac7f26b0ae6f288bd8fb647509da64e5fe50d97ec9b5c56fcd5f16eebb4979c9b57cb3a677cf8733e708a4e5a80
+  languageName: node
+  linkType: hard
+
+"@fontsource/dancing-script@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/dancing-script@npm:5.3.0"
+  checksum: 10c0/20a038031e0e19d84946ce7e9eddb7dd4bfdd8602f666bf441d87648f206f7d5416b70c6e089ae22e75fbb48822cde51891d63b191a61e21e9b473a3c0239e83
+  languageName: node
+  linkType: hard
+
+"@fontsource/great-vibes@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/great-vibes@npm:5.3.0"
+  checksum: 10c0/b25ab59d905448b7b78addc0264d31d165b601b7c24ac82e27d0b716cf705b9b052d278a529fc12f075b357b4adf66edbdbd0136a754c63246b7dcdd603215f0
+  languageName: node
+  linkType: hard
+
 "@isaacs/fs-minipass@npm:^4.0.0":
   version: 4.0.1
   resolution: "@isaacs/fs-minipass@npm:4.0.1"
@@ -563,6 +584,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ream/tools@workspace:packages/tools"
   dependencies:
+    "@fontsource/caveat": "npm:^5.3.0"
+    "@fontsource/dancing-script": "npm:^5.3.0"
+    "@fontsource/great-vibes": "npm:^5.3.0"
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
     "@ream/pdf-core": "workspace:*"

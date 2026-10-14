@@ -39,4 +39,7 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'animated-gif': () => import('./animated-gif/Panel.tsx'),
   'image-metadata': () => import('./image-metadata/Panel.tsx'),
   'compress-pdf': () => import('./compress-pdf/Panel.tsx'),
+  'protect-pdf': () => import('./protect-pdf/Panel.tsx'),
+  'unlock-pdf': () => import('./unlock-pdf/Panel.tsx'),
+  'sign-pdf': () => import('./sign-pdf/Panel.tsx'),
 }

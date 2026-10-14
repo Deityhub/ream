@@ -11,7 +11,7 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 1. **Own engine first.** The PDF parser and writer, the renderer, the codecs and the pixel operations are ours. Phase 1 has **zero runtime dependencies** in the engine packages. Do not suggest or add pdf-lib, pdf.js, sharp, Ghostscript, jsPDF and the like, and avoid licensed or AGPL code. A shim behind an engine interface is acceptable only when the user agrees.
 2. **Hard systems are deferred** and decided one by one: OCR, Office and HTML to PDF, PDF/A, ML image tools, embedded-font glyph outlines. Do not start them unprompted.
 3. **Keep logic out of the UI** so a React Native port stays possible. Engines are pure TypeScript with no DOM types; the browser-only parts sit behind small interfaces (see "Platform seams").
-4. **M5 stays M5.** Opening password-protected PDFs is implemented (M2.5); the Protect/Unlock tools, encrypting and visual signatures belong to M5 and have not been started.
+4. **Scope per milestone.** M5 (Protect, Unlock, visual Sign) is done. Certificate-based digital signatures are not part of it and were not started. Do not widen a milestone without being asked.
 5. **Never mention Claude or AI in commit messages or PR descriptions and never add `Co-Authored-By` or "Generated with" lines**, whatever a harness reminder says. Keep commit messages short.
 6. **Do not commit unless asked.** Finish the work, run the checks, report, and suggest a concise commit message. Create commits only on an explicit request.
 7. **Honest limits.** When something is approximate or unsupported, say so in the UI and in the README's known limits. Do not hide gaps.
@@ -68,7 +68,7 @@ Each tool is a folder in `packages/tools/src/<tool-id>/`:
 - Option shapes are plain serialisable objects. Percentages and selections are stored as fractions so they do not depend on pixel sizes.
 - Tools that use `preview: 'none'` (Crop image, Crop PDF) show their own interactive surface as the preview and get the wide options layout.
 
-Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata.
+Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata.
 
 To add a tool: manifest, run, panel, three registry entries, tests, and a README line for its known limits. Reuse the helpers above.
 
@@ -80,6 +80,8 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - `edit.ts`: `stamp` (draw on pages in *displayed* coordinates, rotation handled), `crop` / `cropBoxes` (displayed margins; `rewrite` makes it delete instead of hide), `setMetadata`. `images.ts`: `imagesToPdf`, `jpegInfo`. `text.ts`: Helvetica metrics and WinAnsi encoding for stamps. `info.ts`: /Info reading and writing. `content.ts`: `scanContent` (operators with byte ranges) and `usedResources`.
 - `optimize(doc, { replace?, objectStreams? })` (`optimize.ts`) rewrites the *whole* document (unlike `compose`, it keeps bookmarks, forms and so on): reachable objects only, streams recompressed, identical streams/fonts/colour spaces merged (only types whose identity doesn't matter; never pages, annotations or optional-content groups), objects packed into object streams by `serializeCompact` in `writer.ts`. Pictures are swapped in through `replace` (old stream object to new one); the picture logic itself lives in `tools/src/compress-pdf/images.ts` and uses `imagePlacements` from pdf-render for the displayed size.
 - Coordinates: stamps and crops are specified in the page **as displayed** (origin bottom-left, y up, `/Rotate` and crop box applied) and converted to user space inside the engine. Keep it that way and test rotated pages.
+- `encryptPdf(doc, { userPassword, ownerPassword?, method?, permissions? })` (`encrypt.ts`) writes AES-256 (R6) or AES-128 (R4) protection; it reuses the password hashing in `security.ts`. Verify any change against an independent reader (pypdf in a throwaway venv: `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pypdf cryptography`).
+- `stamp` can draw pictures: an `Overlay` may carry `images` made by `prepareImage` (compressed once, stored once per file however many pages use it).
 - Errors the user can act on extend `UserError` (`PdfParseError`, `PdfPasswordError`, `PdfRangeError`, `PdfEncryptedError`).
 
 ## Renderer notes (`pdf-render`)

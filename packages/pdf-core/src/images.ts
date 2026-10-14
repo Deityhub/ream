@@ -83,32 +83,41 @@ export type PageSetup = {
 const MAX_PAGE = 14400 // the PDF limit, 200 inches
 const CS = { 1: 'DeviceGray', 3: 'DeviceRGB', 4: 'DeviceCMYK' } as const
 
-async function addImage(b: PdfBuilder, img: ImageInput): Promise<PdfRef> {
-  const dict = new Map<string, PdfObj>([['Type', name('XObject')], ['Subtype', name('Image')], ['Width', img.width], ['Height', img.height], ['BitsPerComponent', 8]])
-  if ('jpeg' in img) {
-    dict.set('ColorSpace', name(CS[img.components]))
-    dict.set('Filter', name('DCTDecode'))
-    if (img.components === 4 && img.adobe) dict.set('Decode', [1, 0, 1, 0, 1, 0, 1, 0])
-    return b.add(new PdfStream(dict, img.jpeg))
-  }
-  const n = img.width * img.height
+/** a picture's pixels compressed and ready to become an image object (compression is async, adding it to a file is not) */
+export type PreparedImage = { width: number; height: number; rgb: Uint8Array; /** soft mask, present only when something is see-through */ alpha?: Uint8Array }
+
+export async function prepareImage(rgba: Uint8ClampedArray, width: number, height: number): Promise<PreparedImage> {
+  const n = width * height
   const rgb = new Uint8Array(n * 3)
   const alpha = new Uint8Array(n)
   let see = false
   for (let p = 0, q = 0; p < n; p++, q += 4) {
-    rgb[p * 3] = img.rgba[q]
-    rgb[p * 3 + 1] = img.rgba[q + 1]
-    rgb[p * 3 + 2] = img.rgba[q + 2]
-    alpha[p] = img.rgba[q + 3]
+    rgb[p * 3] = rgba[q]
+    rgb[p * 3 + 1] = rgba[q + 1]
+    rgb[p * 3 + 2] = rgba[q + 2]
+    alpha[p] = rgba[q + 3]
     if (alpha[p] !== 255) see = true
   }
-  dict.set('ColorSpace', name('DeviceRGB'))
-  dict.set('Filter', name('FlateDecode'))
-  if (see) {
+  return { width, height, rgb: await deflate(rgb), alpha: see ? await deflate(alpha) : undefined }
+}
+
+/** the image object (and its soft mask) for a prepared picture */
+export function addPrepared(b: PdfBuilder, img: PreparedImage): PdfRef {
+  const dict = new Map<string, PdfObj>([['Type', name('XObject')], ['Subtype', name('Image')], ['Width', img.width], ['Height', img.height], ['BitsPerComponent', 8], ['ColorSpace', name('DeviceRGB')], ['Filter', name('FlateDecode')]])
+  if (img.alpha) {
     const mask = new Map<string, PdfObj>([['Type', name('XObject')], ['Subtype', name('Image')], ['Width', img.width], ['Height', img.height], ['ColorSpace', name('DeviceGray')], ['BitsPerComponent', 8], ['Filter', name('FlateDecode')]])
-    dict.set('SMask', b.add(new PdfStream(mask, await deflate(alpha))))
+    dict.set('SMask', b.add(new PdfStream(mask, img.alpha)))
   }
-  return b.add(new PdfStream(dict, await deflate(rgb)))
+  return b.add(new PdfStream(dict, img.rgb))
+}
+
+async function addImage(b: PdfBuilder, img: ImageInput): Promise<PdfRef> {
+  if ('jpeg' in img) {
+    const dict = new Map<string, PdfObj>([['Type', name('XObject')], ['Subtype', name('Image')], ['Width', img.width], ['Height', img.height], ['BitsPerComponent', 8], ['ColorSpace', name(CS[img.components])], ['Filter', name('DCTDecode')]])
+    if (img.components === 4 && img.adobe) dict.set('Decode', [1, 0, 1, 0, 1, 0, 1, 0])
+    return b.add(new PdfStream(dict, img.jpeg))
+  }
+  return addPrepared(b, await prepareImage(img.rgba, img.width, img.height))
 }
 
 /** one page per picture, in the order given */

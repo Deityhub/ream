@@ -9,6 +9,7 @@ import { INFO_KEYS, pdfDate, readInfo } from './info.ts'
 import { ascii } from './bytes.ts'
 import type { UsedResources } from './content.ts'
 import { fontResource } from './text.ts'
+import { addPrepared, type PreparedImage } from './images.ts'
 
 /** what a stamp is told about the page it draws on; sizes are as displayed (rotation applied), in points */
 export type PageInfo = { index: number; count: number; width: number; height: number }
@@ -21,6 +22,8 @@ export type Overlay = {
   content: string
   /** base fonts the content uses, shown as /Ream<Name> (see fontResource) */
   fonts?: string[]
+  /** pictures the content draws with `Do`, by the name it uses (shown as /Ream<Name>); one picture used on several pages is stored once */
+  images?: Record<string, PreparedImage>
   /** 0..1; the content is drawn with this opacity */
   alpha?: number
   /** behind the page's own content instead of on top (hidden wherever the page paints an opaque background) */
@@ -48,6 +51,7 @@ export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null
   const count = doc.pages().length
   const fontRefs = new Map<string, PdfRef>()
   const gsRefs = new Map<number, PdfRef>()
+  const imageRefs = new Map<PreparedImage, PdfRef>()
   return compose(
     [
       {
@@ -86,6 +90,16 @@ export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null
                   fontRefs.set(f, ref)
                 }
                 return [fontResource(f), ref]
+              }),
+            )
+          }
+          if (overlay.images) {
+            addTo(
+              'XObject',
+              Object.entries(overlay.images).map(([n, img]) => {
+                let ref = imageRefs.get(img)
+                if (!ref) imageRefs.set(img, (ref = addPrepared(b, img)))
+                return [`Ream${n}`, ref]
               }),
             )
           }

@@ -95,7 +95,8 @@ export class PdfBuilder {
     return ref
   }
 
-  serialize(root: PdfRef, info?: PdfRef): Uint8Array {
+  /** `extra` are more trailer entries, written as they are (an /Encrypt reference, /ID) */
+  serialize(root: PdfRef, info?: PdfRef, extra: [string, PdfObj][] = []): Uint8Array {
     const s = new Sink()
     s.push('%PDF-1.7\n')
     s.push(Uint8Array.of(37, 0xe2, 0xe3, 0xcf, 0xd3, 10))
@@ -111,6 +112,10 @@ export class PdfBuilder {
     for (const off of offsets) s.push(String(off).padStart(10, '0') + ' 00000 n \n')
     s.push(`trailer\n<< /Size ${offsets.length + 1} /Root ${root.num} 0 R`)
     if (info) s.push(` /Info ${info.num} 0 R`)
+    for (const [k, v] of extra) {
+      s.push(` ${fmtName(k)} `)
+      emit(s, v)
+    }
     s.push(` >>\nstartxref\n${xref}\n%%EOF\n`)
     return concat(s.chunks)
   }
@@ -177,7 +182,7 @@ export async function serializeCompact(b: PdfBuilder, root: PdfRef, info?: PdfRe
 }
 
 /** every ref points at generation 0 in a file we write */
-const zeroGen = (o: PdfObj): PdfObj =>
+export const zeroGen = (o: PdfObj): PdfObj =>
   o instanceof PdfRef
     ? new PdfRef(o.num, 0)
     : Array.isArray(o)
