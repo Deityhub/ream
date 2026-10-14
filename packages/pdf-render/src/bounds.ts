@@ -127,7 +127,7 @@ const NO_PLATFORM: Platform = {
 }
 
 /** the page's content streams joined into one buffer, the way the renderer reads them */
-async function pageContent(doc: PdfDocument, index: number): Promise<{ content: Uint8Array; res: PdfDict }> {
+export async function pageContent(doc: PdfDocument, index: number): Promise<{ content: Uint8Array; res: PdfDict }> {
   const page = doc.pages()[index]
   const parts: Uint8Array[] = []
   for (const c of [doc.resolve(page.dict.get('Contents'))].flat().map((x) => doc.resolve(x))) {
@@ -232,4 +232,29 @@ export async function removeOutside(doc: PdfDocument, index: number, keep: Box, 
     if (x instanceof PdfStream && !x.dict.has('Resources') && isName(doc.resolve(x.dict.get('Subtype')), 'Form')) inherits = true
   }
   return { content: out, removed: edits.length, used: inherits ? null : used }
+}
+
+/** how big each picture is painted, in points: the largest size over all the places it is used */
+export type Placement = { width: number; height: number }
+
+export async function imagePlacements(doc: PdfDocument): Promise<Map<PdfStream, Placement>> {
+  const out = new Map<PdfStream, Placement>()
+  for (let i = 0; i < doc.pages().length; i++) {
+    const { content, res } = await pageContent(doc, i)
+    const interp = new Interpreter(doc, new BoundsCtx() as unknown as Ctx2D, NO_PLATFORM, IDENTITY)
+    interp.analysis = true
+    interp.onImage = (image, m) => {
+      // the picture fills the unit square, so the lengths of the transformed sides are its size
+      const w = Math.hypot(m[0], m[1])
+      const h = Math.hypot(m[2], m[3])
+      const seen = out.get(image)
+      out.set(image, { width: Math.max(seen?.width ?? 0, w), height: Math.max(seen?.height ?? 0, h) })
+    }
+    try {
+      await interp.run(content, res)
+    } catch {
+      // a page that can't be read just contributes nothing: its pictures are left as they are
+    }
+  }
+  return out
 }

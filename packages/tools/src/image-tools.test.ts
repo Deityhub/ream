@@ -60,8 +60,8 @@ describe('convert-image', () => {
     expect(await decodePng(out.bytes)).toEqual(await decodePng(f.bytes))
   })
 
-  test('formats the codec cannot write are reported, not mangled', async () => {
-    await expect(convert([await png('a.png', 2, 2, flat([0, 0, 0, 255]))], { format: 'image/jpeg', quality: 90 }, ctx)).rejects.toBeInstanceOf(UserError)
+  test('formats the codec cannot write (WebP needs the browser) are reported, not mangled', async () => {
+    await expect(convert([await png('a.png', 2, 2, flat([0, 0, 0, 255]))], { format: 'image/webp', quality: 90 }, ctx)).rejects.toBeInstanceOf(UserError)
   })
 })
 

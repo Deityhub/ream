@@ -45,9 +45,9 @@ node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails 
 | Path | What |
 |---|---|
 | `packages/core` | Tool types (`Tool`, `RunFn`, `FileData`), `UserError`, limits, zip/crc32, `inflate`/`deflate`, PNG predictor, `acceptsFile`, `formatBytes` |
-| `packages/pdf-core` | PDF parser, writer, page operations, decryption, stream filters, content-stream scanner, page stamping/crop/metadata edits, image embedding |
+| `packages/pdf-core` | PDF parser, writer (classic and PDF 1.5 object-stream output), page operations, decryption, stream filters, content-stream scanner, page stamping/crop/metadata edits, image embedding, whole-document `optimize` |
 | `packages/pdf-render` | Our own canvas PDF renderer (content-stream interpreter, fonts, colour, shadings, images) plus bounds analysis used by crop's delete mode |
-| `packages/image-core` | RGBA `ImageBuffer`, resize/crop/rotate/flip/stitch, own PNG codec, browser codec |
+| `packages/image-core` | RGBA `ImageBuffer`, resize/crop/rotate/flip/stitch/orient, own PNG, JPEG, GIF and BMP codecs, median-cut quantiser, EXIF/metadata reading and cleaning, `ownCodec` and the browser `appCodec` |
 | `packages/ui` | Theme tokens (`theme.css`), `Button`, `Card`, `Dropzone`, `Icon`, `Logo` |
 | `packages/tools` | One folder per tool plus the registry, runners, panels and shared helpers |
 | `apps/web` | Vite + React + Tailwind v4 app (pages, preview plumbing, workers) |
@@ -62,13 +62,13 @@ Each tool is a folder in `packages/tools/src/<tool-id>/`:
 
 - `manifest.ts`: a `Tool` (`id`, `title`, `description`, `category` `'pdf' | 'image'`, `icon`, `accept`, `action`, `multiple`, `minFiles`, `preview: 'live' | 'manual' | 'none'`, `status: 'ready' | 'soon'`). Register it in `index.ts`.
 - `run.ts`: **pure bytes to bytes** `RunFn<Options>(files, options, { progress })`. It runs in a Web Worker in the app and directly in tests. No DOM, no React, no globals. Throw `UserError` (or a subclass) for anything the user can act on; any other error shows a generic message.
-- `Panel.tsx`: the options UI, exporting `Panel` and `defaultOptions`. Panels receive `{ options, onChange, files, readMetadata?, pdfHost? }`. They must not import from `apps/web`; anything they need from the app (page sizes, a rendered page, metadata) arrives through those injected props.
+- `Panel.tsx`: the options UI, exporting `Panel` and `defaultOptions`. Panels receive `{ options, onChange, files, readMetadata?, readImageMetadata?, pdfHost? }`. They must not import from `apps/web`; anything they need from the app (page sizes, a rendered page, metadata) arrives through those injected props.
 - Register `run.ts` in `runners.ts` and `Panel.tsx` in `panels.ts` (both lazy, so the UI bundle never pulls engine code). Constants used by both a panel and a run live in a **constants-only** module (for example `image-formats.ts`, `images-to-pdf/sizes.ts`, `rect.ts`) so panels do not import engine code, and `run.ts` does not import React.
 - Shared helpers: `pdf-common.ts` (`loadPdf`, `pdfFile`, `selectPages`, `rgb`, `spotCentre`, `clampInt`), `image-common.ts` (`decodeFile`, `encodeFile`), `fields.tsx` (`inputClass`, `RangeField`, `SpotPicker`, `FormatFields`), `CropSurface.tsx` + `rect.ts` (drag-to-select).
 - Option shapes are plain serialisable objects. Percentages and selections are stored as fractions so they do not depend on pixel sizes.
 - Tools that use `preview: 'none'` (Crop image, Crop PDF) show their own interactive surface as the preview and get the wide options layout.
 
-Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, resize-image, convert-image, rotate-image, crop-image, merge-images.
+Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata.
 
 To add a tool: manifest, run, panel, three registry entries, tests, and a README line for its known limits. Reuse the helpers above.
 
@@ -78,6 +78,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Writing goes through `PdfBuilder` (classic xref). `compose(parts, { info })` builds a new PDF from page selections and is the base of merge, split, rotate, stamp, crop and metadata. It deep-copies reachable objects and renumbers them. A `Part` can have `prepare` (runs **before** the page dictionary is copied; use it to prune what must not be copied) and `edit` (runs after, with builder objects).
 - **Edits rewrite the file**: bookmarks, form fields, named destinations and XMP are not carried over yet (M7). Page content, fonts, images and the document information are kept.
 - `edit.ts`: `stamp` (draw on pages in *displayed* coordinates, rotation handled), `crop` / `cropBoxes` (displayed margins; `rewrite` makes it delete instead of hide), `setMetadata`. `images.ts`: `imagesToPdf`, `jpegInfo`. `text.ts`: Helvetica metrics and WinAnsi encoding for stamps. `info.ts`: /Info reading and writing. `content.ts`: `scanContent` (operators with byte ranges) and `usedResources`.
+- `optimize(doc, { replace?, objectStreams? })` (`optimize.ts`) rewrites the *whole* document (unlike `compose`, it keeps bookmarks, forms and so on): reachable objects only, streams recompressed, identical streams/fonts/colour spaces merged (only types whose identity doesn't matter; never pages, annotations or optional-content groups), objects packed into object streams by `serializeCompact` in `writer.ts`. Pictures are swapped in through `replace` (old stream object to new one); the picture logic itself lives in `tools/src/compress-pdf/images.ts` and uses `imagePlacements` from pdf-render for the displayed size.
 - Coordinates: stamps and crops are specified in the page **as displayed** (origin bottom-left, y up, `/Rotate` and crop box applied) and converted to user space inside the engine. Keep it that way and test rotated pages.
 - Errors the user can act on extend `UserError` (`PdfParseError`, `PdfPasswordError`, `PdfRangeError`, `PdfEncryptedError`).
 
@@ -90,7 +91,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 
 ## Platform seams
 
-- Image codec: `codec()` / `setCodec()` in `image-core`. The browser uses OffscreenCanvas; tests call `setCodec(ownCodec)` (PNG only). JPEG, GIF, BMP and WebP need the browser codec until M4.
+- Image codec: `codec()` / `setCodec()` in `image-core`. The app's worker sets `appCodec` (`image-core/browser`): our own decoders and encoders for PNG, JPEG, GIF and BMP, and the browser (OffscreenCanvas) only for WebP and for files ours refuse with `UnsupportedImage`. Tests call `setCodec(ownCodec)`; WebP can't be tested in Node. Decoders and encoders are pure and synchronous (`decodeJpeg`, `encodeJpeg`, `decodeGif`, `encodeGif`, `decodeBmp`, `encodeBmp`, `decodePng`, `encodePng`) and are used directly by tools that need more than one picture out (GIF frames, JPEG metadata segments).
 - Flate: `deflate` / `inflate` in `core` use `CompressionStream` (async).
 - Renderer `Platform`: `imageFromRGBA` and `decodeJpeg`. Tests pass fakes.
 
@@ -118,6 +119,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Fixtures: `packages/pdf-core/test/fixtures/` (`chromium.pdf`, `cups.pdf`, encrypted files made by pypdf with user password `user123` and owner password `owner456`). `packages/pdf-core/test/helpers.ts` has `assemble` and friends for hand-built PDFs; `packages/pdf-render/test/helpers.ts` has `onePage`, `fakeCtx`, `fakePlatform`.
 - Add tests with every change: engine logic, error messages, and rotated pages for anything that places things on a page. Prefer a test that fails if the logic breaks over many shallow ones.
 - Independent verification matters because our parser, writer and renderer could agree on the same mistake. There is no qpdf, mutool or Ghostscript here. Use Chromium's PDF viewer (see below) and pypdf-made fixtures as oracles. macOS `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so never trust it for those.
+- Codecs are checked the same way: Chromium decodes the files (`createImageBitmap` for JPEG/PNG/BMP, `ImageDecoder` for every GIF frame; both need a `file://` page, `data:` pages are not a secure context) and the result is compared with ours; our encoders' files must decode in Chromium. macOS `sips` makes baseline JPEG, GIF and BMP test files (and CMYK ones with `-m` and a CMYK profile). There are real progressive JPEGs and GIFs on most machines (`mdfind`). Keep personal files out of fixtures and out of what you print; use them only as local oracles.
 
 ## Verifying in the real app
 

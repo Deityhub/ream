@@ -1,6 +1,6 @@
-import type { PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
+import type { ImageMetadata, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
 
-export type { PdfInfo, RenderedPage, UnlockResult }
+export type { ImageMetadata, PdfInfo, RenderedPage, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -98,4 +98,16 @@ export const markUnlocked = (file: Blob) => unlocked.add(file)
 export async function unlockPdf(file: Blob, password: string): Promise<UnlockResult> {
   const buf = await file.arrayBuffer()
   return send<UnlockResult>({ op: 'unlock', bytes: new Uint8Array(buf), password }, [buf])
+}
+
+const imageInfo = new WeakMap<Blob, Promise<ImageMetadata>>()
+
+/** what a JPEG or PNG says about itself (camera, date, location ...), read in the worker; cached per file */
+export function readImageMetadata(file: Blob): Promise<ImageMetadata> {
+  let p = imageInfo.get(file)
+  if (!p) {
+    p = file.arrayBuffer().then((buf) => send<ImageMetadata>({ op: 'imageMetadata', bytes: new Uint8Array(buf) }, [buf]))
+    imageInfo.set(file, p)
+  }
+  return p
 }

@@ -96,6 +96,8 @@ export class Interpreter {
   onOp?: (info: OpInfo) => void
   /** analysis only: pictures are not decoded and count as their unit square */
   analysis = false
+  /** told about every picture XObject that is painted (at any depth), with the matrix that maps its unit square into the space the page's own content uses */
+  onImage?: (image: PdfStream, ctm: Matrix) => void
   private unknownWidth = false
   state = new GState()
   private stack: GState[] = []
@@ -554,6 +556,7 @@ export class Interpreter {
   }
 
   private async drawImage(img: PdfStream, res: PdfDict) {
+    this.onImage?.(img, this.state.ctm)
     if (this.analysis) return this.paintRaster('unsupported')
     const isMask = this.doc.resolve(img.dict.get('ImageMask') ?? img.dict.get('IM')) === true
     // stencil masks take the current fill colour, so they can't be shared between uses

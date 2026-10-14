@@ -1,5 +1,5 @@
 import type { OutputMime } from '@ream/image-core'
-import { FORMATS } from './image-formats.ts'
+import { FORMATS, hasQuality } from './image-formats.ts'
 import type { Spot } from './pdf-common.ts'
 
 export const inputClass =
@@ -29,7 +29,7 @@ export function FormatFields({
           ))}
         </select>
       </label>
-      {format !== 'image/png' && (
+      {hasQuality(format) && (
         <label className="flex items-center gap-2">
           Quality
           <input type="range" min={40} max={100} value={quality} onChange={(e) => onChange({ quality: Number(e.target.value) })} />

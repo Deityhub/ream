@@ -1,5 +1,6 @@
 import { UserError } from '@ream/core'
 import { PdfDocument, PdfPasswordError, decryptPdf, readInfo } from '@ream/pdf-core'
+import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
 import { pageGeometry, renderPage } from '@ream/pdf-render'
 
 // One worker for everything that looks at a file without changing it: page counts, thumbnails, page renders and
@@ -12,6 +13,7 @@ export type PdfInfo =
   | { kind: 'error'; message: string }
 
 export type UnlockResult = { kind: 'unlocked'; bytes: Uint8Array } | { kind: 'wrong' } | { kind: 'error'; message: string }
+export type ImageMetadata = MetadataSummary | null
 export type RenderedPage = { bitmap: ImageBitmap; width: number; height: number; warnings: string[] }
 
 type Request =
@@ -19,6 +21,7 @@ type Request =
   | { id: number; op: 'metadata'; docId: number; bytes?: Uint8Array }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; page: number; width: number }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
+  | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
 
 const post = (message: unknown, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer)
 
@@ -72,6 +75,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   try {
     if (req.op === 'inspect') post({ id: req.id, ok: true, result: await inspect(req.docId, req.bytes) })
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes)) })
+    else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })
     else if (req.op === 'render') {
       const result = await render(req.docId, req.page, req.width, req.bytes)
       post({ id: req.id, ok: true, result }, [result.bitmap])

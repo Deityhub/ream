@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import type { MetadataSummary } from '@ream/image-core'
 
 /** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
 export type PdfHost = {
@@ -13,6 +14,8 @@ export type PanelProps<O = any> = {
   files: File[]
   /** the document information of a PDF, read off the main thread (for the metadata tool) */
   readMetadata?: (file: File) => Promise<Record<string, string>>
+  /** what a JPEG or PNG says about itself, read off the main thread (for the image metadata tool) */
+  readImageMetadata?: (file: File) => Promise<MetadataSummary | null>
   pdfHost?: PdfHost
 }
 export type PanelModule = { Panel: ComponentType<PanelProps<any>>; defaultOptions: unknown }
@@ -32,4 +35,8 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'crop-pdf': () => import('./crop-pdf/Panel.tsx'),
   metadata: () => import('./metadata/Panel.tsx'),
   'extract-images': () => import('./extract-images/Panel.tsx'),
+  'compress-image': () => import('./compress-image/Panel.tsx'),
+  'animated-gif': () => import('./animated-gif/Panel.tsx'),
+  'image-metadata': () => import('./image-metadata/Panel.tsx'),
+  'compress-pdf': () => import('./compress-pdf/Panel.tsx'),
 }

@@ -18,3 +18,11 @@ export function checkPixels(width: number, height: number, subject: string): voi
     throw new UserError(`${subject} ${Math.round((width * height) / 1e6)} megapixels. The limit is ${MAX_PIXELS / 1e6}.`)
   }
 }
+
+/** A picture that is valid but uses something our own decoders don't do (the browser codec may still be able to read it). */
+export class UnsupportedImage extends UserError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnsupportedImage'
+  }
+}

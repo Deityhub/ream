@@ -1,6 +1,7 @@
-import { PdfName, PdfRef, PdfStream, PdfString, isName, type PdfObj } from './objects.ts'
+import { PdfName, PdfRef, PdfStream, PdfString, isName, name, type PdfObj } from './objects.ts'
 import type { PdfDocument } from './document.ts'
 import { ascii, concat } from './bytes.ts'
+import { deflate } from './flate.ts'
 
 class Sink {
   chunks: Uint8Array[] = []
@@ -113,6 +114,66 @@ export class PdfBuilder {
     s.push(` >>\nstartxref\n${xref}\n%%EOF\n`)
     return concat(s.chunks)
   }
+}
+
+const OBJECTS_PER_STREAM = 100
+
+/**
+ * Write a PDF 1.5 file: plain objects packed together into compressed object streams, and a compressed cross-reference
+ * stream instead of the classic table. Much smaller for files with many small objects; needs a reader that knows PDF 1.5.
+ */
+export async function serializeCompact(b: PdfBuilder, root: PdfRef, info?: PdfRef, id?: PdfObj): Promise<Uint8Array> {
+  const total = b.objects.length
+  const packed: number[] = []
+  const loose: number[] = []
+  b.objects.forEach((o, i) => (o instanceof PdfStream ? loose : packed).push(i + 1))
+  const streams = Math.ceil(packed.length / OBJECTS_PER_STREAM)
+  const size = total + streams + 2 // objects, object streams, the xref stream, and object 0
+  // where each object lives: [type, field 2, field 3] of its cross-reference entry
+  const entries: [number, number, number][] = Array.from({ length: size }, () => [0, 0, 0])
+  entries[0] = [0, 0, 65535]
+
+  const s = new Sink()
+  s.push('%PDF-1.5\n')
+  s.push(Uint8Array.of(37, 0xe2, 0xe3, 0xcf, 0xd3, 10))
+  const writeObject = (num: number, o: PdfObj) => {
+    entries[num] = [1, s.length, 0]
+    s.push(`${num} 0 obj\n`)
+    emit(s, o)
+    s.push('\nendobj\n')
+  }
+  for (const num of loose) writeObject(num, b.objects[num - 1]!)
+  for (let k = 0; k < streams; k++) {
+    const nums = packed.slice(k * OBJECTS_PER_STREAM, (k + 1) * OBJECTS_PER_STREAM)
+    const bodies = nums.map((num) => {
+      const t = new Sink()
+      emit(t, b.objects[num - 1] ?? null)
+      return concat(t.chunks)
+    })
+    let at = 0
+    const header = nums.map((num, i) => {
+      const line = `${num} ${at}`
+      at += bodies[i].length + 1
+      return line
+    }).join(' ') + '\n'
+    const headBytes = ascii(header)
+    const data = concat([headBytes, ...bodies.flatMap((x) => [x, Uint8Array.of(10)])])
+    const stmNum = total + 1 + k
+    nums.forEach((num, i) => (entries[num] = [2, stmNum, i]))
+    const dict = new Map<string, PdfObj>([['Type', name('ObjStm')], ['N', nums.length], ['First', headBytes.length], ['Filter', name('FlateDecode')]])
+    writeObject(stmNum, new PdfStream(dict, await deflate(data)))
+  }
+  const xrefNum = total + streams + 1
+  entries[xrefNum] = [1, s.length, 0]
+  const rows = new Uint8Array(size * 7)
+  entries.forEach(([t, a, c], i) => rows.set([t, (a >>> 24) & 255, (a >>> 16) & 255, (a >>> 8) & 255, a & 255, (c >> 8) & 255, c & 255], i * 7))
+  const dict = new Map<string, PdfObj>([['Type', name('XRef')], ['Size', size], ['W', [1, 4, 2]], ['Root', new PdfRef(root.num)], ['Filter', name('FlateDecode')]])
+  if (info) dict.set('Info', new PdfRef(info.num))
+  if (id) dict.set('ID', id)
+  s.push(`${xrefNum} 0 obj\n`)
+  emit(s, new PdfStream(dict, await deflate(rows)))
+  s.push(`\nendobj\nstartxref\n${entries[xrefNum][1]}\n%%EOF\n`)
+  return concat(s.chunks)
 }
 
 /** every ref points at generation 0 in a file we write */

@@ -1,5 +1,6 @@
 export { PdfDocument, type Page, type LoadOptions } from './document.ts'
 export { merge, extract, remove, split, rotate, compose, decryptPdf } from './ops.ts'
+export { optimize, type OptimizeOptions } from './optimize.ts'
 export { stamp, crop, cropBoxes, setMetadata, type Overlay, type PageInfo, type Margins, type Metadata, type PageRewrite, type Box4 } from './edit.ts'
 export { baseFont, fontResource, pdfText, textWidth, encodeWinAnsi, type StampFont } from './text.ts'
 export { scanContent, usedResources, type ContentOp, type UsedResources } from './content.ts'

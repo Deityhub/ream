@@ -1,7 +1,7 @@
 // Dev CLI for trying pdf-core on real files:  yarn pdf <command> ...   (see usage below)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { PdfDocument, chunks, decryptPdf, extract, isName, merge, parseRanges, remove, rotate, split } from '../packages/pdf-core/src/index.ts'
+import { PdfDocument, chunks, decryptPdf, extract, isName, merge, optimize, parseRanges, remove, rotate, split } from '../packages/pdf-core/src/index.ts'
 
 const usage = `usage:
   yarn pdf info <in.pdf>
@@ -11,6 +11,7 @@ const usage = `usage:
   yarn pdf rotate  <in.pdf> <90|180|270|-90> [pages] -o <out.pdf>
   yarn pdf split   <in.pdf> <pages | every:N> -o <outdir>   one file per comma item
   yarn pdf decrypt <in.pdf> -p <password> -o <out.pdf>
+  yarn pdf optimize <in.pdf> -o <out.pdf>        the lossless part of Compress PDF (no picture changes)
 
 Add -p <password> to any command to open a password protected PDF.`
 
@@ -44,6 +45,8 @@ try {
       const rot = doc.resolve(p.dict.get('Rotate') ?? p.inherited.get('Rotate')) ?? 0
       console.log(`  ${i + 1}: MediaBox ${JSON.stringify(box)} rotate ${rot}${isName(p.dict.get('Type'), 'Page') ? '' : ' (untyped)'}`)
     })
+  } else if (cmd === 'optimize') {
+    save(await optimize(await load(need(rest[0], 'input file'))))
   } else if (cmd === 'decrypt') {
     save(await decryptPdf(new Uint8Array(readFileSync(need(rest[0], 'input file'))), password))
   } else if (cmd === 'merge') {

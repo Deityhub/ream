@@ -134,6 +134,28 @@ export function rotate(img: ImageBuffer, turns: number): ImageBuffer {
   return out
 }
 
+/** the picture as an EXIF orientation (1..8) says it should be shown; 1 gives the same picture back */
+export function orient(img: ImageBuffer, orientation: number): ImageBuffer {
+  switch (orientation) {
+    case 2:
+      return flip(img, 'horizontal')
+    case 3:
+      return rotate(img, 2)
+    case 4:
+      return flip(img, 'vertical')
+    case 5:
+      return rotate(flip(img, 'horizontal'), 3)
+    case 6:
+      return rotate(img, 1)
+    case 7:
+      return rotate(flip(img, 'horizontal'), 1)
+    case 8:
+      return rotate(img, 3)
+    default:
+      return img
+  }
+}
+
 export function flip(img: ImageBuffer, axis: 'horizontal' | 'vertical'): ImageBuffer {
   const { width: w, height: h, data } = img
   const out = createImage(w, h)

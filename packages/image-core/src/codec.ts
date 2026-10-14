@@ -1,6 +1,6 @@
 import type { ImageBuffer } from './buffer.ts'
 
-export type OutputMime = 'image/png' | 'image/jpeg' | 'image/webp'
+export type OutputMime = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'image/bmp'
 
 /** The only platform-specific part of image-core: bytes to pixels and back. Everything else is pure. */
 export interface Codec {
