@@ -6,8 +6,9 @@ import type { PanelProps } from '../panels.ts'
 import { cropBox, type CropOptions } from './box.ts'
 
 export const defaultOptions: CropOptions = WHOLE
+export const placesActions = true
 
-export function Panel({ options: o, onChange, files }: PanelProps<CropOptions>) {
+export function Panel({ options: o, onChange, files, actions }: PanelProps<CropOptions>) {
   const file = files[0]
   const [url, setUrl] = useState<string | null>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
@@ -21,7 +22,14 @@ export function Panel({ options: o, onChange, files }: PanelProps<CropOptions>) 
     return () => URL.revokeObjectURL(u)
   }, [file])
 
-  if (!file || !url) return <p className="text-sm text-muted">Add an image, then drag on it to choose the area to keep.</p>
+  if (!file || !url) {
+    return (
+      <div className="space-y-4 rounded-xl border border-line bg-surface p-4">
+        <p className="text-sm text-muted">Add an image, then drag on it to choose the area to keep.</p>
+        {actions}
+      </div>
+    )
+  }
 
   // numeric fields in pixels: the keyboard route to the same selection
   const px = size && cropBox(o, size.w, size.h)
@@ -29,7 +37,7 @@ export function Panel({ options: o, onChange, files }: PanelProps<CropOptions>) 
     if (size) onChange(withSide(o, key, value / (key === 'x' || key === 'w' ? size.w : size.h)))
   }
   const field = (key: keyof CropOptions, label: string) => (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex flex-col gap-1 text-sm">
       {label}
       <input
         type="number"
@@ -38,14 +46,15 @@ export function Panel({ options: o, onChange, files }: PanelProps<CropOptions>) 
         disabled={!px}
         onChange={(e) => setPx(key, Math.floor(Number(e.target.value)) || 0)}
         aria-label={`${label} in pixels`}
-        className={`${inputClass} w-24`}
+        className={`${inputClass} w-full`}
       />
     </label>
   )
 
   return (
-    <div className="space-y-3">
-      <CropSurface rect={o} onChange={onChange} className="inline-block max-w-full">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+      <div className="min-w-0 rounded-xl border border-line bg-surface p-4">
+        <CropSurface rect={o} onChange={onChange} className="mx-auto flex w-fit max-w-full">
         <img
           src={url}
           alt="The image to crop"
@@ -53,14 +62,18 @@ export function Panel({ options: o, onChange, files }: PanelProps<CropOptions>) 
           onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           className="block max-h-[60vh] max-w-full"
         />
-      </CropSurface>
-      <div className="flex flex-wrap items-center gap-4">
-        {field('x', 'Left')}
-        {field('y', 'Top')}
-        {field('w', 'Width')}
-        {field('h', 'Height')}
+        </CropSurface>
       </div>
-      {px && <p className="text-sm text-muted">Keeping {px.w} × {px.h} px of {size.w} × {size.h}.</p>}
+      <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+          {field('x', 'Left')}
+          {field('y', 'Top')}
+          {field('w', 'Width')}
+          {field('h', 'Height')}
+        </div>
+        {px && <p className="text-sm text-muted">Keeping {px.w} × {px.h} px of {size.w} × {size.h}.</p>}
+        {actions}
+      </div>
     </div>
   )
 }

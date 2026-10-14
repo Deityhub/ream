@@ -99,7 +99,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 
 ## Web app (`apps/web`)
 
-- `ToolPage.tsx`: files rail | preview | options at `xl`, two columns at `lg`, stacked below. Locked PDFs open a password dialog and are replaced by a decrypted in-memory copy; the password is never stored.
+- `ToolPage.tsx`: files | preview | options at `xl`; at `lg` the options stay on the right with the files above the preview; stacked below that, options before the preview. Options are always the right-hand region. Tools with their own surface (crop, sign) set `placesActions` and render the `actions` prop (run button, progress, errors) beside their controls. A finished run opens a modal `<dialog>` (download, keep editing, start over, use in another tool), not a card under the options. Locked PDFs open a password dialog and are replaced by a decrypted in-memory copy; the password is never stored.
 - `previewController.ts` (pure, fake-timer tested) runs the same engine as the Run button: **600 ms debounce**, cancels stale runs, keeps the last result on screen. `ready` states have `stale` (outdated; Run never reuses a stale result) and `computing` (dim and "Updating..."). Do not make the UI react per keystroke.
 - `previewWorker.ts` / `previewClient.ts`: one worker for inspect, render, unlock and metadata. The main thread never parses a PDF. Page canvases keep the old picture until the new one is ready (no flashing).
 - Tool runs go through `runtime.ts` and `worker.ts` (progress, cancel, ZIP for several outputs). Limits: 50 files, 200 MB per file, 500 MB total.

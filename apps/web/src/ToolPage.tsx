@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, Dropzone, Icon } from '@ream/ui'
 import { UserError, acceptsFile, formatBytes, type FileData, type Tool } from '@ream/core'
 import { tools } from '@ream/tools'
@@ -140,15 +140,47 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const running = state.kind === 'running'
 
   const empty = files.length === 0
-  // three regions at xl (files | preview | options), two at lg, stacked below; tools without a preview (crop) keep the options wide
+  // files | preview | options at xl. At lg the options stay on the right and the files sit above the preview. Tools without a
+  // preview (crop, sign) have the page or picture in their own panel, with their controls and the button on its right.
+  // Stacked (small screens), the options come before the preview so they are not missed.
   const grid = empty
     ? 'mx-auto max-w-2xl'
     : showPreview
-      ? 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] xl:grid-cols-[18rem_minmax(0,1fr)_18rem]'
-      : 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]'
-  const railPos = empty ? '' : 'lg:col-start-1 lg:row-start-1'
-  const optionsPos = showPreview ? 'order-2 lg:col-start-1 lg:row-start-2 xl:order-3 xl:col-start-3 xl:row-start-1' : 'lg:col-start-2 lg:row-start-1 lg:row-span-2'
-  const canvasPos = 'order-3 lg:col-start-2 lg:row-start-1 lg:row-span-2 xl:order-2 xl:row-span-1'
+      ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[18rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]'
+      : 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[22rem_minmax(0,1fr)]'
+  const railPos = empty ? '' : showPreview ? 'lg:col-start-1 lg:row-start-1' : 'lg:col-start-1 lg:row-start-1'
+  const optionsPos = showPreview ? 'order-2 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-4 xl:order-3 xl:col-start-3 xl:row-span-1' : 'lg:col-start-2 lg:row-start-1 lg:row-span-2'
+  const canvasPos = 'order-3 lg:col-start-1 lg:row-start-2 xl:col-start-2 xl:row-start-1 xl:order-2'
+
+  // the run button with its progress, hints and the error from the last run
+  const actionBar = (
+    <div className="space-y-3">
+      {running ? (
+        <Progress value={state.progress} onCancel={cancel} />
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
+          {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
+          {!asking && missing > 0 && (
+            <span className="text-sm text-muted">
+              {files.length === 0 ? `Add ${tool.minFiles === 1 ? 'a file' : `at least ${tool.minFiles} files`} to start.` : `Add ${missing} more ${missing === 1 ? 'file' : 'files'} to start.`}
+            </span>
+          )}
+        </div>
+      )}
+      {state.kind === 'error' && (
+        <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+          <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
+          {state.message}
+        </p>
+      )}
+    </div>
+  )
+
+  const panelBody =
+    panel && options !== null ? (
+      <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} readImageMetadata={readImageMetadata} pdfHost={pdfHost} actions={panel.placesActions ? actionBar : undefined} />
+    ) : null
 
   return (
     <>
@@ -165,7 +197,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
             onFiles={(added) => changeFiles(tool.multiple ? [...files, ...added] : added)}
           />
           {!empty && (
-            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+            <ul className="divide-y divide-line overflow-auto rounded-xl border border-line bg-surface lg:max-h-60 xl:max-h-none">
               {files.map((f, i) => (
                 <li key={`${f.name}-${i}`} className={`flex items-center gap-1 px-3 py-2 text-sm ${showPreview && i === active ? 'bg-accent-soft' : ''}`}>
                   <button
@@ -197,44 +229,31 @@ export function ToolPage({ tool }: { tool?: Tool }) {
 
         {!empty && (
           <div className={`min-w-0 space-y-4 ${optionsPos}`}>
-            <Card className="space-y-4">
+            {panel?.placesActions && !soon ? (
+              // a tool with its own surface lays out its own cards (surface, controls) in the same grid
+              panelBody
+            ) : (
+              <Card className="space-y-4">
               {soon ? (
                 <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
               ) : (
                 <>
-                  {panel && options !== null && <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} readImageMetadata={readImageMetadata} pdfHost={pdfHost} />}
-                  {running ? (
-                    <Progress value={state.progress} onCancel={cancel} />
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
-                      {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
-                      {!asking && missing > 0 && (
-                        <span className="text-sm text-muted">
-                          {files.length === 0 ? `Add ${tool.minFiles === 1 ? 'a file' : `at least ${tool.minFiles} files`} to start.` : `Add ${missing} more ${missing === 1 ? 'file' : 'files'} to start.`}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {panelBody}
+                  {actionBar}
                 </>
               )}
-              {state.kind === 'error' && (
-                <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-                  <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
-                  {state.message}
-                </p>
-              )}
-            </Card>
-            {state.kind === 'done' && <Result tool={tool} outputs={state.outputs} onReset={() => changeFiles([])} />}
+              </Card>
+            )}
           </div>
         )}
 
         {!empty && showPreview && (
-          <aside className={`min-w-0 xl:sticky xl:top-4 ${canvasPos}`}>
+          <aside className={`min-w-0 ${canvasPos}`}>
             <Preview tool={tool} files={files} active={active} preview={preview.state} onRefresh={preview.refresh} />
           </aside>
         )}
       </div>
+      {state.kind === 'done' && <ResultDialog tool={tool} outputs={state.outputs} onClose={() => setState({ kind: 'idle' })} onReset={() => changeFiles([])} />}
       {asking && (
         <PasswordDialog
           key={`${asking.name}-${asking.size}-${asking.lastModified}`}
@@ -274,48 +293,78 @@ function Progress({ value, onCancel }: { value: number; onCancel: () => void }) 
   )
 }
 
-function Result({ tool, outputs, onReset }: { tool: Tool; outputs: FileData[]; onReset: () => void }) {
+/** The finished files in a popup: download them, start over, or carry them into another tool. Closing it goes back to the options. */
+function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs: FileData[]; onClose: () => void; onReset: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
   const next = tools.filter(
     (t) => t.id !== tool.id && t.status === 'ready' && outputs.every((o) => acceptsFile(o, t.accept)) && (t.multiple || outputs.length === 1),
   )
   const total = outputs.reduce((n, o) => n + o.bytes.length, 0)
+
+  useEffect(() => {
+    const d = dialog.current!
+    if (!d.open) d.showModal()
+    return () => {
+      if (d.open) d.close()
+    }
+  }, [])
+
   return (
-    <Card className="space-y-4" aria-label="Result">
-      <p role="status" className="flex items-center gap-2 text-sm font-medium">
-        <Icon name="check" className="size-4 text-accent" />
-        Done: {outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}
-      </p>
-      <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-        {outputs.map((o, i) => (
-          <li key={i} className="flex gap-3 px-3 py-1.5">
-            <span className="min-w-0 flex-1 truncate">{o.name}</span>
-            <span className="text-xs text-muted">{formatBytes(o.bytes.length)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => download(outputs)}>
-          <Icon name="download" className="size-4" /> {outputs.length > 1 ? 'Download ZIP' : 'Download'}
-        </Button>
-        <Button variant="secondary" onClick={onReset}>Start over</Button>
-      </div>
-      {next.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted">Use in another tool:</span>
-          {next.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setHandoff(outputs.map(toFile))
-                location.hash = `#/tool/${t.id}`
-              }}
-              className="rounded-full border border-line bg-surface px-3 py-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              {t.title}
-            </button>
-          ))}
+    <dialog
+      ref={dialog}
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+      // a click on the dimmed area (the dialog element itself, outside its padded content) closes it
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      className="m-auto w-[min(32rem,92vw)] rounded-xl border border-line bg-surface p-0 text-ink backdrop:bg-black/50"
+    >
+      <div className="space-y-4 p-6">
+        <div className="flex items-start justify-between gap-3">
+          <h2 id={titleId} role="status" className="flex items-center gap-2 text-lg font-semibold">
+            <Icon name="check" className="size-5 text-accent" />
+            Done: {outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}
+          </h2>
+          <button onClick={onClose} aria-label="Close" className="-m-1 rounded p-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent">
+            <Icon name="x" className="size-5" />
+          </button>
         </div>
-      )}
-    </Card>
+        <ul className="max-h-60 divide-y divide-line overflow-auto rounded-lg border border-line text-sm">
+          {outputs.map((o, i) => (
+            <li key={i} className="flex gap-3 px-3 py-1.5">
+              <span className="min-w-0 flex-1 truncate">{o.name}</span>
+              <span className="text-xs text-muted">{formatBytes(o.bytes.length)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button autoFocus onClick={() => download(outputs)}>
+            <Icon name="download" className="size-4" /> {outputs.length > 1 ? 'Download ZIP' : 'Download'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Keep editing</Button>
+          <Button variant="secondary" onClick={onReset}>Start over</Button>
+        </div>
+        {next.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted">Use in another tool:</span>
+            {next.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setHandoff(outputs.map(toFile))
+                  location.hash = `#/tool/${t.id}`
+                }}
+                className="rounded-full border border-line bg-surface px-3 py-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </dialog>
   )
 }

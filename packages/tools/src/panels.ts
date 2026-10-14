@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { MetadataSummary } from '@ream/image-core'
 
 /** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
@@ -17,8 +17,10 @@ export type PanelProps<O = any> = {
   /** what a JPEG or PNG says about itself, read off the main thread (for the image metadata tool) */
   readImageMetadata?: (file: File) => Promise<MetadataSummary | null>
   pdfHost?: PdfHost
+  /** the run button with its progress and hints. A panel that sets `placesActions` puts it where it wants (next to its controls); otherwise the page shows it under the panel */
+  actions?: ReactNode
 }
-export type PanelModule = { Panel: ComponentType<PanelProps<any>>; defaultOptions: unknown }
+export type PanelModule = { Panel: ComponentType<PanelProps<any>>; defaultOptions: unknown; placesActions?: boolean }
 
 // Options UI per tool, loaded on demand.
 export const panels: Record<string, () => Promise<PanelModule>> = {
