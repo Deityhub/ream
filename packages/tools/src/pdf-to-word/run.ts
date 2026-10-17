@@ -2,16 +2,20 @@ import { UserError, type FileData, type RunContext } from '@ream/core'
 import { encodePng } from '@ream/image-core'
 import { writeDocx, type DocSection } from '@ream/office-core'
 import type { PdfStream } from '@ream/pdf-core'
-import { browserPlatform, browserRaster, findTables, pageBlocks, pageChars, rasterSize, type PageRaster, type Platform } from '@ream/pdf-render'
+import { browserPlatform, browserRaster, findTables, isBlank, pageBlocks, pageChars, rasterSize, type PageRaster, type Platform } from '@ream/pdf-render'
 import { extractFrom } from '../extract-images/run.ts'
 import { baseName, clampInt, loadPdf, selectPages } from '../pdf-common.ts'
-import { sectionOf } from './convert.ts'
+import { layoutSection, sectionOf } from './convert.ts'
 
 export type PdfToWordOptions = {
   /** like "1-3, 5"; empty for every page */
   pages: string
-  /** 'editable': text, tables and pictures as Word content. 'picture': each page as a picture, looks the same but cannot be edited. */
-  mode: 'editable' | 'picture'
+  /**
+   * 'layout': each page's design as a picture behind its text, every paragraph in a frame where it was (looks like the PDF,
+   * text editable). 'flow': text, tables and pictures as ordinary Word content that reflows. 'picture': each page as a
+   * picture, looks the same but cannot be edited.
+   */
+  mode: 'layout' | 'flow' | 'picture'
   /** resolution of the page pictures */
   dpi: number
 }
@@ -36,11 +40,19 @@ export async function run(files: FileData[], o: PdfToWordOptions, { progress }: 
       const w = Math.max(1, Math.round((size.width / 72) * dpi))
       rasterSize(doc, p, w)
       const px = await raster(doc, p, w)
-      sections.push({ width: size.width, height: size.height, margins: { top: 0, right: 0, bottom: 0, left: 0 }, blocks: [{ kind: 'picture', bytes: await encodePng(px), type: 'png', width: size.width, height: size.height, alt: `Page ${p + 1}`, at: { x: 0, y: 0 } }] })
+      sections.push({ width: size.width, height: size.height, margins: { top: 0, right: 0, bottom: 0, left: 0 }, blocks: [{ kind: 'picture', bytes: await encodePng(px), type: 'png', width: size.width, height: size.height, alt: `Page ${p + 1}`, at: { x: 0, y: 0 }, front: true }] })
       continue
     }
     const chars = await pageChars(doc, p)
-    const blocks = pageBlocks(chars, findTables(chars))
+    const tables = findTables(chars)
+    if (o.mode === 'layout') {
+      const w = Math.max(1, Math.round((size.width / 72) * dpi))
+      rasterSize(doc, p, w)
+      const px = await raster(doc, p, w, { text: false })
+      sections.push(layoutSection(pageBlocks(chars, tables), tables, isBlank(px) ? null : { bytes: await encodePng(px), type: 'png' }))
+      continue
+    }
+    const blocks = pageBlocks(chars, tables)
     // pictures are decoded one by one here: sectionOf asks for them by block
     const have = new Map<PdfStream, { bytes: Uint8Array; type: 'png' | 'jpeg' } | null>()
     for (const b of blocks.blocks) {
@@ -52,7 +64,7 @@ export async function run(files: FileData[], o: PdfToWordOptions, { progress }: 
     sections.push(sectionOf(blocks, (b) => have.get(b.image) ?? null))
   }
   progress(0.95)
-  if (o.mode === 'editable' && !sections.some((s) => s.blocks.length)) {
+  if (o.mode === 'flow' && !sections.some((s) => s.blocks.length)) {
     throw new UserError('No text or pictures were found to put in the document. If these pages are scans, choose "Page pictures" instead: reading text out of pictures needs OCR, which Ream does not have yet.')
   }
   const bytes = await writeDocx({ sections, title: baseName(f.name) })

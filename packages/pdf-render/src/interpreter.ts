@@ -120,6 +120,8 @@ export class Interpreter {
   onGlyph?: (glyph: GlyphInfo) => void
   /** analysis only: pictures are not decoded and count as their unit square */
   analysis = false
+  /** draw the page without its text (it is still read: onGlyph sees it): the design of a page under editable text */
+  skipText = false
   /** told about every picture XObject that is painted (at any depth), with the matrix that maps its unit square into the space the page's own content uses */
   onImage?: (image: PdfStream, ctm: Matrix) => void
   private unknownWidth = false
@@ -476,7 +478,7 @@ export class Interpreter {
     for (const g of glyphs) {
       let advance = g.width ?? 0
       if (font.type3) {
-        if (mode !== 3) await this.type3Glyph(font, g, res)
+        if (mode !== 3 && !this.skipText) await this.type3Glyph(font, g, res)
       } else if (g.text) {
         const fontString = `${font.italic ? 'italic ' : ''}${font.bold ? 'bold ' : ''}${drawSize}px ${font.family}`
         if (this.fontString !== fontString) {
@@ -488,7 +490,7 @@ export class Interpreter {
           advance = (natural / drawSize) * 1000
           this.unknownWidth = true
         }
-        if ((fillIt || strokeIt) && g.text.trim() !== '') {
+        if ((fillIt || strokeIt) && g.text.trim() !== '' && !this.skipText) {
           // a stand-in font's letters are rarely as wide as the original's: squeeze or stretch each to its slot
           let fit = 1
           if (g.width !== null && natural > 0) fit = Math.min(2, Math.max(0.5, ((g.width / 1000) * drawSize) / natural))

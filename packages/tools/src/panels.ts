@@ -23,6 +23,10 @@ export type PanelProps<O = any> = {
   readMetadata?: (file: File) => Promise<Record<string, string>>
   /** what a JPEG or PNG says about itself, read off the main thread (for the image metadata tool) */
   readImageMetadata?: (file: File) => Promise<MetadataSummary | null>
+  /** the font names a .pptx or .xlsx uses, read off the main thread (for the Office converters' installed-font option) */
+  readOfficeFonts?: (file: File) => Promise<string[]>
+  /** the faces in a font file someone added (a web font comes back unpacked) */
+  readFontFile?: (file: Blob) => Promise<{ faces: { family: string; typographic?: string; style: string; postscript: string; embeddable: boolean }[]; bytes: Uint8Array }>
   pdfHost?: PdfHost
   /** the run button with its progress and hints. A panel that sets `placesActions` puts it where it wants (next to its controls); otherwise the page shows it under the panel */
   actions?: ReactNode

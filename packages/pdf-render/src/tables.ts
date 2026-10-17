@@ -17,6 +17,13 @@ export type TableCell = {
   size: number
   /** where the text sits across the page (internal: used to work out column alignment) */
   ink?: [number, number] | null
+  /** the box the cell's text covers on the page (top of the first line to below the last), absent for an empty cell */
+  box?: { x0: number; y0: number; x1: number; y1: number }
+  /** the text's colour and the font's name and kind, from its first letter */
+  color?: [number, number, number]
+  face?: string
+  kind?: 'sans' | 'serif' | 'mono'
+  italic?: boolean
 }
 
 export type Table = {
@@ -37,7 +44,7 @@ export type Table = {
 }
 
 /** a run of text on one line with no wide gap inside, the unit tables are built from */
-type Piece = { text: string; x0: number; x1: number; y: number; size: number; bold: boolean }
+type Piece = { text: string; x0: number; x1: number; y: number; size: number; bold: boolean; italic: boolean; color?: [number, number, number]; face?: string; kind?: 'sans' | 'serif' | 'mono' }
 
 const COLUMN_GAP = 1.0 // a gap wider than this many font sizes ends a piece
 const TOL = 1.5 // points: lines closer than this are the same line
@@ -64,7 +71,7 @@ function pieces(line: Line, gapEm = COLUMN_GAP): Piece[] {
     if (!t) continue
     const gap = prev ? c.x0 - prev.x1 : 0
     if (!cur || (prev && gap > gapEm * Math.max(prev.size, c.size))) {
-      cur = { text: '', x0: c.x0, x1: c.x1, y: line.y, size: c.size, bold: false, b: 0, n: 0 }
+      cur = { text: '', x0: c.x0, x1: c.x1, y: line.y, size: c.size, bold: false, italic: c.italic, color: c.src.color, face: c.src.face, kind: c.src.kind, b: 0, n: 0 }
       out.push(cur)
       ends = ''
     } else if (prev && gap > WORD_GAP * Math.max(prev.size, c.size) && !/\s$/.test(ends) && !/^\s/.test(t)) cur.text += ' '
@@ -78,7 +85,7 @@ function pieces(line: Line, gapEm = COLUMN_GAP): Piece[] {
     prev = c
   }
   return out
-    .map((p) => ({ text: p.text.trim(), x0: p.x0, x1: p.x1, y: p.y, size: p.size, bold: p.n > 0 && p.b / p.n >= 0.6 }))
+    .map((p) => ({ text: p.text.trim(), x0: p.x0, x1: p.x1, y: p.y, size: p.size, bold: p.n > 0 && p.b / p.n >= 0.6, italic: p.italic, color: p.color, face: p.face, kind: p.kind }))
     .filter((p) => p.text)
 }
 
@@ -200,7 +207,7 @@ function ruledTables(h: Seg[], v: Seg[], all: Piece[]): { table: Table; used: Se
 }
 
 /** the text of the pieces of one cell, lines top to bottom; short lines break, long ones are wrapped text and join with a space */
-function cellText(ps: Piece[], width: number): { text: string; bold: boolean; size: number; ink: [number, number] | null } {
+function cellText(ps: Piece[], width: number): Pick<TableCell, 'text' | 'bold' | 'size' | 'ink' | 'box' | 'color' | 'face' | 'kind' | 'italic'> {
   const lines: Piece[][] = []
   for (const p of [...ps].sort((a, b) => a.y - b.y || a.x0 - b.x0)) {
     const l = lines[lines.length - 1]
@@ -213,7 +220,10 @@ function cellText(ps: Piece[], width: number): { text: string; bold: boolean; si
     if (i) text += lines[i - 1].reduce((n, p) => Math.max(n, p.x1), 0) - lines[i - 1][0].x0 >= 0.7 * width ? ' ' : '\n'
     text += t
   })
-  return { text, bold: ps.length > 0 && ps.every((p) => p.bold), size: median(ps.map((p) => p.size)), ink: ps.length ? [Math.min(...ps.map((p) => p.x0)), Math.max(...ps.map((p) => p.x1))] : null }
+  if (!ps.length) return { text, bold: false, size: 0, ink: null }
+  const box = { x0: Math.min(...ps.map((p) => p.x0)), x1: Math.max(...ps.map((p) => p.x1)), y0: Math.min(...ps.map((p) => p.y - p.size)), y1: Math.max(...ps.map((p) => p.y + 0.25 * p.size)) }
+  const f = ps[0]
+  return { text, bold: ps.every((p) => p.bold), italic: f.italic, size: median(ps.map((p) => p.size)), ink: [box.x0, box.x1], box, color: f.color, face: f.face, kind: f.kind }
 }
 
 /**

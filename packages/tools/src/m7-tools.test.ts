@@ -195,7 +195,7 @@ describe('watermark with an uploaded font', () => {
 
   test('a letter the font lacks, and a file that is not a font, are explained', async () => {
     await expect(watermark([pdf(1)], o({ text: 'Aש' }), ctx)).rejects.toThrow('no glyph for')
-    await expect(watermark([pdf(1)], o({ fontFile: new TextEncoder().encode('not a font at all, really') }), ctx)).rejects.toThrow("isn't a TrueType font")
+    await expect(watermark([pdf(1)], o({ fontFile: new TextEncoder().encode('not a font at all, really') }), ctx)).rejects.toThrow("isn't a TrueType or OpenType font")
   })
 
   test('without a font file it is Helvetica and Latin only, as before', async () => {

@@ -23,7 +23,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
             className={`${inputClass} w-full`}
           >
             <option value="builtin">Helvetica (Latin letters)</option>
-            <option value="file">{options.fontFile ? options.fontName : 'A font file (.ttf)…'}</option>
+            <option value="file">{options.fontFile ? options.fontName : 'A font file (.ttf, .otf)…'}</option>
           </select>
         </label>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 font-medium hover:bg-surface-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent">
@@ -32,7 +32,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
           <input
             id="wm-font-file"
             type="file"
-            accept=".ttf,.ttc,font/ttf"
+            accept=".ttf,.otf,.ttc,font/ttf,font/otf"
             className="sr-only"
             onChange={async (e) => {
               const f = e.target.files?.[0]
@@ -90,7 +90,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
         Pages
         <input type="text" value={options.pages} onChange={(e) => set({ pages: e.target.value })} placeholder="All pages, or like 1-3, 5" className={`${inputClass} w-full`} />
       </label>
-      <p className="text-xs text-muted">{options.fontFile ? 'The font must be a TrueType file (.ttf) that allows embedding, and have every letter of the text. Letters are placed one after another with no kerning, so scripts that need shaping (Arabic, Indic) are not supported. ' : 'Helvetica has Latin letters, digits and common symbols; use a font file for other scripts. '}Text behind the page is hidden where the page has a solid background.</p>
+      <p className="text-xs text-muted">{options.fontFile ? 'The font must be a TrueType or OpenType file (.ttf, .otf) that allows embedding, and have every letter of the text. Letters are placed one after another with no kerning, so scripts that need shaping (Arabic, Indic) are not supported. ' : 'Helvetica has Latin letters, digits and common symbols; use a font file for other scripts. '}Text behind the page is hidden where the page has a solid background.</p>
     </fieldset>
   )
 }

@@ -29,9 +29,11 @@ test('shapes: own colours, style references for fill and text colour, geometry, 
   expect((free as SlideBox).paragraphs[0].runs[0]).toMatchObject({ font: 'Georgia', size: 28, bold: true, color: 'C0392B' })
   expect((free as SlideBox).paragraphs[1]).toMatchObject({ align: 'right' })
   expect(free).toMatchObject({ wrap: false })
-  expect(rect).toMatchObject({ fill: '4F81BD', geometry: 'rect' }) // accent1 of the theme, from the style reference
+  // python-pptx shapes point at the theme's third fill style: accent1 as the theme's intense gradient
+  expect(rect).toMatchObject({ geometry: 'rect', paint: { type: 'gradient' } })
+  expect((rect as SlideBox).paint?.type === 'gradient' && (rect as SlideBox).paint).toMatchObject({ angle: 270 }) // the theme's gradient runs bottom to top
   expect((rect as SlideBox).paragraphs[0].runs[0].color).toBe('FFFFFF') // the style's font reference: light text
-  expect(oval).toMatchObject({ fill: 'F1C40F', geometry: 'ellipse', line: { color: '000000' } })
+  expect(oval).toMatchObject({ paint: { type: 'solid', color: 'F1C40F' }, geometry: 'ellipse', line: { color: '000000' } })
   expect(arrow).toMatchObject({ geometry: 'rightArrow', rotation: 20 })
   expect(round).toMatchObject({ geometry: 'roundRect', anchor: 'middle' })
   expect(pic).toMatchObject({ kind: 'pic', type: 'png', w: 108, h: 79.2 })
@@ -57,7 +59,7 @@ test('what the writer writes, the reader reads back', async () => {
     }),
   )
   const [s] = deck.slides
-  expect(s.background).toBe('EEEEEE')
+  expect(s.backgroundPaint).toEqual({ type: 'solid', color: 'EEEEEE' })
   const [box, pic, tbl] = s.shapes
   expect(box).toMatchObject({ x: 10, y: 20, w: 300, h: 50 })
   expect((box as SlideBox).paragraphs[0]).toMatchObject({ align: 'center', bullet: '•', marginLeft: 18, indent: -18 })
@@ -106,7 +108,7 @@ test('groups scale and move their children; hidden slides are marked; background
   expect(s.hidden).toBe(true)
   expect(s.background).toBe('E7E6E6') // bg2 -> lt2
   // the group is shown twice as big as its own coordinates and moved by (100, 100): the child at (50, 50) size 50 x 25 -> (200, 200) size 100 x 50
-  expect(s.shapes[0]).toMatchObject({ x: 200, y: 200, w: 100, h: 50, fill: '00FF00', geometry: 'ellipse' })
+  expect(s.shapes[0]).toMatchObject({ x: 200, y: 200, w: 100, h: 50, paint: { type: 'solid', color: '00FF00' }, geometry: 'ellipse' })
 })
 
 test('files that are not presentations are refused in plain words', async () => {
@@ -123,4 +125,72 @@ test('the spreadsheet fixture from openpyxl reads as it was made', async () => {
   expect(s.rows[6]![3]!.text).toBe('-$150.75')
   expect(s.rows[8]![1]!.text).toBe('15 March 2024')
   expect(s.rows[2]![0]!.style).toMatchObject({ bold: true, color: 'FFFFFF', fill: '1F4E79' })
+})
+
+// features.pptx: made by python-pptx with gradients, see-through fills, turns, mirrors, a turned group, connectors with
+// ends, a picture fill and text effects added to the XML
+test('fills: linear and radial gradients, see-through colour, a picture cut to an oval', async () => {
+  const [s1, s2] = (await readPptx(fixture('features.pptx'))).slides
+  const boxes = s1.shapes as SlideBox[]
+  expect(boxes[1].paint).toMatchObject({ type: 'gradient', angle: 90, stops: [{ at: 0, color: 'FF6B6B' }, { at: 1, color: '4D96FF' }] })
+  expect(boxes[2].paint).toMatchObject({ type: 'gradient', center: [0.5, 0.5] })
+  expect(boxes.map((b) => b.geometry).slice(0, 4)).toEqual(['roundRect', 'ellipse', 'triangle', 'diamond'])
+  const see = s2.shapes[2] as SlideBox
+  expect(see.paint).toEqual({ type: 'solid', color: '1565C0', alpha: 0.4 })
+  const pic = s2.shapes.find((x) => x.kind === 'text' && x.paint?.type === 'picture') as SlideBox
+  expect(pic).toMatchObject({ geometry: 'ellipse', paint: { type: 'picture', kind: 'png' } })
+})
+
+test('turns, mirrors, groups and connector ends', async () => {
+  const s = (await readPptx(fixture('features.pptx'))).slides[1]
+  expect(s.shapes[0]).toMatchObject({ geometry: 'rightArrow', rotation: 30 })
+  expect(s.shapes[1]).toMatchObject({ geometry: 'rtTriangle', flipH: true })
+  // shapes in a turned group keep their own boxes and carry the group's turn as a matrix
+  const inGroup = s.shapes.filter((x) => x.kind === 'text' && x.xform)
+  expect(inGroup).toHaveLength(2)
+  const m = (inGroup[0] as SlideBox).xform!
+  expect(m[0]).toBeCloseTo(Math.cos(Math.PI / 9), 5)
+  expect(m[1]).toBeCloseTo(Math.sin(Math.PI / 9), 5)
+  const line = s.shapes.find((x) => x.kind === 'line')!
+  expect(line).toMatchObject({ head: 'oval', tail: 'triangle', width: 3 })
+  const elbow = s.shapes.find((x) => x.kind === 'text' && x.geometry === 'bentConnector3') as SlideBox
+  expect(elbow.line).toMatchObject({ tail: 'stealth', width: 2 })
+})
+
+test('text effects: letter spacing, raised and lowered, highlight, capitals, a coloured Wingdings bullet', async () => {
+  const s = (await readPptx(fixture('features.pptx'))).slides[1]
+  const tb = s.shapes[s.shapes.length - 1] as SlideBox
+  const runs = tb.paragraphs[0].runs
+  expect(runs.find((r) => r.text === 'wide')).toMatchObject({ spacing: 6 })
+  expect(runs.filter((r) => r.text === '2').map((r) => r.baseline)).toEqual([0.3, -0.25])
+  expect(runs.find((r) => r.text === 'highlight')).toMatchObject({ highlight: 'FFFF00' })
+  expect(runs.find((r) => r.text === ' caps')).toMatchObject({ caps: 'all' })
+  expect(tb.paragraphs[1]).toMatchObject({ bullet: 'Ø', bulletFont: 'Wingdings', bulletColor: 'E53935', marginLeft: 27, indent: -27 })
+})
+
+test('custom geometry: paths with lines, curves and arcs, scaled to the box; holes made by a second outline', () => {
+  const pptxPath = (path: string) => readPptx(mini(`<p:sp><p:nvSpPr><p:cNvPr id="3" name="f"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst><a:gd name="q" fmla="*/ w 1 2"/></a:gdLst><a:pathLst>${path}</a:pathLst></a:custGeom><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></p:spPr></p:sp>`))
+  return pptxPath('<a:path w="100" h="50"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="0"/></a:lnTo><a:arcTo wR="50" hR="25" stAng="0" swAng="5400000"/><a:quadBezTo><a:pt x="0" y="50"/><a:pt x="0" y="0"/></a:quadBezTo><a:close/></a:path><a:path><a:moveTo><a:pt x="q" y="0"/></a:moveTo><a:lnTo><a:pt x="0" y="0"/></a:lnTo></a:path>').then((deck) => {
+    const b = deck.slides[0].shapes[0] as SlideBox
+    expect(b.geometry).toBe('custom')
+    const [p1, p2] = b.paths!
+    expect(p1).toMatchObject({ w: 100, h: 50 })
+    expect(p1.segs.map((s) => s[0])).toEqual(['M', 'L', 'C', 'C', 'Z'])
+    // a quarter arc of radii 50 x 25 from angle 0 ends at the bottom: (100 - 50, 0 + 25)
+    const arc = p1.segs[2] as ['C', number, number, number, number, number, number]
+    expect(arc[5]).toBeCloseTo(50, 5)
+    expect(arc[6]).toBeCloseTo(25, 5)
+    // a path without its own size uses the box in EMU; the guide q is half the width
+    expect(p2.segs[0]).toEqual(['M', 635000, 0])
+  })
+})
+
+// placeholders.pptx (python-pptx): the layout's content placeholder has the same number (idx 4) as the master's slide
+// number, as some templates do; the master's style must come from its body placeholder, found by type
+test('a placeholder takes the master style of its type, not of a master placeholder that shares its number', async () => {
+  const [slide] = (await readPptx(fixture('placeholders.pptx'))).slides
+  const body = slide.shapes.find((s) => s.kind === 'text' && texts(s)[0] === 'Introduction') as SlideBox
+  expect(body.paragraphs[0].align ?? 'left').toBe('left') // the slide number is right-aligned
+  expect(body.paragraphs[0].runs[0].size).toBe(32) // the master's body text, not the slide number's 12 pt
+  expect(body.paragraphs[0].bullet).toBe('•')
 })

@@ -20,7 +20,7 @@ export type WatermarkOptions = {
   layer: 'over' | 'under'
   /** page ranges like 1-3,5; empty for every page */
   pages: string
-  /** a TrueType font to draw the text with, instead of Helvetica: lets it be in any script the font has. Bold and italic don't apply to it. */
+  /** a TrueType or OpenType font to draw the text with, instead of Helvetica: lets it be in any script the font has. Bold and italic don't apply to it. */
   fontFile: Uint8Array | null
   /** the file's name, for the panel */
   fontName: string

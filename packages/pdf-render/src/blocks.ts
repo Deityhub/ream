@@ -30,6 +30,10 @@ export type TextBlock = {
   indentFirst: number
   /** space before the next block, points */
   after: number
+  /** its lines are kept as they are on the page, joined with line breaks (placed blocks only) */
+  breaks?: boolean
+  /** a bullet drawn as a letter: which, in what colour, size and font (placed blocks only) */
+  mark?: { text: string; color: [number, number, number]; size: number; face: string }
 }
 
 export type TableBlock = { kind: 'table'; table: Table; y0: number; y1: number; after: number }
@@ -54,8 +58,11 @@ const runOf = (c: Placed, text: string): BlockRun => {
   return { text, bold: c.bold, italic: c.italic, size: Math.round(c.size * 2) / 2, face: src.face ?? '', kind: src.kind ?? 'sans', color: src.color ?? BLACK }
 }
 
-/** the runs of a paragraph: its lines joined (a hyphen at a line end before a lower-case letter is a split word) and equal neighbours merged */
-function paraRuns(p: Para): BlockRun[] {
+/**
+ * The runs of a paragraph: its lines joined (a hyphen at a line end before a lower-case letter is a split word) and equal
+ * neighbours merged. With `breaks` the lines stay lines: they are joined with a line break ("\n") and nothing is rejoined.
+ */
+function paraRuns(p: Para, breaks = false): BlockRun[] {
   const out: BlockRun[] = []
   const push = (r: BlockRun) => {
     const last = out[out.length - 1]
@@ -70,7 +77,12 @@ function paraRuns(p: Para): BlockRun[] {
       if (!t) continue
       if (first && li > 0) {
         const last = out[out.length - 1]
-        if (last && /[A-Za-zÀ-ɏ]-$/.test(last.text) && /^[a-zß-ÿ]/.test(t)) last.text = last.text.slice(0, -1)
+        if (breaks) {
+          // the break goes after the line's last letter: spaces at the end of the line (in any font) are dropped
+          while (out.length && !out[out.length - 1].text.trim()) out.pop()
+          if (out.length) out[out.length - 1].text = out[out.length - 1].text.replace(/\s+$/, '') + '\n'
+        }
+        else if (last && /[A-Za-zÀ-ɏ]-$/.test(last.text) && /^[a-zß-ÿ]/.test(t)) last.text = last.text.slice(0, -1)
         else if (last && !/\s$/.test(last.text)) last.text += ' '
       } else if (prev && c.x0 - prev.x1 > WORD_GAP * Math.max(prev.size, c.size) && !/^\s/.test(t)) {
         const last = out[out.length - 1]
@@ -88,6 +100,31 @@ function paraRuns(p: Para): BlockRun[] {
   return out.filter((r) => r.text)
 }
 
+/** a paragraph as a block: its runs (a leading bullet sign taken off), its box, type size and line spacing; left aligned, no indents */
+export function blockOf(p: Para, fallbackSize: number, breaks = false): TextBlock {
+  const runs = paraRuns(p, breaks)
+  if (runs.length && BULLET.test(runs[0].text)) runs[0].text = runs[0].text.replace(BULLET, '')
+  const lines = p.lines
+  const gaps = lines.slice(1).map((l, i) => l.y - lines[i].y)
+  return {
+    kind: 'text',
+    x0: Math.min(...lines.map((l) => l.x0)),
+    x1: Math.max(...lines.map((l) => l.x1)),
+    y0: lines[0].y - lines[0].size,
+    y1: lines[lines.length - 1].y + 0.25 * lines[lines.length - 1].size,
+    runs: runs.filter((r) => r.text),
+    align: 'left',
+    bullet: false,
+    size: median(lines.map((l) => l.size)) || fallbackSize,
+    leading: gaps.length ? median(gaps) : 0,
+    lines: lines.length,
+    indentLeft: 0,
+    indentFirst: 0,
+    after: 0,
+    breaks: breaks || undefined,
+  }
+}
+
 const BIG_PICTURE = 0.6 // share of the page a picture covers to count as a background or a scan
 
 /**
@@ -95,7 +132,7 @@ const BIG_PICTURE = 0.6 // share of the page a picture covers to count as a back
  * Invisible text (a scan's text layer) is left out unless `invisible` asks for it. Margins come from where the content sits, not from any setting in the file.
  */
 /** the x of a bullet mark (a small shape) just left of a line's first letter and level with its middle, if there is one */
-function markerBefore(line: { x0: number; y: number; size: number }, dots: { x0: number; y0: number; x1: number; y1: number }[]): number | undefined {
+export function markerBefore(line: { x0: number; y: number; size: number }, dots: { x0: number; y0: number; x1: number; y1: number }[]): number | undefined {
   const mid = line.y - 0.35 * line.size
   const hit = dots.find((d) => d.x1 <= line.x0 + 1 && d.x1 >= line.x0 - 2.5 * line.size && Math.abs((d.y0 + d.y1) / 2 - mid) < 0.4 * line.size)
   return hit?.x0
@@ -111,21 +148,23 @@ export function pageBlocks(page: PageChars, tables: Table[], o: { invisible?: bo
   const columns = tables.length ? [free] : readingColumns(free, size)
   const bounds = { x0: Math.min(...free.map((c) => c.x0), ...tables.map((t) => t.x0)), x1: Math.max(...free.map((c) => c.x1), ...tables.map((t) => t.x1)) }
   const paras: { block: TextBlock; first: number; last: number }[] = []
-  const objects: [number, number][] = [...tables.map((t): [number, number] => [t.y0, t.y1]), ...page.pictures.filter((p) => p.y1 - p.y0 >= 4).map((p): [number, number] => [p.y0, p.y1])]
+  const objects: { y0: number; y1: number; x0: number; x1: number }[] = [...tables, ...page.pictures.filter((p) => p.y1 - p.y0 >= 4)]
   const pageLead: number[] = []
 
   for (const col of columns) {
     if (!col.length) continue
     const cx0 = Math.min(...col.map((c) => c.x0))
     const cx1 = Math.max(...col.map((c) => c.x1))
-    // a table or a picture between two lines ends the paragraph: lines on its two sides never belong together
+    // a table or a picture between two lines ends the paragraph: lines above and below it never belong together
     const all = toLines(col)
     if (!turn) for (const line of all) line.marker = markerBefore(line, page.shapes.dots)
     const groups: (typeof all)[] = []
     for (const line of all) {
       const g = groups[groups.length - 1]
       const prev = g?.[g.length - 1]
-      if (g && prev && !objects.some(([y0, y1]) => prev.y <= y1 && line.y >= y0)) g.push(line)
+      // something between the two lines and under them (not beside them) ends the paragraph
+      const between = (o: (typeof objects)[number]) => prev!.y <= o.y1 && line.y >= o.y0 && o.x0 < Math.max(prev!.x1, line.x1) && o.x1 > Math.min(prev!.x0, line.x0)
+      if (g && prev && !objects.some(between)) g.push(line)
       else groups.push([line])
     }
     const ps = groups.flatMap((g) => paragraphs(g))
@@ -134,15 +173,14 @@ export function pageBlocks(page: PageChars, tables: Table[], o: { invisible?: bo
       if (gaps.length) pageLead.push(median(gaps))
     }
     for (const p of ps) {
-      const runs = paraRuns(p)
-      if (!runs.length) continue
+      const base = blockOf(p, size)
+      if (!base.runs.length) continue
       const lines = p.lines
-      const psize = median(lines.map((l) => l.size)) || size
-      const text = runs.map((r) => r.text).join('')
+      const psize = base.size
+      const text = paraRuns(p).map((r) => r.text).join('')
       const x0s = lines.map((l) => l.x0)
-      const x1s = lines.map((l) => l.x1)
-      const minX0 = Math.min(...x0s)
-      const maxX1 = Math.max(...x1s)
+      const minX0 = base.x0
+      const maxX1 = base.x1
       let align: TextBlock['align'] = 'left'
       const centred = lines.every((l) => Math.abs((l.x0 + l.x1) / 2 - (cx0 + cx1) / 2) < 4)
       if (lines.length === 1 ? centred && minX0 - cx0 > 8 && cx1 - maxX1 > 8 : centred && x0s.some((x) => Math.abs(x - minX0) > 6)) align = 'center'
@@ -150,7 +188,6 @@ export function pageBlocks(page: PageChars, tables: Table[], o: { invisible?: bo
       else if (lines.length >= 3 && lines.slice(0, -1).every((l) => Math.abs(l.x1 - maxX1) < 3) && lines.slice(1).every((l) => Math.abs(l.x0 - lines[1].x0) < 3)) align = 'justify'
       const marker = lines[0].marker
       const bullet = marker !== undefined || BULLET.test(text)
-      if (BULLET.test(text)) runs[0].text = runs[0].text.replace(BULLET, '')
       const rest = lines.slice(1)
       let indentLeft = align === 'left' || align === 'justify' ? Math.max(0, (rest.length ? Math.min(...rest.map((l) => l.x0)) : lines[0].x0) - cx0) : 0
       let indentFirst = align === 'left' || align === 'justify' ? (rest.length ? lines[0].x0 - Math.min(...rest.map((l) => l.x0)) : 0) : 0
@@ -167,24 +204,7 @@ export function pageBlocks(page: PageChars, tables: Table[], o: { invisible?: bo
       }
       let heading: TextBlock['heading']
       if (body && lines.length <= 2 && text.length <= 140 && psize >= 1.15 * body && !bullet) heading = psize >= 1.8 * body ? 1 : psize >= 1.4 * body ? 2 : 3
-      const gaps = lines.slice(1).map((l, i) => l.y - lines[i].y)
-      const block: TextBlock = {
-        kind: 'text',
-        x0: minX0,
-        x1: maxX1,
-        y0: lines[0].y - lines[0].size,
-        y1: lines[lines.length - 1].y + 0.25 * lines[lines.length - 1].size,
-        runs,
-        align,
-        heading,
-        bullet,
-        size: psize,
-        leading: gaps.length ? median(gaps) : 0,
-        lines: lines.length,
-        indentLeft,
-        indentFirst,
-        after: 0,
-      }
+      const block: TextBlock = { ...base, align, heading, bullet, indentLeft, indentFirst }
       paras.push({ block, first: lines[0].y, last: lines[lines.length - 1].y })
     }
   }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import { UserError, unzip, zip } from '@ream/core'
 import { readXlsx, sheetNames, writeXlsx, type Sheet } from '../src/index.ts'
@@ -68,4 +69,20 @@ test('refuses what is not a workbook, with words a user can act on', async () =>
   await expect(readXlsx(new TextEncoder().encode('just text, nothing zipped here at all, really'))).rejects.toBeInstanceOf(UserError)
   await expect(readXlsx(zip([{ name: 'a.txt', bytes: new Uint8Array(1) }]))).rejects.toThrow(/Excel workbook/)
   expect([...(await unzip(await writeXlsx([sheet]))).keys()]).toContain('xl/styles.xml')
+})
+
+// setup.xlsx was made by openpyxl: A5 landscape with grid lines, a print area, a repeated header row, a picture, and a
+// second sheet set to fit one page wide
+test('page setup, print area, repeated rows and pictures are read', async () => {
+  const book = await readXlsx(new Uint8Array(readFileSync(new URL('./fixtures/setup.xlsx', import.meta.url))))
+  const [sales, wide] = book.sheets
+  expect(sales.page).toMatchObject({ saved: true, paper: [420, 595], landscape: true, gridlines: true, scale: 100, area: { row: 0, col: 0, rows: 41, cols: 4 }, titleRows: [0, 0] })
+  expect(sales.page!.margins).toEqual({ left: 54, right: 54, top: 72, bottom: 72 })
+  expect(sales.page!.fit).toBeUndefined()
+  expect(sales.pictures).toHaveLength(1)
+  expect(sales.pictures![0]).toMatchObject({ from: { col: 2, row: 2, dx: 0, dy: 0 }, width: 48, height: 36, type: 'png' })
+  expect(sales.rows[1]![1]).toMatchObject({ value: -1, style: { color: 'FF0000' } })
+  expect(sales.rows[2]![1]!.style!.color).not.toBe('FF0000')
+  expect(wide.page).toMatchObject({ fit: { wide: 1, tall: 0 }, landscape: false })
+  expect(wide.page!.paper).toBeUndefined()
 })

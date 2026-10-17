@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { formatValue as f, general } from '../src/numfmt.ts'
+import { formatColor, formatValue as f, general } from '../src/numfmt.ts'
 
 test('general: trims, rounds to 10 digits, scientific for extremes', () => {
   expect([general(3), general(0.1 + 0.2), general(1234.5), general(1e21), general(-2.5e-7)]).toEqual(['3', '0.3', '1234.5', '1E+21', '-2.5E-07'])
@@ -42,4 +42,14 @@ test('text and other types', () => {
   expect(f(true, undefined)).toBe('TRUE')
   expect(f(null, '0.00')).toBe('')
   expect(f(42, 'General')).toBe('42')
+})
+
+test('colours in formats follow the section the value is shown with', () => {
+  expect(formatColor(-3, '0;[Red]-0')).toBe('FF0000')
+  expect(formatColor(3, '0;[Red]-0')).toBeUndefined()
+  expect(formatColor(0, '[Blue]0;[Red]-0;[Green]0')).toBe('00FF00')
+  expect(formatColor('x', '0;0;0;[Magenta]@')).toBe('FF00FF')
+  expect(formatColor(-1, '#,##0;[$€-407][Red]-#,##0')).toBe('FF0000')
+  expect(formatColor(1, '"[Red]"0')).toBeUndefined() // quoted text is not a colour
+  expect(formatColor(5, undefined)).toBeUndefined()
 })

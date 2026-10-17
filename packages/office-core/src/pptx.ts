@@ -29,7 +29,8 @@ function paraXml(p: SlidePara): string {
   const spacing =
     `${p.line ? `<a:lnSpc><a:spcPts val="${hundred(p.line)}"/></a:lnSpc>` : p.lineFactor ? `<a:lnSpc><a:spcPct val="${Math.round(p.lineFactor * 100000)}"/></a:lnSpc>` : ''}` +
     `${p.before !== undefined ? `<a:spcBef><a:spcPts val="${hundred(p.before)}"/></a:spcBef>` : ''}${p.after !== undefined ? `<a:spcAft><a:spcPts val="${hundred(p.after)}"/></a:spcAft>` : ''}`
-  const bullet = p.bullet ? (p.bullet === 'number' ? '<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"/>' : `<a:buFont typeface="Arial"/><a:buChar char="${esc(p.bullet)}"/>`) : '<a:buNone/>'
+  const look = `${p.bulletColor ? `<a:buClr><a:srgbClr val="${p.bulletColor}"/></a:buClr>` : ''}${p.bulletScale ? `<a:buSzPct val="${Math.round(p.bulletScale * 100000)}"/>` : ''}`
+  const bullet = p.bullet ? (p.bullet === 'number' ? `${look}<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"/>` : `${look}<a:buFont typeface="${esc(p.bulletFont ?? 'Arial')}"/><a:buChar char="${esc(p.bullet)}"/>`) : '<a:buNone/>'
   const attrs = `${p.marginLeft ? ` marL="${emu(p.marginLeft)}"` : ''}${p.indent ? ` indent="${emu(p.indent)}"` : ''} algn="${p.align === 'center' ? 'ctr' : p.align === 'right' ? 'r' : p.align === 'justify' ? 'just' : 'l'}"`
   const end = p.size ? `<a:endParaRPr lang="en-GB" sz="${hundred(p.size)}" dirty="0"/>` : ''
   return `<a:p><a:pPr${attrs}>${spacing}${bullet}</a:pPr>${p.runs.map(runXml).join('')}${end}</a:p>`
@@ -77,7 +78,7 @@ function slideXml(s: Slide, media: Media[], rels: string[]): string {
         const flipV = sh.y1 < sh.y0
         return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${n}" name="Line ${n}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr><a:xfrm${flipH ? ' flipH="1"' : ''}${flipV ? ' flipV="1"' : ''}><a:off x="${emu(Math.min(sh.x0, sh.x1))}" y="${emu(Math.min(sh.y0, sh.y1))}"/><a:ext cx="${emu(Math.abs(sh.x1 - sh.x0))}" cy="${emu(Math.abs(sh.y1 - sh.y0))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(sh.width)}">${solid(sh.color)}</a:ln></p:spPr></p:cxnSp>`
       }
-      if (sh.type === 'other') return ''
+      if (sh.kind === 'chart' || sh.type === 'other') return '' // charts are read, not written
       const m: Media = { name: `image${media.length + 1}.${sh.type === 'png' ? 'png' : 'jpeg'}`, bytes: sh.bytes, ext: sh.type === 'png' ? 'png' : 'jpeg' }
       media.push(m)
       const rid = `rId${rels.length + 2}` // rId1 is the layout

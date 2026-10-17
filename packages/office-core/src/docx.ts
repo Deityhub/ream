@@ -35,7 +35,7 @@ function pictureXml(p: Picture, pkg: Package, docPrId: number): string {
   const graphic = `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${docPrId}" name="Picture ${docPrId}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>`
   const doc = `<wp:docPr id="${docPrId}" name="Picture ${docPrId}" descr="${esc(p.alt ?? '')}"/>`
   if (!p.at) return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/>${doc}<wp:cNvGraphicFramePr/>${graphic}</wp:inline></w:drawing>`
-  return `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>${emu(p.at.x)}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>${emu(p.at.y)}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>${doc}<wp:cNvGraphicFramePr/>${graphic}</wp:anchor></w:drawing>`
+  return `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="${p.front ? 1 : 0}" behindDoc="${p.front ? 0 : 1}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>${emu(p.at.x)}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>${emu(p.at.y)}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>${doc}<wp:cNvGraphicFramePr/>${graphic}</wp:anchor></w:drawing>`
 }
 
 function paragraphXml(p: Paragraph, extra = '', sectPr = ''): string {
@@ -69,6 +69,14 @@ function tableXml(t: Table): string {
   return `<w:tbl><w:tblPr><w:tblW w:w="${tw(total)}" w:type="dxa"/>${borders}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${rows}</w:tbl>`
 }
 
+/** paragraphs in a text box placed on the page (Word 2010 shapes; readers that lack them get nothing in their place) */
+function textBoxXml(paras: Paragraph[], id: number): string {
+  const f = paras[0].frame!
+  const [cx, cy] = [emu(f.w), emu(f.h ?? 14 * paras.length)]
+  const content = paras.map((p) => paragraphXml({ ...p, frame: undefined })).join('')
+  return `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="${2 + id}" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>${emu(f.x)}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>${emu(f.y)}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="${id}" name="Text ${id}"/><wp:cNvGraphicFramePr/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr><wps:txbx><w:txbxContent>${content}</w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t" anchorCtr="0"><a:spAutoFit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback/></mc:AlternateContent></w:r>`
+}
+
 function sectPr(s: Section): string {
   const m = s.margins
   return `<w:sectPr><w:pgSz w:w="${tw(s.width)}" w:h="${tw(s.height)}"${s.width > s.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${tw(m.top)}" w:right="${tw(m.right)}" w:bottom="${tw(m.bottom)}" w:left="${tw(m.left)}" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`
@@ -94,18 +102,29 @@ export async function writeDocx(doc: DocModel): Promise<Uint8Array> {
   let body = ''
   doc.sections.forEach((s, i) => {
     const last = i === doc.sections.length - 1
-    const parts = s.blocks.map((b) => blockXml(b, pkg, ids))
-    // a section ends with a paragraph that carries its properties (the last section's go at the end of the body): the section's
-    // own last paragraph when it has one, else a one-point paragraph
-    if (!last) {
+    // paragraphs placed on the page go into text boxes, all held by one tiny paragraph at the end of the section
+    const parts: string[] = []
+    const boxes: string[] = []
+    for (let k = 0; k < s.blocks.length; k++) {
+      const b = s.blocks[k]
+      if (b.kind !== 'p' || !b.frame) { parts.push(blockXml(b, pkg, ids)); continue }
+      const group = [b]
+      while (k + 1 < s.blocks.length && s.blocks[k + 1].kind === 'p' && (s.blocks[k + 1] as Paragraph).frame === b.frame) group.push(s.blocks[++k] as Paragraph)
+      boxes.push(textBoxXml(group, ++ids.n))
+    }
+    const tiny = '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>'
+    if (boxes.length) {
+      // a section that has boxes ends with their paragraph, which then carries the section's properties
+      parts.push(`<w:p><w:pPr>${tiny}${last ? '' : sectPr(s)}</w:pPr>${boxes.join('')}</w:p>`)
+    } else if (!last) {
       const tail = s.blocks[s.blocks.length - 1]
       if (tail?.kind === 'p') parts[parts.length - 1] = paragraphXml(tail, '', sectPr(s))
-      else parts.push(`<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>${sectPr(s)}</w:pPr></w:p>`)
+      else parts.push(`<w:p><w:pPr>${tiny}${sectPr(s)}</w:pPr></w:p>`)
     }
     body += parts.join('')
   })
   const lastSection = doc.sections[doc.sections.length - 1]
-  const document = `${HEAD}<w:document xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}${lastSection ? sectPr(lastSection) : ''}</w:body></w:document>`
+  const document = `${HEAD}<w:document xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>${body}${lastSection ? sectPr(lastSection) : ''}</w:body></w:document>`
   const enc = new TextEncoder()
   const exts = [...new Set(pkg.images.map((i) => i.ext))]
   const files = [

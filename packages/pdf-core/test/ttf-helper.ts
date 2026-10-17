@@ -13,7 +13,11 @@ const composite = (a: number, b: number, dx: number, dy: number) =>
 export const GLYPHS = { notdef: 0, space: 1, A: 2, Zhe: 3, accent: 4, Aacute: 5 }
 const ADVANCE = [500, 250, 600, 700, 300, 600]
 
-export function makeTtf(options: { fsType?: number; sfnt?: string } = {}): Uint8Array {
+/**
+ * `cff` makes it an OpenType font with PostScript outlines instead: a minimal CFF table (no real charstrings: enough to be
+ * read and embedded), its Top DICT either plain or starting with ROS (CID-keyed).
+ */
+export function makeTtf(options: { fsType?: number; sfnt?: string; cff?: 'plain' | 'cid' } = {}): Uint8Array {
   const glyphs = [new Uint8Array(0), new Uint8Array(0), rect(50, 0, 550, 700), rect(40, 0, 660, 700), rect(100, 750, 300, 900), composite(GLYPHS.A, GLYPHS.accent, 0, 0)]
   const glyf: number[] = []
   const loca: number[] = []
@@ -37,7 +41,11 @@ export function makeTtf(options: { fsType?: number; sfnt?: string } = {}): Uint8
   const name = bytes(be16(0), be16(1), be16(18), be16(3), be16(1), be16(0x409), be16(6), be16(nameStr.length), be16(0), nameStr)
   const post = bytes(be32(0x00030000), be32(0), new Array(24).fill(0))
   const os2 = bytes(be16(0), sbe16(500), be16(400), be16(5), be16(options.fsType ?? 0), new Array(68).fill(0))
-  const tables: [string, Uint8Array][] = [['OS/2', os2], ['cmap', cmap], ['glyf', Uint8Array.from(glyf)], ['head', head], ['hhea', hhea], ['hmtx', hmtx], ['loca', Uint8Array.from(loca)], ['maxp', maxp], ['name', name], ['post', post]]
+  const top = options.cff === 'cid' ? [139, 139, 139, 12, 30] : [139, 17]
+  const cff = bytes([1, 0, 4, 1], be16(1), [1, 1, 5], [...'Test'].map((c) => c.charCodeAt(0)), be16(1), [1, 1, 1 + top.length], top)
+  const outlines: [string, Uint8Array][] = options.cff ? [['CFF ', cff]] : [['glyf', Uint8Array.from(glyf)], ['loca', Uint8Array.from(loca)]]
+  const tables: [string, Uint8Array][] = [['OS/2', os2], ...outlines, ['cmap', cmap], ['head', head], ['hhea', hhea], ['hmtx', hmtx], ['maxp', maxp], ['name', name], ['post', post]]
+  if (options.cff) options.sfnt = 'OTTO'
   const pad = (b: Uint8Array) => (b.length % 4 ? Uint8Array.from([...b, ...new Array(4 - (b.length % 4)).fill(0)]) : b)
   const dirLen = 12 + tables.length * 16
   let at = dirLen

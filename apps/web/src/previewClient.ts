@@ -1,6 +1,7 @@
-import type { ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
+import { officeKind } from './usePdfInfo'
+import type { FontFileInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
 
-export type { ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult }
+export type { FontFileInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -49,13 +50,14 @@ async function withDoc<T>(file: Blob, msg: object): Promise<T> {
   } catch (e) {
     if ((e as { code?: string }).code !== 'missing') throw e
     const buf = await file.arrayBuffer()
-    return send<T>({ ...msg, docId, bytes: new Uint8Array(buf) }, [buf])
+    const office = officeKind((file as File).name ?? '') ?? undefined
+    return send<T>({ ...msg, docId, office, bytes: new Uint8Array(buf) }, [buf])
   }
 }
 
 const infoCache = new WeakMap<Blob, Promise<PdfInfo>>()
 
-/** page count and sizes of a PDF, read in the worker; cached per file */
+/** page count and sizes of a PDF (or of the preview PDF of an Office file), read in the worker; cached per file */
 export function inspectPdf(file: Blob): Promise<PdfInfo> {
   let p = infoCache.get(file)
   if (!p) infoCache.set(file, (p = withDoc<PdfInfo>(file, { op: 'inspect' })))
@@ -101,6 +103,18 @@ export const markUnlocked = (file: Blob) => unlocked.add(file)
 export async function unlockPdf(file: Blob, password: string): Promise<UnlockResult> {
   const buf = await file.arrayBuffer()
   return send<UnlockResult>({ op: 'unlock', bytes: new Uint8Array(buf), password }, [buf])
+}
+
+/** the font names a .pptx or .xlsx uses, read in the worker */
+export async function readOfficeFonts(file: Blob): Promise<string[]> {
+  const buf = await file.arrayBuffer()
+  return send<string[]>({ op: 'officeFonts', bytes: new Uint8Array(buf) }, [buf])
+}
+
+/** the faces in a font file someone added, read in the worker */
+export async function readFontFile(file: Blob): Promise<FontFileInfo> {
+  const buf = await file.arrayBuffer()
+  return send<FontFileInfo>({ op: 'fontFile', bytes: new Uint8Array(buf) }, [buf])
 }
 
 const imageInfo = new WeakMap<Blob, Promise<ImageMetadata>>()

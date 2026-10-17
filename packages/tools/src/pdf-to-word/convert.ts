@@ -1,4 +1,5 @@
 import type { DocBlock, DocSection, DocTableCell, Paragraph, Run } from '@ream/office-core'
+import type { TableCell } from '@ream/pdf-render'
 import type { Block, BlockRun, PageBlocks, Table, TextBlock } from '@ream/pdf-render'
 
 export const FACE = { sans: 'Arial', serif: 'Times New Roman', mono: 'Courier New' } as const
@@ -81,4 +82,44 @@ export function sectionOf(p: PageBlocks, pictureFor: PictureFor): DocSection {
     margins: { top: cap(p.margins.top, p.height), left: cap(p.margins.left, p.width), right: cap(p.margins.right, p.width), bottom: Math.min(18, cap(p.margins.bottom, p.height)) },
     blocks,
   }
+}
+
+/** the run a table cell's text is in: its own font name, size, colour, bold and italic */
+const cellRun = (c: TableCell, text: string): Run => ({ text, bold: c.bold, italic: c.italic, size: Math.round((c.size || 10) * 2) / 2, font: c.face || FACE[c.kind ?? 'sans'], color: c.color && c.color.some((v) => v > 8) ? hex(c.color) : undefined })
+
+/**
+ * A page as a section that keeps its layout: the page's design (drawn without its text) behind, and every paragraph and
+ * table cell in a text box where it was. The text is real text in reading order; only its place is fixed.
+ */
+export function layoutSection(p: PageBlocks, tables: Table[], design: { bytes: Uint8Array; type: 'png' | 'jpeg' } | null): DocSection {
+  const blocks: DocBlock[] = []
+  // in front of the page, under the text boxes (some readers fade pictures that sit behind the text)
+  if (design) blocks.push({ kind: 'picture', ...design, width: p.width, height: p.height, at: { x: 0, y: 0 }, front: true, alt: 'Page design' })
+  for (const b of p.blocks) {
+    if (b.kind !== 'text') continue
+    const w = b.x1 - b.x0
+    // a little room on the right (both sides when centred) for a stand-in font that runs wider
+    const grow = Math.max(4, w * 0.04)
+    const centred = b.align === 'center' || b.align === 'right'
+    const hang = b.indentFirst < 0 ? -b.indentFirst : 0
+    blocks.push({
+      ...paragraphOf(b),
+      before: 0,
+      after: 0,
+      indentLeft: hang || undefined,
+      indentFirst: b.indentFirst || undefined,
+      heading: undefined,
+      frame: { x: b.x0 - (centred ? grow : 0), y: b.y0 + 0.08 * b.size, w: w + (centred ? 2 * grow : grow), h: b.y1 - b.y0 + 2 },
+    })
+  }
+  for (const t of tables) {
+    for (const c of t.cells) {
+      if (!c.box || !c.text) continue
+      const [x0, x1] = [t.xs[c.col], t.xs[Math.min(t.xs.length - 1, c.col + c.cols)]]
+      const frame = { x: c.align === 'left' ? c.box.x0 : x0, y: c.box.y0 + 0.08 * (c.size || 10), w: c.align === 'left' ? Math.max(x1 - c.box.x0, c.box.x1 - c.box.x0 + 4) : x1 - x0, h: c.box.y1 - c.box.y0 + 2 }
+      // the lines of a cell share one box
+      for (const line of c.text.split('\n')) blocks.push({ kind: 'p', runs: [cellRun(c, line)], align: c.align, after: 0, frame })
+    }
+  }
+  return { width: p.width, height: p.height, margins: { top: 0, right: 0, bottom: 0, left: 0 }, blocks }
 }

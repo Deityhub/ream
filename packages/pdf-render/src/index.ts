@@ -6,13 +6,15 @@ import { browserPlatform, type Ctx2D, type Platform } from './platform.ts'
 
 export type { Ctx2D, Platform } from './platform.ts'
 export { browserPlatform } from './platform.ts'
-export { browserRaster, rasterSize, type PageRaster, type Pixels } from './raster.ts'
+export { browserRaster, isBlank, rasterSize, type PageRaster, type Pixels } from './raster.ts'
 export { Interpreter } from './interpreter.ts'
 export { rasterizeImage, type Raster } from './image.ts'
 export { extractText, type ExtractOptions } from './extract.ts'
 export { pageChars, type TextChar, type PageChars, type PagePicture } from './textchars.ts'
+export { placedBlocks } from './placed.ts'
 export { pageBlocks, type PageBlocks, type Block, type TextBlock, type TableBlock, type PictureBlock, type BlockRun } from './blocks.ts'
 export { findTables, type Table, type TableCell } from './tables.ts'
+export type { Shapes, Rule, FillBox } from './shapes.ts'
 export { layoutPage, cleanText, type LayoutOptions } from './textlayout.ts'
 export { analyzePage, imagePlacements, removeOutside, BoundsCtx, type Box, type PaintedOp, type Removal, type Placement } from './bounds.ts'
 
@@ -27,7 +29,8 @@ export function pageGeometry(doc: PdfDocument, index: number, widthPx: number): 
   return { page, width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), scale }
 }
 
-export type RenderOptions = { platform?: Platform; signal?: AbortSignal }
+/** `text: false` leaves the page's text out: the design of a page under editable text */
+export type RenderOptions = { platform?: Platform; signal?: AbortSignal; text?: boolean }
 export type RenderResult = { warnings: string[] }
 
 /**
@@ -38,6 +41,7 @@ export async function renderPage(doc: PdfDocument, index: number, ctx: Ctx2D, wi
   const { page, width, height, scale } = pageGeometry(doc, index, widthPx)
   const base = pageBase(doc, page, scale)
   const interp = new Interpreter(doc, ctx, options.platform ?? browserPlatform, base, options.signal)
+  interp.skipText = options.text === false
 
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)

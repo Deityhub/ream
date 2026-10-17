@@ -4,7 +4,7 @@ import { formatBytes, type FileData, type Tool } from '@ream/core'
 import type { PreviewState } from './previewController'
 import { toFile } from './download'
 import { useObjectUrl } from './Thumb'
-import { isPdf, pageCount, usePdfInfo } from './usePdfInfo'
+import { isPreviewable, pageCount, usePdfInfo } from './usePdfInfo'
 import { LazyPdfPage } from './PdfPage'
 
 type Props = {
@@ -122,7 +122,7 @@ function Outputs({ outputs, compareTo }: { outputs: FileData[]; compareTo?: numb
 
 /** a picture, or for a PDF its page count and size, with the facts under it */
 function FileView({ file, was }: { file: File; was?: number }) {
-  return file.type.startsWith('image/') ? <ImageView file={file} was={was} /> : isPdf(file) ? <PdfView file={file} was={was} /> : file.type.startsWith('text/') ? <TextView file={file} /> : null
+  return file.type.startsWith('image/') ? <ImageView file={file} was={was} /> : isPreviewable(file) ? <PdfView file={file} was={was} /> : file.type.startsWith('text/') ? <TextView file={file} /> : null
 }
 
 const TEXT_SHOWN = 20_000
@@ -187,8 +187,8 @@ function PdfView({ file, was }: { file: File; was?: number }) {
           ))}
         </div>
       )}
-      {warnings.length > 0 && <p className="rounded-md bg-warning-soft px-2 py-1 text-xs text-warning">Preview is approximate: {warnings.join('; ').replace(/^./, (c) => c.toLowerCase())}.</p>}
-      <Facts name={file.name} parts={[pageCount(info) ?? undefined, sizeText(file.size, was)]} />
+      {warnings.length > 0 && <p className="rounded-md bg-warning-soft px-2 py-1 text-xs text-warning">Preview is approximate: {warnings.map((w) => w.replace(/^./, (c) => c.toLowerCase())).join('; ')}.</p>}
+      <Facts name={file.name} parts={[pageCount(info, file.name) ?? undefined, sizeText(file.size, was)]} />
     </figure>
   )
 }

@@ -1,4 +1,4 @@
-import { PdfName, PdfStream, decodeStream, isDict, type PdfDict, type PdfDocument, type PdfObj } from '@ream/pdf-core'
+import { PdfName, PdfStream, PdfString, decodeStream, decodeTextString, fontFamilyName, isDict, type PdfDict, type PdfDocument, type PdfObj } from '@ream/pdf-core'
 import { parseToUnicode, type ToUnicode } from './cmap.ts'
 import { baseEncodings, glyphToUnicode, standard, winAnsi } from './encodings.ts'
 import { numbers } from './function.ts'
@@ -72,6 +72,33 @@ export function classify(baseFont: string, flags: number, weight?: number, itali
   return { family, bold, italic, face: cands[1] ?? cands[0] ?? '', kind }
 }
 
+/** the open fonts Ream (and others) put in for Office fonts, and the fonts they stand in for */
+const STAND_INS: Record<string, string> = {
+  Carlito: 'Calibri', Caladea: 'Cambria', Arimo: 'Arial', Tinos: 'Times New Roman', Cousine: 'Courier New',
+  'Liberation Sans': 'Arial', 'Liberation Serif': 'Times New Roman', 'Liberation Mono': 'Courier New',
+}
+
+/**
+ * The family name the text was set in, as Office names fonts: the family a Ream PDF says the document asked for
+ * (/ReamFamily), else the embedded font's own family name, else the name read from BaseFont; an open stand-in for an
+ * Office font gives that Office font's name.
+ */
+async function faceOf(doc: PdfDocument, dict: PdfDict, desc: PdfDict | null, fromName: string): Promise<string> {
+  const asked = doc.resolve(dict.get('ReamFamily'))
+  if (asked instanceof PdfString) return decodeTextString(asked.bytes)
+  let face = fromName
+  const file = desc && (['FontFile2', 'FontFile3'] as const).map((k) => doc.resolve(desc.get(k))).find((f) => f instanceof PdfStream)
+  if (file instanceof PdfStream) {
+    try {
+      face = fontFamilyName(await decodeStream(file)) ?? face
+    } catch {
+      // a damaged font program keeps the name from BaseFont
+    }
+  }
+  const base = face.replace(/ (Regular|Bold|Italic|Bold Italic)$/, '')
+  return STAND_INS[base] ?? face
+}
+
 const cache = new WeakMap<object, Promise<Font>>()
 
 /** used when a text operator names a font the page doesn't have */
@@ -116,6 +143,7 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
   }
   const embedded = !!desc && ['FontFile', 'FontFile2', 'FontFile3'].some((k) => desc.has(k))
   const style = classify(baseFont, num('Flags') ?? 0, num('FontWeight'), num('ItalicAngle'))
+  style.face = await faceOf(doc, dict, desc, style.face)
   const toUni = await toUnicodeOf(doc, dict)
 
   // code -> text: glyph names from the encoding first (they say which shape is drawn), then ToUnicode, then the base table
@@ -192,6 +220,7 @@ async function type0(doc: PdfDocument, dict: PdfDict, baseFont: string): Promise
     return typeof v === 'number' ? v : undefined
   }
   const style = classify(baseFont || nameOf(doc, cidDict.get('BaseFont')) || '', num('Flags') ?? 0, num('FontWeight'), num('ItalicAngle'))
+  style.face = await faceOf(doc, dict, desc, style.face)
   const toUni = await toUnicodeOf(doc, dict)
 
   // /W: either  c [w1 w2 ...]  or  cFirst cLast w

@@ -8,7 +8,7 @@ import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
 import { PasswordDialog } from './PasswordDialog'
-import { inspectPdf, markUnlocked, readImageMetadata, readPdfMetadata, readPdfOutline, unlockPdf } from './previewClient'
+import { inspectPdf, markUnlocked, readFontFile, readImageMetadata, readOfficeFonts, readPdfMetadata, readPdfOutline, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
 import { LazyPdfPage, PdfPage } from './PdfPage'
@@ -185,7 +185,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
 
   const panelBody =
     panel && options !== null ? (
-      <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} readImageMetadata={readImageMetadata} pdfHost={pdfHost} actions={panel.placesActions ? actionBar : undefined} />
+      <panel.Panel options={options} onChange={setOptions} files={files} readMetadata={readPdfMetadata} readImageMetadata={readImageMetadata} readOfficeFonts={readOfficeFonts} readFontFile={readFontFile} pdfHost={pdfHost} actions={panel.placesActions ? actionBar : undefined} />
     ) : null
 
   return (

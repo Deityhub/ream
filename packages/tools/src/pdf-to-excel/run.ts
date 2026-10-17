@@ -1,6 +1,6 @@
 import { UserError, type RunFn } from '@ream/core'
 import { writeXlsx, type Sheet } from '@ream/office-core'
-import { findTables, pageChars, type Table } from '@ream/pdf-render'
+import { findTables, pageChars, type Shapes, type Table } from '@ream/pdf-render'
 import { baseName, loadPdf, selectPages } from '../pdf-common.ts'
 import { sheetOf } from './sheet.ts'
 
@@ -21,11 +21,12 @@ export const run: RunFn<PdfToExcelOptions> = async (files, o, { progress }) => {
   const count = doc.pages().length
   const chosen = selectPages(o.pages, count)
   const pages = chosen ? [...chosen].sort((a, b) => a - b) : Array.from({ length: count }, (_, i) => i)
-  const found: { page: number; tables: Table[] }[] = []
+  const found: { page: number; tables: Table[]; shapes: Shapes }[] = []
   for (const [n, p] of pages.entries()) {
     progress(n / pages.length)
-    const tables = findTables(await pageChars(doc, p))
-    if (tables.length) found.push({ page: p + 1, tables })
+    const chars = await pageChars(doc, p)
+    const tables = findTables(chars)
+    if (tables.length) found.push({ page: p + 1, tables, shapes: chars.shapes })
   }
   const total = found.reduce((n, p) => n + p.tables.length, 0)
   if (!total) {
@@ -34,9 +35,9 @@ export const run: RunFn<PdfToExcelOptions> = async (files, o, { progress }) => {
     )
   }
   const sheets: Sheet[] = []
-  for (const { page, tables } of found) {
-    if (o.layout === 'page') sheets.push(sheetOf(`Page ${page}`, tables, o.numbers))
-    else tables.forEach((t, i) => sheets.push(sheetOf(tables.length > 1 ? `Page ${page} table ${i + 1}` : `Page ${page}`, [t], o.numbers)))
+  for (const { page, tables, shapes } of found) {
+    if (o.layout === 'page') sheets.push(sheetOf(`Page ${page}`, tables, shapes, o.numbers))
+    else tables.forEach((t, i) => sheets.push(sheetOf(tables.length > 1 ? `Page ${page} table ${i + 1}` : `Page ${page}`, [t], shapes, o.numbers)))
   }
   progress(1)
   return [{ name: `${baseName(f.name)}.xlsx`, type: XLSX, bytes: await writeXlsx(sheets) }]

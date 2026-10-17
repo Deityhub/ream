@@ -1,5 +1,5 @@
 // Pieces every Office format shares: part names, relationships, colours, the theme.
-import { dig, kids, num, type XmlNode } from './xml.ts'
+import { child, dig, kids, num, type XmlNode } from './xml.ts'
 
 /** 0 -> "A", 25 -> "Z", 26 -> "AA" */
 export function colName(i: number): string {
@@ -50,18 +50,31 @@ export function tint(rgb: string, t: number): string {
   return c.map((v) => hex2(t > 0 ? v + (255 - v) * t : v * (1 + t))).join('')
 }
 
-export type Theme = { colors: Record<string, string>; major: string; minor: string; /** widths of the theme's line styles, EMU */ lineWidths: number[] }
+export type Theme = {
+  colors: Record<string, string>
+  major: string
+  minor: string
+  /** widths of the theme's line styles, EMU */
+  lineWidths: number[]
+  /** the format scheme's fills, lines and background fills (shapes point into these by number) */
+  fillStyles: XmlNode[]
+  lineStyles: XmlNode[]
+  bgFillStyles: XmlNode[]
+}
 
 export const DEFAULT_THEME: Theme = {
   colors: { dk1: '000000', lt1: 'FFFFFF', dk2: '44546A', lt2: 'E7E6E6', accent1: '4472C4', accent2: 'ED7D31', accent3: 'A5A5A5', accent4: 'FFC000', accent5: '5B9BD5', accent6: '70AD47', hlink: '0563C1', folHlink: '954F72' },
   major: 'Calibri Light',
   minor: 'Calibri',
   lineWidths: [6350, 12700, 19050],
+  fillStyles: [],
+  lineStyles: [],
+  bgFillStyles: [],
 }
 
 /** colours and fonts of a theme part; anything missing keeps the Office default */
 export function readTheme(root: XmlNode | undefined): Theme {
-  const t: Theme = { colors: { ...DEFAULT_THEME.colors }, major: DEFAULT_THEME.major, minor: DEFAULT_THEME.minor, lineWidths: [...DEFAULT_THEME.lineWidths] }
+  const t: Theme = { colors: { ...DEFAULT_THEME.colors }, major: DEFAULT_THEME.major, minor: DEFAULT_THEME.minor, lineWidths: [...DEFAULT_THEME.lineWidths], fillStyles: [], lineStyles: [], bgFillStyles: [] }
   const scheme = dig(root, 'themeElements', 'clrScheme')
   for (const c of scheme?.children ?? []) {
     const v = c.children[0]
@@ -71,6 +84,10 @@ export function readTheme(root: XmlNode | undefined): Theme {
   const fonts = dig(root, 'themeElements', 'fontScheme')
   t.major = dig(fonts, 'majorFont', 'latin')?.attrs.typeface || t.major
   t.minor = dig(fonts, 'minorFont', 'latin')?.attrs.typeface || t.minor
+  const fmt = dig(root, 'themeElements', 'fmtScheme')
+  t.fillStyles = child(fmt, 'fillStyleLst')?.children ?? []
+  t.lineStyles = child(fmt, 'lnStyleLst')?.children ?? []
+  t.bgFillStyles = child(fmt, 'bgFillStyleLst')?.children ?? []
   const lines = kids(dig(root, 'themeElements', 'fmtScheme', 'lnStyleLst'), 'ln')
   if (lines.length) t.lineWidths = lines.map((l, i) => num(l, 'w', DEFAULT_THEME.lineWidths[i] ?? 12700))
   return t

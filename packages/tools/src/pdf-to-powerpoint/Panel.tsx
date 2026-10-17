@@ -13,7 +13,7 @@ export function Panel({ options: o, onChange }: PanelProps<O>) {
         <input type="radio" name="ppt-mode" checked={o.mode === 'editable'} onChange={() => set({ mode: 'editable' })} className="mt-1" />
         <span>
           Editable text
-          <span className="block text-xs text-muted">Text boxes, tables and pictures in the places they were on the page, ready to change.</span>
+          <span className="block text-xs text-muted">The page's design (backgrounds, shapes, lines and pictures) stays as a picture behind the slide, with text boxes on top in the places they were, ready to change.</span>
         </span>
       </label>
       <label className="flex items-start gap-2 text-sm">
@@ -38,7 +38,7 @@ export function Panel({ options: o, onChange }: PanelProps<O>) {
         <input type="text" value={o.pages} onChange={(e) => set({ pages: e.target.value })} placeholder="All pages, or like 1-3, 5" className={`${inputClass} w-full`} />
       </label>
       {o.mode === 'editable' && (
-        <p className="text-xs text-muted">Slides take the size of the first page. Fonts keep their names, and PowerPoint uses a similar one when it is not installed, so lines can break differently. Drawings, shapes and backgrounds are left out, and scans stay pictures: reading text out of them needs OCR, which Ream does not have yet.</p>
+        <p className="text-xs text-muted">Slides take the size of the first page; pages of another size are scaled to fit. Fonts keep their names, and PowerPoint uses a similar one when it is not installed, so lines can break differently. Shapes in the design can be moved only as part of the picture, and scans stay pictures: reading text out of them needs OCR, which Ream does not have yet.</p>
       )}
     </fieldset>
   )

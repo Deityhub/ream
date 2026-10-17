@@ -31,9 +31,8 @@ describe('parseTtf', () => {
   })
 
   test('files it can not use are refused with a message that says why', () => {
-    expect(() => parseTtf(makeTtf({ sfnt: 'OTTO' }))).toThrow('PostScript outlines')
     expect(() => parseTtf(Uint8Array.from([...'wOFF'].map((c) => c.charCodeAt(0)).concat(new Array(20).fill(0))))).toThrow('web font')
-    expect(() => parseTtf(new TextEncoder().encode('this is not a font at all'))).toThrow("isn't a TrueType font")
+    expect(() => parseTtf(new TextEncoder().encode('this is not a font at all'))).toThrow("isn't a TrueType or OpenType font")
     expect(() => parseTtf(makeTtf({ fsType: 2 }))).toThrow('does not allow it to be embedded')
     expect(() => parseTtf(makeTtf({ fsType: 8 }))).not.toThrow() // editable embedding is fine
   })
@@ -98,4 +97,24 @@ describe('prepareFont', () => {
     const programs = [...doc.objects.values()].filter((o) => o instanceof PdfStream && o.dict.has('Length1'))
     expect(programs).toHaveLength(1)
   })
+})
+
+test('OpenType fonts with PostScript (CFF) outlines are embedded whole as OpenType; CID-keyed ones are refused', async () => {
+  const font = parseTtf(makeTtf({ cff: 'plain' }))
+  expect(font.cff).toBe(true)
+  expect(font.glyphFor(65)).toBe(GLYPHS.A)
+  const p = await prepareFont(font, 'AA')
+  const objs = new Map<number, unknown>()
+  let n = 0
+  const ref = p.write({ reserve: () => ({ num: ++n, gen: 0 }) as never, set: (r: { num: number }, o: unknown) => void objs.set(r.num, o) } as never)
+  const all = [...objs.values()]
+  const dicts = all.map((o) => (o instanceof Map ? o : (o as { dict?: Map<string, unknown> }).dict)).filter(Boolean) as Map<string, { value?: string }>[]
+  const cid = dicts.find((d) => d.get('Subtype')?.value === 'CIDFontType0')
+  expect(cid).toBeDefined()
+  expect(cid!.has('CIDToGIDMap')).toBe(false)
+  expect(dicts.some((d) => d.has('FontFile3'))).toBe(true)
+  expect(dicts.some((d) => d.get('Subtype')?.value === 'OpenType')).toBe(true)
+  expect(p.encode('A')).toBe(`<000${GLYPHS.A}>`)
+  expect(ref).toBeDefined()
+  expect(() => parseTtf(makeTtf({ cff: 'cid' }))).toThrow(/character collection/)
 })

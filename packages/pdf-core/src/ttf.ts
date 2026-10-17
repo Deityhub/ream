@@ -5,7 +5,7 @@
 import { PdfRef, PdfStream, PdfString, name, type PdfObj } from './objects.ts'
 import { PdfFontError } from './errors.ts'
 import { ascii, concat } from './bytes.ts'
-import { deflate } from './flate.ts'
+import { deflate, inflate } from './flate.ts'
 import type { ObjectSink } from './outline.ts'
 
 type Tables = Map<string, Uint8Array>
@@ -27,6 +27,8 @@ export type TtfFont = {
   /** the glyph for a character, 0 (the missing-glyph box) when the font has none */
   glyphFor(cp: number): number
   tables: Tables
+  /** PostScript (CFF) outlines, as in most .otf files: embedded whole, not cut down */
+  cff?: boolean
 }
 
 const u16 = (v: DataView, o: number) => v.getUint16(o)
@@ -114,22 +116,97 @@ function readName(t: Uint8Array | undefined): string {
   return (found.get(6) ?? found.get(1) ?? 'Font').replace(/[^A-Za-z0-9-]/g, '') || 'Font'
 }
 
+/** the strings of a naming table by name ID (Windows Unicode entries preferred) */
+function nameStrings(t: Uint8Array): Map<number, string> {
+  const v = view(t)
+  const [count, strings] = [u16(v, 2), u16(v, 4)]
+  const found = new Map<number, string>()
+  const fromWindows = new Set<number>()
+  for (let i = 0; i < count; i++) {
+    const r = 6 + i * 12
+    const [platform, language, id, length, offset] = [u16(v, r), u16(v, r + 4), u16(v, r + 6), u16(v, r + 8), u16(v, r + 10)]
+    const raw = t.subarray(strings + offset, strings + offset + length)
+    let s = ''
+    if (platform === 3 || platform === 0) for (let k = 0; k + 1 < raw.length; k += 2) s += String.fromCharCode((raw[k] << 8) | raw[k + 1])
+    else s = String.fromCharCode(...raw)
+    s = s.trim()
+    // Windows English names win: they are what Office shows
+    const windows = platform === 3 && (language === 0x409 || !fromWindows.has(id))
+    if (s && (!found.has(id) || windows)) {
+      found.set(id, s)
+      if (platform === 3) fromWindows.add(id)
+    }
+  }
+  return found
+}
+
+/** one face of a font file as Office and browsers list it */
+export type FontFaceInfo = {
+  /** name ID 1, the family Office uses ("Gill Sans Nova Light") */
+  family: string
+  /** name ID 16 when there is one, the family without the weight ("Gill Sans Nova") */
+  typographic?: string
+  /** "Regular", "Bold Italic", "Light" ... (name ID 17, else 2) */
+  style: string
+  postscript: string
+  /** its licence allows embedding in documents, and Ream can embed its outlines */
+  embeddable: boolean
+}
+
+/** every face in a font file (.ttf, .otf or each face of a .ttc), or [] when it isn't one */
+export function fontFaces(bytes: Uint8Array): FontFaceInfo[] {
+  try {
+    const head4 = tag(bytes, 0)
+    const offsets = head4 === 'ttcf' ? Array.from({ length: Math.min(u32(view(bytes), 8), 256) }, (_, i) => u32(view(bytes), 12 + i * 4)) : ['\x00\x01\x00\x00', 'true', 'OTTO'].includes(head4) ? [0] : []
+    return offsets.flatMap((o) => {
+      const tables = readTables(bytes, o)
+      const t = tables.get('name')
+      if (!t) return []
+      const n = nameStrings(t)
+      const family = n.get(1)
+      const os2 = tables.get('OS/2')
+      const fsType = os2 && os2.length >= 10 ? u16(view(os2), 8) : 0
+      const cff = tables.get('CFF ')
+      const embeddable = !(fsType & 0x0002) && !(fsType & 0x0200) && !(tables.has('CFF2') && !cff) && !(cff && cidKeyed(cff)) && (!!cff || tables.has('glyf'))
+      return family ? [{ family, typographic: n.get(16), style: n.get(17) ?? n.get(2) ?? 'Regular', postscript: n.get(6) ?? family, embeddable }] : []
+    })
+  } catch {
+    return []
+  }
+}
+
 /**
- * Read a TrueType font (.ttf, or the first font of a .ttc). Fonts with PostScript (CFF) outlines, web fonts and fonts
- * whose licence forbids embedding are refused with a message saying so.
+ * The family name a font file gives itself (name ID 1, as Office lists fonts: "Gill Sans Nova Light"), or undefined. Works
+ * for TrueType and OpenType files, and for the subsets PDFs embed when they keep the naming table.
  */
-export function parseTtf(bytes: Uint8Array): TtfFont {
+export function fontFamilyName(bytes: Uint8Array): string | undefined {
+  return fontFaces(bytes)[0]?.family
+}
+
+/**
+ * Read a TrueType font (.ttf, or one font of a .ttc: `face` is its number or PostScript name, default the first). Fonts
+ * with PostScript (CFF) outlines, web fonts (decode them with `woffToSfnt` first) and fonts whose licence forbids
+ * embedding are refused with a message saying so.
+ */
+export function parseTtf(bytes: Uint8Array, face: number | string = 0): TtfFont {
   if (bytes.length < 12) throw new PdfFontError("This isn't a font file.")
   const head4 = tag(bytes, 0)
-  if (head4 === 'OTTO') throw new PdfFontError('This is a font with PostScript outlines (.otf). Use a TrueType font (.ttf).')
   if (head4 === 'wOFF' || head4 === 'wOF2') throw new PdfFontError('This is a web font (.woff). Use a TrueType font (.ttf).')
   let base = 0
-  if (head4 === 'ttcf') base = u32(view(bytes), 12)
-  else if (!['\x00\x01\x00\x00', 'true'].includes(head4)) throw new PdfFontError("This isn't a TrueType font (.ttf).")
-  const tables = readTables(bytes, base)
-  for (const need of ['head', 'hhea', 'maxp', 'hmtx', 'cmap', 'loca', 'glyf']) {
-    if (!tables.has(need)) throw new PdfFontError(tables.has('CFF ') ? 'This is a font with PostScript outlines. Use a TrueType font (.ttf).' : `This font file is missing its ${need.trim()} table.`)
+  if (head4 === 'ttcf') {
+    const count = u32(view(bytes), 8)
+    const offsets = Array.from({ length: Math.min(count, 256) }, (_, i) => u32(view(bytes), 12 + i * 4))
+    if (typeof face === 'number') base = offsets[face] ?? offsets[0]
+    else base = offsets.find((o) => readName(readTables(bytes, o).get('name')) === face.replace(/[^A-Za-z0-9-]/g, '')) ?? offsets[0]
   }
+  else if (!['\x00\x01\x00\x00', 'true', 'OTTO'].includes(head4)) throw new PdfFontError("This isn't a TrueType or OpenType font (.ttf, .otf).")
+  const tables = readTables(bytes, base)
+  const cff = tables.has('CFF ')
+  if (!cff && tables.has('CFF2')) throw new PdfFontError("This is a variable OpenType font (CFF2), which PDF can't hold. Use a static .otf or a .ttf.")
+  for (const need of ['head', 'hhea', 'maxp', 'hmtx', 'cmap', ...(cff ? [] : ['loca', 'glyf'])]) {
+    if (!tables.has(need)) throw new PdfFontError(`This font file is missing its ${need.trim()} table.`)
+  }
+  if (cff && cidKeyed(tables.get('CFF ')!)) throw new PdfFontError("This OpenType font numbers its glyphs by character collection (CID), as most Chinese, Japanese and Korean fonts do; Ream can't embed those yet. Use a .ttf of it.")
   const os2 = tables.get('OS/2')
   const fsType = os2 && os2.length >= 10 ? u16(view(os2), 8) : 0
   if (fsType & 0x0002 || fsType & 0x0200) throw new PdfFontError("This font's licence does not allow it to be embedded in documents. Choose another font.")
@@ -161,7 +238,77 @@ export function parseTtf(bytes: Uint8Array): TtfFont {
       return g < numGlyphs ? g : 0
     },
     tables,
+    cff,
   }
+}
+
+/** a CFF font program whose Top DICT starts with ROS: its glyphs are found by CID through a charset, not by number */
+function cidKeyed(cff: Uint8Array): boolean {
+  try {
+    const hdr = cff[2]
+    // skip the Name INDEX, then read the first entry of the Top DICT INDEX
+    const index = (at: number) => {
+      const count = (cff[at] << 8) | cff[at + 1]
+      if (!count) return { start: at + 2, end: at + 2, first: [at + 2, at + 2] as [number, number] }
+      const size = cff[at + 2]
+      const off = (i: number) => { let v = 0; for (let k = 0; k < size; k++) v = (v << 8) | cff[at + 3 + i * size + k]; return v }
+      const data = at + 3 + (count + 1) * size - 1
+      return { start: at, end: data + off(count), first: [data + off(0), data + off(1)] as [number, number] }
+    }
+    const names = index(hdr)
+    const [a, b] = index(names.end).first
+    // operands come before their operator; ROS is the two-byte operator 12 30
+    for (let i = a; i < b; i++) {
+      const v = cff[i]
+      if (v === 12) { if (cff[i + 1] === 30) return true; i++ }
+      else if (v === 28) i += 2
+      else if (v === 29) i += 4
+      else if (v === 30) { while (i < b && (cff[i] & 0x0f) !== 0x0f && (cff[i] >> 4) !== 0x0f) i++ }
+      else if (v >= 247 && v <= 254) i += 1
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+/** a WOFF 1 web font turned back into the TrueType file it was made from (each table is inflated when it was compressed) */
+export async function woffToSfnt(woff: Uint8Array): Promise<Uint8Array> {
+  const v = view(woff)
+  if (woff.length < 44 || tag(woff, 0) !== 'wOFF') throw new PdfFontError("This isn't a WOFF font.")
+  const flavor = u32(v, 4)
+  const count = u16(v, 12)
+  const tables: { tag: string; data: Uint8Array }[] = []
+  for (let i = 0; i < count; i++) {
+    const at = 44 + i * 20
+    if (at + 20 > woff.length) throw new PdfFontError('This font file is damaged.')
+    const [offset, comp, orig] = [u32(v, at + 4), u32(v, at + 8), u32(v, at + 12)]
+    if (offset + comp > woff.length || orig > 64 * 1024 * 1024) throw new PdfFontError('This font file is damaged.')
+    const raw = woff.subarray(offset, offset + comp)
+    const data = comp < orig ? await inflate(raw) : raw
+    tables.push({ tag: tag(woff, at), data })
+  }
+  const head = 12 + 16 * count
+  const out = new Uint8Array(head + tables.reduce((n, t) => n + ((t.data.length + 3) & ~3), 0))
+  const o = view(out)
+  o.setUint32(0, flavor)
+  o.setUint16(4, count)
+  let pow = 1
+  while (pow * 2 <= count) pow *= 2
+  o.setUint16(6, pow * 16)
+  o.setUint16(8, Math.log2(pow))
+  o.setUint16(10, count * 16 - pow * 16)
+  let at = head
+  tables.forEach((t, i) => {
+    const r = 12 + i * 16
+    for (let k = 0; k < 4; k++) out[r + k] = t.tag.charCodeAt(k)
+    o.setUint32(r + 4, checksum(t.data))
+    o.setUint32(r + 8, at)
+    o.setUint32(r + 12, t.data.length)
+    out.set(t.data, at)
+    at += (t.data.length + 3) & ~3
+  })
+  return out
 }
 
 // ---------- subsetting ----------
@@ -234,7 +381,7 @@ export function subsetTtf(font: TtfFont, gids: Iterable<number>): Uint8Array {
   offsets.forEach((o, i) => lv.setUint32(i * 4, o))
   const newHead = t.get('head')!.slice()
   view(newHead).setInt16(50, 1) // long offsets
-  view(newHead).setUint32(8, 0) // checkSumAdjustment, set below
+  view(newHead).setUint32(8, 0) // checkSumAdjustment, set by writeSfnt
   const out = new Map<string, Uint8Array>([
     ['glyf', concat(parts)],
     ['head', newHead],
@@ -244,12 +391,17 @@ export function subsetTtf(font: TtfFont, gids: Iterable<number>): Uint8Array {
     ['maxp', t.get('maxp')!],
   ])
   for (const k of ['cvt ', 'fpgm', 'prep']) if (t.has(k)) out.set(k, t.get(k)!)
+  return writeSfnt(out, 0x00010000)
+}
+
+/** a font file from its tables; `version` is 0x00010000 for TrueType outlines, 'OTTO' for CFF ones */
+function writeSfnt(out: Map<string, Uint8Array>, version: number): Uint8Array {
   const names = [...out.keys()].sort()
   const dirEnd = 12 + names.length * 16
   const chunks: Uint8Array[] = []
   const header = new Uint8Array(dirEnd)
   const hv = view(header)
-  hv.setUint32(0, 0x00010000)
+  hv.setUint32(0, version)
   hv.setUint16(4, names.length)
   const log = Math.floor(Math.log2(names.length))
   hv.setUint16(6, 2 ** log * 16)
@@ -274,6 +426,16 @@ export function subsetTtf(font: TtfFont, gids: Iterable<number>): Uint8Array {
   return file
 }
 
+/** one face of an OpenType (CFF) font as a file of its own, with the tables a PDF reader needs */
+function otfFile(font: TtfFont): Uint8Array {
+  const out = new Map<string, Uint8Array>()
+  for (const k of ['CFF ', 'cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post']) if (font.tables.has(k)) out.set(k, font.tables.get(k)!)
+  const head = out.get('head')!.slice()
+  view(head).setUint32(8, 0)
+  out.set('head', head)
+  return writeSfnt(out, 0x4f54544f)
+}
+
 // ---------- embedding ----------
 
 /** a font ready to draw one text with: its glyphs chosen and its file made, but not yet written into any document */
@@ -285,8 +447,8 @@ export type PreparedFont = {
   /** height of a capital letter and the depth below the baseline, in points at `size` */
   capHeight(size: number): number
   descent(size: number): number
-  /** put the font's objects in a document and give back the font to refer to */
-  write(into: ObjectSink): PdfRef
+  /** put the font's objects in a document and give back the font to refer to; `extra` entries go in the font dictionary */
+  write(into: ObjectSink, extra?: Map<string, PdfObj>): PdfRef
 }
 
 const hex4 = (n: number) => n.toString(16).padStart(4, '0')
@@ -306,14 +468,15 @@ function toUnicodeMap(pairs: [number, number][]): string {
  * Make a font from a .ttf for drawing `text`. Throws a readable error when the font can't be used or has no letter
  * for a character in the text. Only the glyphs of this text are kept in the PDF.
  */
-export async function prepareFont(bytes: Uint8Array, text: string): Promise<PreparedFont> {
-  const font = parseTtf(bytes)
+export async function prepareFont(source: Uint8Array | TtfFont, text: string): Promise<PreparedFont> {
+  const font = source instanceof Uint8Array ? parseTtf(source) : source
   const chars = [...text.normalize('NFC')].map((c) => c.codePointAt(0)!)
   const missing = [...new Set(chars.filter((cp) => cp >= 32 && !font.glyphFor(cp)))]
   if (missing.length) throw new PdfFontError(`This font has no ${missing.length === 1 ? 'glyph' : 'glyphs'} for "${missing.slice(0, 6).map((c) => String.fromCodePoint(c)).join('')}". Choose a font that includes ${missing.length === 1 ? 'it' : 'them'}.`)
   const used = new Map<number, number>() // glyph -> a character it stands for
   for (const cp of chars) if (cp >= 32) used.set(font.glyphFor(cp), used.get(font.glyphFor(cp)) ?? cp)
-  const subset = subsetTtf(font, used.keys())
+  // ponytail: CFF outlines are embedded whole (cutting a CFF font down is its own project); a .ttf is cut to the text's glyphs
+  const subset = font.cff ? otfFile(font) : subsetTtf(font, used.keys())
   const fileLength = subset.length
   const file = await deflate(subset)
   const unicode = await deflate(ascii(toUnicodeMap([...used].sort(([a], [b]) => a - b))))
@@ -331,13 +494,13 @@ export async function prepareFont(bytes: Uint8Array, text: string): Promise<Prep
     width: (s, size) => ([...s.normalize('NFC')].reduce((sum, c) => sum + font.advance(font.glyphFor(c.codePointAt(0)!)), 0) * size) / font.unitsPerEm,
     capHeight: (size) => (font.capHeight * size) / font.unitsPerEm,
     descent: (size) => (Math.abs(font.descent) * size) / font.unitsPerEm,
-    write(into) {
+    write(into, extra) {
       const add = (o: PdfObj) => {
         const r = into.reserve()
         into.set(r, o)
         return r
       }
-      const fontFile = add(new PdfStream(new Map<string, PdfObj>([['Length1', fileLength], ['Filter', name('FlateDecode')]]), file))
+      const fontFile = add(new PdfStream(new Map<string, PdfObj>(font.cff ? [['Subtype', name('OpenType')], ['Filter', name('FlateDecode')]] : [['Length1', fileLength], ['Filter', name('FlateDecode')]]), file))
       const descriptor = add(
         new Map<string, PdfObj>([
           ['Type', name('FontDescriptor')],
@@ -349,7 +512,7 @@ export async function prepareFont(bytes: Uint8Array, text: string): Promise<Prep
           ['Descent', mid(font.descent)],
           ['CapHeight', mid(font.capHeight)],
           ['StemV', font.bold ? 120 : 80],
-          ['FontFile2', fontFile],
+          [font.cff ? 'FontFile3' : 'FontFile2', fontFile],
         ]),
       )
       const widths: PdfObj[] = []
@@ -357,11 +520,12 @@ export async function prepareFont(bytes: Uint8Array, text: string): Promise<Prep
       const cid = add(
         new Map<string, PdfObj>([
           ['Type', name('Font')],
-          ['Subtype', name('CIDFontType2')],
+          // a CFF font that isn't CID-keyed takes CIDs as glyph numbers, so Identity-H codes select glyphs as with TrueType
+          ['Subtype', name(font.cff ? 'CIDFontType0' : 'CIDFontType2')],
           ['BaseFont', name(baseName)],
           ['CIDSystemInfo', new Map<string, PdfObj>([['Registry', new PdfString(ascii('Adobe'))], ['Ordering', new PdfString(ascii('Identity'))], ['Supplement', 0]])],
           ['FontDescriptor', descriptor],
-          ['CIDToGIDMap', name('Identity')],
+          ...(font.cff ? [] : ([['CIDToGIDMap', name('Identity')]] as [string, PdfObj][])),
           ['DW', 1000],
           ['W', widths],
         ]),
@@ -375,6 +539,7 @@ export async function prepareFont(bytes: Uint8Array, text: string): Promise<Prep
           ['Encoding', name('Identity-H')],
           ['DescendantFonts', [cid]],
           ['ToUnicode', toUnicode],
+          ...(extra ?? []),
         ]),
       )
     },

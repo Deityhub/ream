@@ -1,7 +1,10 @@
-import { UserError, type FileData, type RunFn } from '@ream/core'
-import { decodeBmp, decodeGif, decodeJpeg, decodePng } from '@ream/image-core'
-import { readPptx } from '@ream/office-core'
-import { PdfDrawing, buildPdf, jpegInfo, prepareFont, type ImageInput } from '@ream/pdf-core'
+import { UserError, type FileData, type RunContext } from '@ream/core'
+import { readPptx, type Slide } from '@ream/office-core'
+import { PdfDrawing, buildPdf, type ImageInput } from '@ream/pdf-core'
+import { imageInput } from '../office-images.ts'
+import { FontBook, type FontNeed, type FontSource, type InstalledFont } from '../fonts/book.ts'
+import { chartFontNeeds } from '../office-charts.ts'
+import { browserFonts } from '../fonts/source.ts'
 import { baseName } from '../names.ts'
 import { pdfFile } from '../pdf-common.ts'
 import { drawSlide } from './layout.ts'
@@ -9,41 +12,25 @@ import { drawSlide } from './layout.ts'
 export type PowerpointToPdfOptions = {
   /** include slides marked hidden */
   hidden: boolean
-  /** a .ttf for text the standard fonts cannot show (other scripts); every text then uses it */
-  fontFile: Uint8Array | null
-  fontName: string
+  /** fonts the panel found for the deck: installed, added from files or downloaded (empty: bundled look-alikes) */
+  localFonts: InstalledFont[]
 }
 
-/** a picture as the PDF builder takes it: a JPEG as it is, anything else as pixels; null for formats Ream cannot read (EMF, WMF, SVG ...) */
-async function imageInput(bytes: Uint8Array, type: 'png' | 'jpeg' | 'other', name?: string): Promise<ImageInput | null> {
-  try {
-    if (type === 'jpeg') {
-      const info = jpegInfo(bytes)
-      if (info && info.orientation === 1) return { width: info.width, height: info.height, jpeg: bytes, components: info.components, adobe: info.adobe }
-      const px = decodeJpeg(bytes)
-      return { width: px.width, height: px.height, rgba: px.data }
+/** every font the slides' text asks for, with that text */
+function fontNeeds(slides: Slide[]): FontNeed[] {
+  const out: FontNeed[] = [{ name: 'Arial', text: '(not shown)Chart Diagram Object' }]
+  for (const s of slides) {
+    for (const sh of s.shapes) {
+      const paras = sh.kind === 'text' ? sh.paragraphs : sh.kind === 'table' ? sh.cells.flat().flatMap((c) => c.paragraphs) : []
+      for (const p of paras) for (const r of p.runs) out.push({ name: r.font, bold: r.bold, italic: r.italic, text: r.text + (p.bullet ?? '') + '0123456789.' })
+      if (sh.kind === 'chart') out.push(...chartFontNeeds(sh.chart))
     }
-    if (type === 'png') {
-      const px = await decodePng(bytes)
-      return { width: px.width, height: px.height, rgba: px.data }
-    }
-    const ext = name?.split('.').pop()?.toLowerCase()
-    if (ext === 'gif') {
-      const gif = decodeGif(bytes)
-      const f = gif.frames[0]
-      return f ? { width: gif.width, height: gif.height, rgba: f.image.data } : null
-    }
-    if (ext === 'bmp') {
-      const px = decodeBmp(bytes)
-      return { width: px.width, height: px.height, rgba: px.data }
-    }
-  } catch {
-    // a picture that cannot be read leaves a grey box where it was
   }
-  return null
+  return out
 }
 
-export const run: RunFn<PowerpointToPdfOptions> = async (files, o, { progress }) => {
+/** `fonts` loads the bundled look-alike fonts (the app's bundle by default; tests read them from disk) */
+export async function run(files: FileData[], o: PowerpointToPdfOptions, { progress }: RunContext, fonts: FontSource = browserFonts): Promise<FileData[]> {
   const f = files[0]
   let deck
   try {
@@ -53,19 +40,25 @@ export const run: RunFn<PowerpointToPdfOptions> = async (files, o, { progress })
   }
   const slides = deck.slides.filter((s) => o.hidden || !s.hidden)
   if (!slides.length) throw new UserError('Every slide in this presentation is hidden. Turn on "Include hidden slides".')
-  const emb = o.fontFile ? await prepareFont(o.fontFile, slides.flatMap((s) => s.shapes.flatMap((sh) => (sh.kind === 'text' ? sh.paragraphs : sh.kind === 'table' ? sh.cells.flat().flatMap((c) => c.paragraphs) : []).flatMap((p) => p.runs.map((r) => r.text)))).join('')) : null
+  const book = new FontBook(fonts, o.localFonts ?? [])
+  await book.load(fontNeeds(slides))
   const d = new PdfDrawing()
   d.title = baseName(f.name)
   // a picture used on many slides (a logo on the master) is stored once; the bytes of one part are the same object each time
   const ids = new Map<Uint8Array, number | null>()
   const pending: Promise<void>[] = []
   const decoded = new Map<Uint8Array, ImageInput | null>()
+  const want = (bytes: Uint8Array, type: 'png' | 'jpeg' | 'other', name?: string) => {
+    if (decoded.has(bytes)) return
+    decoded.set(bytes, null)
+    pending.push(imageInput(bytes, type, name).then((r) => void decoded.set(bytes, r)))
+  }
+  const paints = (p: Slide['backgroundPaint']) => p?.type === 'picture' && want(p.bytes, p.kind, p.name)
   for (const s of slides) {
-    for (const sh of [...s.shapes, ...(s.backgroundPicture ? [{ kind: 'pic' as const, ...s.backgroundPicture, x: 0, y: 0, w: 0, h: 0 }] : [])]) {
-      if (sh.kind === 'pic' && !decoded.has(sh.bytes)) {
-        decoded.set(sh.bytes, null)
-        pending.push(imageInput(sh.bytes, sh.type, sh.name).then((r) => void decoded.set(sh.bytes, r)))
-      }
+    paints(s.backgroundPaint)
+    for (const sh of s.shapes) {
+      if (sh.kind === 'pic') want(sh.bytes, sh.type, sh.name)
+      else if (sh.kind === 'text') paints(sh.paint)
     }
   }
   await Promise.all(pending)
@@ -78,10 +71,10 @@ export const run: RunFn<PowerpointToPdfOptions> = async (files, o, { progress })
   }
   for (const [i, s] of slides.entries()) {
     progress(i / slides.length)
-    drawSlide(d, s, { width: Math.min(14400, deck.width), height: Math.min(14400, deck.height) }, { emb, imageFor })
+    drawSlide(d, s, { width: Math.min(14400, deck.width), height: Math.min(14400, deck.height) }, { book, imageFor })
   }
   progress(0.95)
-  const { bytes } = await buildPdf(d, emb)
+  const { bytes } = await buildPdf(d)
   progress(1)
   return [pdfFile(`${baseName(f.name)}.pdf`, bytes)]
 }

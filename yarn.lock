@@ -452,10 +452,38 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/arimo@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/arimo@npm:5.3.0"
+  checksum: 10c0/87cfd2a0a184ba7091d056906427181220ed1492ab6bede6dca1e260d69596b0380abfe578298ba41de3a9b1d3279e7f2ce86e95a96191501868d24552573a8a
+  languageName: node
+  linkType: hard
+
+"@fontsource/caladea@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/caladea@npm:5.3.0"
+  checksum: 10c0/d9091d8ec8653a7b4e1fa56190b5ff18e3fac58889983165231529f8972e44bf329f6737c509f1c4e5bc72e3674748f8ea715b6e5152a98cab5b0214c7772710
+  languageName: node
+  linkType: hard
+
+"@fontsource/carlito@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/carlito@npm:5.3.0"
+  checksum: 10c0/0a41dd1ef555d8619f727530f1c236d6aab5b219297ff485794d6b0519a44cffdda7d5fb930654b08c9e3b52489c922d2ae7ba0eaabad5f4aa4fb60078b54e3b
+  languageName: node
+  linkType: hard
+
 "@fontsource/caveat@npm:^5.3.0":
   version: 5.3.0
   resolution: "@fontsource/caveat@npm:5.3.0"
   checksum: 10c0/90b25e1c23783f8a2e11b245518447aaf6704ac7f26b0ae6f288bd8fb647509da64e5fe50d97ec9b5c56fcd5f16eebb4979c9b57cb3a677cf8733e708a4e5a80
+  languageName: node
+  linkType: hard
+
+"@fontsource/cousine@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/cousine@npm:5.3.0"
+  checksum: 10c0/30669b1664363d0f5eb684ee99b78a7f6e15a70d6227e6d5019803fc1833cee996bcd9e4bf845aefbf3240eae03199f29da41a2c6362bba55482a03f3aa94295
   languageName: node
   linkType: hard
 
@@ -470,6 +498,13 @@ __metadata:
   version: 5.3.0
   resolution: "@fontsource/great-vibes@npm:5.3.0"
   checksum: 10c0/b25ab59d905448b7b78addc0264d31d165b601b7c24ac82e27d0b716cf705b9b052d278a529fc12f075b357b4adf66edbdbd0136a754c63246b7dcdd603215f0
+  languageName: node
+  linkType: hard
+
+"@fontsource/tinos@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/tinos@npm:5.3.0"
+  checksum: 10c0/a6cbae046206235b5f5bd490205c0ef84a6b0e7f0b86a34a7b5c36f4ac6af844dc7ee1d55a691b9e2ebe0076614e8128a6c39275545f2685644c964d6096d072
   languageName: node
   linkType: hard
 
@@ -601,9 +636,14 @@ __metadata:
   resolution: "@ream/tools@workspace:packages/tools"
   dependencies:
     "@fontsource/anton": "npm:^5.3.0"
+    "@fontsource/arimo": "npm:^5.3.0"
+    "@fontsource/caladea": "npm:^5.3.0"
+    "@fontsource/carlito": "npm:^5.3.0"
     "@fontsource/caveat": "npm:^5.3.0"
+    "@fontsource/cousine": "npm:^5.3.0"
     "@fontsource/dancing-script": "npm:^5.3.0"
     "@fontsource/great-vibes": "npm:^5.3.0"
+    "@fontsource/tinos": "npm:^5.3.0"
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
     "@ream/office-core": "workspace:*"
@@ -631,6 +671,7 @@ __metadata:
     "@fontsource-variable/inter": "npm:^5.3.0"
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
+    "@ream/office-core": "workspace:*"
     "@ream/pdf-core": "workspace:*"
     "@ream/pdf-render": "workspace:*"
     "@ream/tools": "workspace:*"

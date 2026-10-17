@@ -47,17 +47,33 @@ export function bodySizeOf(chars: { text: string; size: number; invisible: boole
 
 // ---------- lines ----------
 
-/** chars on the same baseline, left to right; single linkage in y so a raised or lowered letter stays on its line */
+/**
+ * Chars on the same baseline, left to right. Runs are taken in the order the page draws them (a raised or lowered letter
+ * stays with the letters drawn around it), then runs on the same baseline are joined. Linking chars by
+ * height alone would chain a big title to the smaller lines on either side of it and mix their letters.
+ */
 export function toLines(chars: Placed[]): Line[] {
-  const sorted = [...chars].sort((a, b) => a.y - b.y || a.x0 - b.x0)
-  const groups: Placed[][] = []
-  for (const c of sorted) {
-    const g = groups[groups.length - 1]
-    const last = g?.[g.length - 1]
-    if (g && last && Math.abs(c.y - last.y) <= 0.4 * Math.max(c.size, last.size)) g.push(c)
-    else groups.push([c])
+  const runs: { chars: Placed[]; y: number; size: number; x0: number; x1: number }[] = []
+  let run: (typeof runs)[number] | undefined
+  for (const c of chars) {
+    const last = run?.chars[run.chars.length - 1]
+    const dy = last ? Math.abs(c.y - run!.y) : Infinity
+    const gap = last ? c.x0 - last.x1 : Infinity
+    const near = gap > -0.3 * c.size && gap < 3 * Math.max(c.size, last?.size ?? 0)
+    // the same line, or a raised or lowered letter right after it
+    if (run && last && near && (dy <= 0.15 * Math.min(c.size, run.size) || (dy <= 0.45 * run.size && gap < 0.5 * run.size && c.size < run.size * 1.05))) {
+      run.chars.push(c)
+      run.x1 = Math.max(run.x1, c.x1)
+    } else runs.push((run = { chars: [c], y: c.y, size: c.size, x0: c.x0, x1: c.x1 }))
   }
-  return groups.map((g) => {
+  // runs on one baseline are one line, even overlapping ones (cells whose text runs on under the next cell)
+  const groups: { chars: Placed[]; y: number; size: number }[] = []
+  for (const r of runs.sort((a, b) => a.y - b.y || a.x0 - b.x0)) {
+    const g = groups.find((g) => Math.abs(g.y - r.y) <= 0.15 * Math.min(g.size, r.size))
+    if (g) g.chars.push(...r.chars)
+    else groups.push({ chars: [...r.chars], y: r.y, size: r.size })
+  }
+  return groups.sort((a, b) => a.y - b.y).map(({ chars: g }) => {
     const cs = g.sort((a, b) => a.x0 - b.x0)
     const size = median(cs.filter((c) => c.text.trim()).map((c) => c.size)) || cs[0].size
     return { chars: cs, y: median(cs.map((c) => c.y)), size, x0: cs[0].x0, x1: Math.max(...cs.map((c) => c.x1)), text: '' }

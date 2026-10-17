@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { PdfDocument, PdfStream, PdfDrawing, buildPdf, decodeStream, isDict, measure, prepareFont } from '../src/index.ts'
+import { FontFace, PdfDocument, PdfStream, PdfDrawing, buildPdf, decodeStream, isDict, measure, parseTtf } from '../src/index.ts'
 import { makeTtf } from './ttf-helper.ts'
 
 const dec = new TextDecoder('latin1')
@@ -48,17 +48,18 @@ test('characters the standard fonts lack become ? and are reported once', async 
   expect(await contentOf(await PdfDocument.load(bytes), 0)).toContain('<613f62203f3f>') // a?b ??
 })
 
-test('a custom font is embedded once, used for custom text, and measured with its own widths', async () => {
-  const ttf = makeTtf()
+test('an embedded face: cut down to the letters used, written once, measured with its own widths; letters it lacks fall back', async () => {
+  const face = new FontFace([parseTtf(makeTtf())])
   const d = new PdfDrawing()
-  d.addPage(100, 100).text(5, 20, 'AЖ', { family: 'custom' }, 10, [0, 0, 0])
-  d.addPage(100, 100).text(5, 20, 'A', { family: 'custom' }, 10, [0, 0, 0])
-  const font = await prepareFont(ttf, d.customText())
-  const { bytes } = await buildPdf(d, font)
+  d.addPage(100, 100).text(5, 20, 'AЖ', { family: 'sans', face }, 10, [0, 0, 0])
+  d.addPage(100, 100).text(5, 20, 'A b', { family: 'sans', face }, 10, [0, 0, 0])
+  const { bytes, lost } = await buildPdf(d)
+  expect(lost).toEqual([]) // 'b' is not in the face: Helvetica draws it
   const doc = await PdfDocument.load(bytes)
   expect(fontNames(doc, 0)[0]).toMatch(/^[A-Z]{6}\+/)
-  expect(await contentOf(doc, 1)).toContain('<0002> Tj')
-  expect(measure('AЖ', 10, { family: 'custom' }, font)).toBeCloseTo((600 + 700) / 100, 5)
+  expect(fontNames(doc, 1)).toHaveLength(2)
+  expect(await contentOf(doc, 1)).toMatch(/<00020001> Tj .*<62> Tj/) // A (and the space with it) in the face, b in Helvetica
+  expect(measure('AЖ', 10, { family: 'sans', face })).toBeCloseTo((600 + 700) / 100, 5)
 })
 
 test('pictures: one object however many pages draw it', async () => {
@@ -94,12 +95,12 @@ test('paths in page space, turning about a centre, transparency as a graphics st
   const c = await contentOf(doc, 0)
   expect(c).toContain('10 90 m 60 90 l 70 90 70 70 60 70 c h B') // y flipped: 100 - 10, 100 - 30
   expect(c).toContain('[3 1] 0 d')
-  expect(c).toMatch(/\/Ream0 gs 0 0.502 0 rg/)
+  expect(c).toMatch(/\/A0 gs 0 0.502 0 rg/)
   // 90 degrees clockwise: a=0 b=-1 c=1 d=0; the page point (100, 50) -> PDF (100, 50) stays where it is
   expect(c).toContain('0 -1 1 0 50 150 cm')
   expect(c).toContain('50 Tz')
   const res = doc.resolve(doc.pages()[0].dict.get('Resources'))
   const gs = isDict(res) ? doc.resolve(res.get('ExtGState')) : null
-  expect(isDict(gs) && [...gs.keys()]).toEqual(['Ream0'])
+  expect(isDict(gs) && [...gs.keys()]).toEqual(['A0'])
   expect(measure('Hi', 10, { family: 'sans', scale: 0.5 })).toBeCloseTo(measure('Hi', 10, { family: 'sans' }) / 2, 6)
 })

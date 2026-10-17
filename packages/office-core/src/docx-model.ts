@@ -1,4 +1,4 @@
-// A word-processing document as plain data: what PDF to Word writes. Lengths are in points.
+// A word-processing document as plain data: what PDF to Word writes and the Word preview reads. Lengths are in points.
 export type Run = {
   text: string
   bold?: boolean
@@ -10,6 +10,9 @@ export type Run = {
   color?: string
   /** a font name; Word substitutes when it is not installed */
   font?: string
+  /** reading: RRGGBB behind the text, raised (super) or lowered (sub) */
+  highlight?: string
+  vertAlign?: 'super' | 'sub'
 }
 
 export type Paragraph = {
@@ -21,12 +24,22 @@ export type Paragraph = {
   bullet?: boolean
   before?: number
   after?: number
-  /** least line height in points (leading) */
+  /** least line height in points (leading); `lineExact` makes it exact. Reading: `lineFactor` is a multiple of single spacing */
   line?: number
+  lineExact?: boolean
+  lineFactor?: number
+  /** reading: the list mark in front, already worked out ('•', '3.', 'b)') */
+  marker?: string
+  indentRight?: number
   indentLeft?: number
   /** first line, relative to the left indent; negative hangs */
   indentFirst?: number
   pageBreakBefore?: boolean
+  /**
+   * placed in a text box at a spot on the page, points from its top left, instead of in the flow; paragraphs that share one
+   * `frame` object (the same object, one after the other) share the box. `h` is a first guess: the box grows to its text.
+   */
+  frame?: { x: number; y: number; w: number; h?: number; /** reading: what x and y count from (default the page) */ from?: { h: 'page' | 'margin'; v: 'page' | 'margin' | 'paragraph' } }
 }
 
 export type TableCell = {
@@ -58,8 +71,11 @@ export type Picture = {
   width: number
   height: number
   alt?: string
-  /** put the picture at this place on the page, behind the text, instead of in the flow */
+  /** put the picture at this place on the page instead of in the flow; behind the text unless `front` */
   at?: { x: number; y: number }
+  front?: boolean
+  /** reading: what `at` counts from (default the page) */
+  from?: { h: 'page' | 'margin'; v: 'page' | 'margin' | 'paragraph' }
 }
 
 export type Block = Paragraph | Table | Picture

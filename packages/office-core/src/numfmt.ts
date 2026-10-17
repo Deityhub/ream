@@ -20,7 +20,9 @@ export function general(v: number): string {
 }
 
 /** split a format into its `;` sections and drop colour and locale tags, keeping a currency symbol from [$€-407] */
-function sections(code: string): string[] {
+const sections = (code: string): string[] => split(code).map((s) => s.replace(/\[\$([^\]-]*)(-[^\]]*)?\]/g, '"$1"').replace(/\[(red|black|blue|green|white|cyan|magenta|yellow|color\s*\d+)\]/gi, ''))
+
+function split(code: string): string[] {
   const out: string[] = []
   let cur = ''
   let quoted = false
@@ -32,7 +34,21 @@ function sections(code: string): string[] {
     cur += ch
   }
   out.push(cur)
-  return out.map((s) => s.replace(/\[\$([^\]-]*)(-[^\]]*)?\]/g, '"$1"').replace(/\[(red|black|blue|green|white|cyan|magenta|yellow|color\s*\d+)\]/gi, ''))
+  return out
+}
+
+/** which section of a format a value is shown with */
+const sectionOf = (value: string | number, count: number) =>
+  typeof value === 'string' ? (count > 3 ? 3 : count - 1) : count === 1 ? 0 : value < 0 ? 1 : value === 0 && count >= 3 ? 2 : 0
+
+const NAMED: Record<string, string> = { black: '000000', blue: '0000FF', cyan: '00FFFF', green: '00FF00', magenta: 'FF00FF', red: 'FF0000', white: 'FFFFFF', yellow: 'FFFF00' }
+
+/** the colour a format gives a value, like the red of "#,##0;[Red]-#,##0" for a negative number (RRGGBB), or undefined */
+export function formatColor(value: string | number | boolean | null, code: string | undefined): string | undefined {
+  if (value === null || typeof value === 'boolean' || !code || /^general$/i.test(code)) return undefined
+  const secs = split(code)
+  // ponytail: [ColorN] (the 56-colour palette) is left at the cell's own colour; add the palette if files use it
+  return NAMED[/\[(black|blue|cyan|green|magenta|red|white|yellow)\]/i.exec((secs[sectionOf(value, secs.length)] ?? '').replace(/"[^"]*"/g, ''))?.[1].toLowerCase() ?? '']
 }
 
 type Token = { kind: 'lit'; text: string } | { kind: 'sym'; text: string }
@@ -167,12 +183,12 @@ export function formatValue(value: string | number | boolean | null, code: strin
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
   const secs = !code || /^general$/i.test(code) ? null : sections(code)
   if (typeof value === 'string') {
-    const text = secs?.[secs.length > 3 ? 3 : secs.length - 1]
+    const text = secs?.[sectionOf(value, secs.length)]
     return text?.includes('@') ? tokens(text).map((t) => (t.kind === 'lit' ? t.text : t.text === '@' ? value : t.text)).join('') : value
   }
   if (!secs) return general(value)
   const neg = value < 0
-  const idx = secs.length === 1 ? 0 : neg && secs.length >= 2 ? 1 : value === 0 && secs.length >= 3 ? 2 : 0
+  const idx = sectionOf(value, secs.length)
   const toks = tokens(secs[idx])
   if (!toks.length) return ''
   if (isDateFormat(toks)) return value < 0 ? '#####' : formatDate(value, toks, date1904)

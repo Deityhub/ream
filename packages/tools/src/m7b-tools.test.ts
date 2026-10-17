@@ -4,7 +4,7 @@ import type { FileData } from '@ream/core'
 import { decodeJpeg, decodePng } from '@ream/image-core'
 import { PdfDocument } from '@ream/pdf-core'
 import type { PageRaster } from '@ream/pdf-render'
-import { readXlsx, writeXlsx, parseXml, kids, child, type Sheet, type XmlNode } from '@ream/office-core'
+import { readXlsx, writeXlsx, writePptx, parseXml, kids, child, type Sheet, type XmlNode } from '@ream/office-core'
 import { unzip } from '@ream/core'
 import { extractText } from '@ream/pdf-render'
 import { assemble, classicPdf } from '../../pdf-core/test/helpers.ts'
@@ -16,7 +16,9 @@ import { run as toPowerpoint } from './pdf-to-powerpoint/run.ts'
 import { run as powerpointToPdf } from './powerpoint-to-pdf/run.ts'
 import { readPptx } from '@ream/office-core'
 import { familyOf } from './office-fonts.ts'
+import { nodeFonts } from './fonts/node.ts'
 import { parseNumber } from './pdf-to-excel/number.ts'
+import { docxToPdf, officeToPdf } from './office-preview.ts'
 
 const ctx = { progress: () => {} }
 const pdf = (n = 3, name = 'doc.pdf'): FileData => ({ name, type: 'application/pdf', bytes: classicPdf(Array.from({ length: n }, (_, i) => `P${i + 1}`)) })
@@ -121,6 +123,21 @@ describe('pdf to excel', () => {
     expect(rows[1]![0]!.value).toBe('Tea')
   })
 
+  test('the look comes along: fills under cells, each side its own line weight, page widths and heights, fonts', async () => {
+    // a blue header band, and a heavier line under the header
+    const look = `0.2 0.4 0.6 rg 50 230 140 20 re f 0 g\n` + table([['Item', 'Price'], ['Tea', '5']]) + `2 w 50 230 m 190 230 l S\n`
+    const sh = (await readXlsx((await toExcel([pdfWith([look])], o, ctx))[0].bytes)).sheets[0]
+    const head = sh.rows[0]![0]!.style!
+    expect(head.fill).toBe('336699')
+    expect(head.border).toEqual({ top: 'thin', right: 'thin', bottom: 'medium', left: 'thin' })
+    expect(sh.rows[1]![0]!.style!.fill).toBeUndefined()
+    expect(sh.rows[1]![0]!.style!.border!.top).toBe('medium')
+    expect(head).toMatchObject({ font: 'Helvetica', size: 10 })
+    // 70 pt columns are 12.6 characters wide; 20 pt rows
+    expect(sh.colWidths![0]).toBeCloseTo(12.62, 1)
+    expect(sh.rowHeights![0]).toBe(20)
+  })
+
   test('numbers stay text when asked, and layouts differ in sheet count', async () => {
     const two = pdfWith([table([['A', 'B'], ['x', '1'], ['y', '2']]), table([['C', 'D'], ['z', '3'], ['w', '4']])])
     const asText = await readXlsx((await toExcel([two], { ...o, numbers: false }, ctx))[0].bytes)
@@ -136,7 +153,7 @@ describe('pdf to excel', () => {
 
 describe('excel to pdf', () => {
   const xlsx = async (sheets: Sheet[], name = 'book.xlsx'): Promise<FileData> => ({ name, type: '', bytes: await writeXlsx(sheets) })
-  const o = { paper: 'a4' as const, orientation: 'auto' as const, fit: 'width' as const, gridlines: false, fontFile: null, fontName: '' }
+  const o = { setup: 'choose' as const, paper: 'a4' as const, orientation: 'auto' as const, fit: 'width' as const, gridlines: false, localFonts: [] }
   const text = async (f: FileData, page = 0) => {
     const doc = await PdfDocument.load(f.bytes)
     return (await extractText(doc, [page], { markdown: false }))[0]
@@ -144,7 +161,7 @@ describe('excel to pdf', () => {
   const grid = (n: number, cols = 3): Sheet['rows'] => Array.from({ length: n }, (_, r) => Array.from({ length: cols }, (_, c) => ({ value: `r${r}c${c}` })))
 
   test('cells keep their text, numbers show as formatted, a title row and the page size come out right', async () => {
-    const [out] = await excelToPdf([await xlsx([{ name: 'S', rows: [[{ value: 'Item', style: { bold: true } }, { value: 'Price' }], [{ value: 'Tea' }, { value: 1234.5, style: { numFmt: '#,##0.00' } }]] }])], o, ctx)
+    const [out] = await excelToPdf([await xlsx([{ name: 'S', rows: [[{ value: 'Item', style: { bold: true } }, { value: 'Price' }], [{ value: 'Tea' }, { value: 1234.5, style: { numFmt: '#,##0.00' } }]] }])], o, ctx, nodeFonts)
     expect(out.name).toBe('book.pdf')
     const doc = await PdfDocument.load(out.bytes)
     expect(doc.pages()).toHaveLength(1)
@@ -154,19 +171,19 @@ describe('excel to pdf', () => {
 
   test('long sheets continue on more pages; a wide one is shrunk to one page or split across', async () => {
     const tall = await xlsx([{ name: 'T', rows: grid(120) }])
-    expect((await PdfDocument.load((await excelToPdf([tall], o, ctx))[0].bytes)).pages().length).toBeGreaterThan(2)
+    expect((await PdfDocument.load((await excelToPdf([tall], o, ctx, nodeFonts))[0].bytes)).pages().length).toBeGreaterThan(2)
     const wide = await xlsx([{ name: 'W', rows: grid(5, 30), colWidths: Array(30).fill(12) }])
-    const fit = await PdfDocument.load((await excelToPdf([wide], o, ctx))[0].bytes)
+    const fit = await PdfDocument.load((await excelToPdf([wide], o, ctx, nodeFonts))[0].bytes)
     expect(fit.pages()).toHaveLength(1)
     expect(fit.pageSize(fit.pages()[0]).width).toBeGreaterThan(fit.pageSize(fit.pages()[0]).height) // automatic direction chose landscape
-    const split = await PdfDocument.load((await excelToPdf([wide], { ...o, fit: 'none' }, ctx))[0].bytes)
+    const split = await PdfDocument.load((await excelToPdf([wide], { ...o, fit: 'none' }, ctx, nodeFonts))[0].bytes)
     expect(split.pages().length).toBeGreaterThan(2)
   })
 
   test('hidden sheets, rows and columns are left out; merged and wrapped cells are drawn once', async () => {
     const rows = [[{ value: 'keep' }, { value: 'hidden col' }, { value: 'x' }], [{ value: 'hidden row' }], [{ value: 'a long wrapped sentence that needs several lines', style: { wrap: true } }]]
     const f = await xlsx([{ name: 'A', rows, hiddenCols: [1], hiddenRows: [1], colWidths: [10] }, { name: 'B', rows: grid(2), hidden: true }, { name: 'M', rows: [[{ value: 'wide merge' }, null, null]], merges: [{ row: 0, col: 0, rows: 1, cols: 3 }] }])
-    const out = await excelToPdf([f], o, ctx)
+    const out = await excelToPdf([f], o, ctx, nodeFonts)
     const pages = (await PdfDocument.load(out[0].bytes)).pages().length
     expect(pages).toBe(2) // sheet B is hidden
     const t = (await text(out[0], 0) + ' ' + (await text(out[0], 1))).replace(/\s+/g, ' ')
@@ -177,17 +194,36 @@ describe('excel to pdf', () => {
     expect((t.match(/wide merge/g) ?? []).length).toBe(1)
   })
 
-  test('letters the standard fonts lack show as ?; an empty or damaged workbook gives a clear error', async () => {
-    const [out] = await excelToPdf([await xlsx([{ name: 'S', rows: [[{ value: 'aЖb' }]] }])], o, ctx)
-    expect(await text(out)).toBe('a?b')
-    await expect(excelToPdf([await xlsx([{ name: 'S', rows: [] }])], o, ctx)).rejects.toThrow(/nothing to print/)
-    await expect(excelToPdf([{ name: 'bad.xlsx', type: '', bytes: new TextEncoder().encode('not a zip file at all, nothing to see here') }], o, ctx)).rejects.toThrow(/bad.xlsx/)
+  test('letters no font has show as ?; an empty or damaged workbook gives a clear error', async () => {
+    // Cyrillic comes from the look-alike's Cyrillic part; a script none of the bundled fonts has becomes ?
+    const [out] = await excelToPdf([await xlsx([{ name: 'S', rows: [[{ value: 'aЖb中' }]] }])], o, ctx, nodeFonts)
+    expect(await text(out)).toBe('aЖb?')
+    await expect(excelToPdf([await xlsx([{ name: 'S', rows: [] }])], o, ctx, nodeFonts)).rejects.toThrow(/nothing to print/)
+    await expect(excelToPdf([{ name: 'bad.xlsx', type: '', bytes: new TextEncoder().encode('not a zip file at all, nothing to see here') }], o, ctx, nodeFonts)).rejects.toThrow(/bad.xlsx/)
+  })
+
+  test("the workbook's own page setup: paper, direction, repeated rows, print area, fit to width, a picture on its cell", async () => {
+    // setup.xlsx (openpyxl): sheet 1 A5 landscape, header row repeated, print area A1:D41, a picture at C3;
+    // sheet 2 has no paper size (so the panel's A4 is used) and is set to fit one page wide
+    const f: FileData = { name: 'setup.xlsx', type: '', bytes: new Uint8Array(readFileSync(new URL('../../office-core/test/fixtures/setup.xlsx', import.meta.url))) }
+    const [out] = await excelToPdf([f], { ...o, setup: 'file' }, ctx, nodeFonts)
+    const doc = await PdfDocument.load(out.bytes)
+    const sizes = doc.pages().map((p) => doc.pageSize(p))
+    expect(sizes.slice(0, -1).every((s) => s.width === 595 && s.height === 420)).toBe(true)
+    expect(sizes.length).toBe(4) // 40 body rows at 17 a page, then the wide sheet on one page
+    expect(sizes[sizes.length - 1]).toEqual({ width: 595, height: 842 })
+    for (const i of [0, 1, 2]) expect((await text(out, i)).split('\n')[0]).toMatch(/^Region\s+Change$/)
+    expect(await text(out, 3)).toContain('Column 40')
+    expect(new TextDecoder('latin1').decode(out.bytes).match(/\/Subtype \/Image/g)).toHaveLength(1)
+    // chosen settings replace the file's paper (Automatic direction still follows the sheet's landscape)
+    const chosen = await PdfDocument.load((await excelToPdf([f], o, ctx, nodeFonts))[0].bytes)
+    expect(chosen.pageSize(chosen.pages()[0])).toEqual({ width: 842, height: 595 })
   })
 
   test('a merged range declared as big as the whole sheet is cut to the cells that are there', async () => {
     const f = await xlsx([{ name: 'S', rows: [[{ value: 'only cell' }]], merges: [{ row: 0, col: 0, rows: 1_048_576, cols: 16_384 }] }])
     const started = Date.now()
-    const [out] = await excelToPdf([f], o, ctx)
+    const [out] = await excelToPdf([f], o, ctx, nodeFonts)
     expect(Date.now() - started).toBeLessThan(3000)
     expect(await text(out)).toContain('only cell')
   })
@@ -212,7 +248,7 @@ describe('pdf to word', () => {
     t(40, 280, 'Second paragraph') +
     [0, 1, 2].map((i) => line(40, 240 - i * 20, 190, 240 - i * 20)).join('') + line(40, 240, 40, 200) + line(115, 240, 115, 200) + line(190, 240, 190, 200) + line(40, 200, 190, 200) +
     t(45, 226, 'Cell A') + t(120, 226, 'Cell B') + t(45, 206, 'Cell C') + t(120, 206, 'Cell D') + t(40, 160, 'After the table')
-  const ctxo = { pages: '', mode: 'editable' as const, dpi: 150 }
+  const ctxo = { pages: '', mode: 'flow' as const, dpi: 150 }
   const document = async (f: FileData) => parseXml(new TextDecoder().decode((await unzip(f.bytes)).get('word/document.xml')!))
   const paras = (n: XmlNode): string[] => kids(child(n, 'body'), 'p').map((p) => kids(p, 'r').map((r) => kids(r, 't').map((x) => x.text).join('')).join(''))
 
@@ -241,6 +277,20 @@ describe('pdf to word', () => {
     expect(paras(d).join('')).toBe('')
   })
 
+  test('same layout: the page design behind, every paragraph and cell in a text box at its place, in reading order', async () => {
+    const grey: PageRaster = async (_d, _i, w) => ({ width: w, height: w, data: new Uint8ClampedArray(w * w * 4).fill(180) })
+    const [out] = await toWord([pdfOf(page)], { ...ctxo, mode: 'layout' }, ctx, grey)
+    const xml = new TextDecoder().decode((await unzip(out.bytes)).get('word/document.xml')!)
+    // text boxes placed on the page: the heading's at x 40 pt = 508000 EMU
+    const boxes = [...xml.matchAll(/<wp:positionH relativeFrom="page"><wp:posOffset>(\d+)<\/wp:posOffset>/g)].map((m) => Number(m[1]))
+    expect(boxes.length).toBe(9) // the design picture, heading, 3 paragraphs, 4 cells
+    expect(boxes[1]).toBe(508000)
+    const texts = [...xml.matchAll(/<w:txbxContent>(.*?)<\/w:txbxContent>/g)].map((m) => [...m[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join(''))
+    expect(texts).toEqual(['A Heading', 'First paragraph line one and line two of it.', 'Second paragraph', 'After the table', 'Cell A', 'Cell B', 'Cell C', 'Cell D'])
+    parseXml(xml) // well formed
+    expect([...(await unzip(out.bytes)).keys()].filter((k) => k.startsWith('word/media/'))).toHaveLength(1)
+  })
+
   test('a page with no text or pictures says what to do', async () => {
     await expect(toWord([pdfOf('')], ctxo, ctx)).rejects.toThrow(/Page pictures/)
   })
@@ -261,19 +311,36 @@ describe('pdf to powerpoint and back', () => {
   const base = { pages: '', mode: 'editable' as const, dpi: 100 }
   const textOf = async (f: FileData) => (await extractText(await PdfDocument.load(f.bytes), [0], { markdown: false }))[0]
 
-  test('editable slides: the page size, text boxes where the text was, a table, and no empty slide', async () => {
-    const [out] = await toPowerpoint([pdfOf(page)], base, ctx)
+  // a fake page drawing: grey where the page has design, white when asked for a blank one
+  const design = (fill: number): PageRaster => async (_d, _i, w) => ({ width: w, height: Math.round(w * 0.75), data: new Uint8ClampedArray(w * Math.round(w * 0.75) * 4).fill(fill) })
+
+  test('font names survive the round trip: a stand-in font keeps the family the deck asked for', async () => {
+    const run = (text: string, font: string) => ({ runs: [{ text, font, size: 24 }] })
+    const deck = await writePptx({ width: 720, height: 405, slides: [{ shapes: [{ kind: 'text', x: 40, y: 40, w: 600, h: 200, paragraphs: [run('Set in a font nobody has', 'Gill Sans Nova Light'), run('Set in Calibri', 'Calibri')] }] }] })
+    const [pdf] = await powerpointToPdf([{ name: 'd.pptx', type: '', bytes: deck }], { hidden: false, localFonts: [] }, ctx, nodeFonts)
+    // both are drawn with the bundled Carlito, but each keeps its own name
+    expect(new TextDecoder('latin1').decode(pdf.bytes)).toMatch(/Carlito/)
+    const [back] = await toPowerpoint([pdf], base, ctx, design(255))
+    const fonts = (await readPptx(back.bytes)).slides[0].shapes.flatMap((x) => (x.kind === 'text' ? x.paragraphs.flatMap((p) => p.runs.filter((r) => r.text.trim()).map((r) => `${r.text.trim()}: ${r.font}`)) : []))
+    expect(fonts).toEqual(['Set in a font nobody has: Gill Sans Nova Light', 'Set in Calibri: Calibri'])
+  })
+
+  test('editable slides: the page size, the design behind, text boxes where the text was, lines kept, table cells apart', async () => {
+    const [out] = await toPowerpoint([pdfOf(page)], base, ctx, design(200))
     expect(out.name).toBe('in.pptx')
     const deck = await readPptx(out.bytes)
     expect([deck.width, deck.height]).toEqual([400, 300])
-    const shapes = deck.slides[0].shapes
-    const boxes = shapes.filter((x) => x.kind === 'text')
-    expect(boxes.map((b) => b.kind === 'text' && b.paragraphs[0].runs.map((r) => r.text).join(''))).toEqual(['Slide title', 'A line of body text and a second line.'])
-    expect(boxes[0]).toMatchObject({ x: 40 })
-    expect(boxes[0].kind === 'text' && boxes[0].paragraphs[0].runs[0]).toMatchObject({ size: 24, bold: true })
-    const table = shapes.find((x) => x.kind === 'table')!
-    expect(table.kind === 'table' && table.cells.map((r) => r.map((c) => c.paragraphs[0]?.runs[0]?.text))).toEqual([['R1C1', 'R1C2'], ['R2C1', 'R2C2']])
-    await expect(toPowerpoint([pdfOf('')], base, ctx)).rejects.toThrow(/Page pictures/)
+    const [bg, ...shapes] = deck.slides[0].shapes
+    expect(bg).toMatchObject({ kind: 'pic', x: 0, y: 0, w: 400, h: 300 })
+    const texts = shapes.map((x) => (x.kind === 'text' ? x.paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join('/') : ''))
+    // the paragraph's lines stay the page's lines; a ruled line between table rows keeps the cells apart
+    expect(texts).toEqual(['Slide title', 'A line of body text\nand a second line.', 'R1C1', 'R1C2', 'R2C1', 'R2C2'])
+    expect(shapes.every((x) => x.kind !== 'text' || x.wrap === false)).toBe(true)
+    expect(shapes[0]).toMatchObject({ x: 40 })
+    expect(shapes[0].kind === 'text' && shapes[0].paragraphs[0].runs[0]).toMatchObject({ size: 24, bold: true })
+    // a blank page has no design picture
+    const plain = await readPptx((await toPowerpoint([pdfOf(page)], base, ctx, design(255)))[0].bytes)
+    expect(plain.slides[0].shapes[0].kind).toBe('text')
   })
 
   test('page pictures: a picture of the page with its text kept behind it', async () => {
@@ -287,8 +354,8 @@ describe('pdf to powerpoint and back', () => {
   })
 
   test('PDF to slides to PDF keeps the words and their order', async () => {
-    const [pptx] = await toPowerpoint([pdfOf(page)], base, ctx)
-    const [back] = await powerpointToPdf([{ name: 'in.pptx', type: '', bytes: pptx.bytes }], { hidden: false, fontFile: null, fontName: '' }, ctx)
+    const [pptx] = await toPowerpoint([pdfOf(page)], base, ctx, design(255))
+    const [back] = await powerpointToPdf([{ name: 'in.pptx', type: '', bytes: pptx.bytes }], { hidden: false, localFonts: [] }, ctx, nodeFonts)
     const doc = await PdfDocument.load(back.bytes)
     expect(doc.pageSize(doc.pages()[0])).toEqual({ width: 400, height: 300 })
     const text = (await textOf(back)).replace(/\s+/g, ' ')
@@ -300,7 +367,7 @@ describe('pdf to powerpoint and back', () => {
 
   test('a deck made by another program: one page per slide at the slide size, text from placeholders and a table, pictures and shapes drawn', async () => {
     const bytes = new Uint8Array(readFileSync(new URL('../../office-core/test/fixtures/deck.pptx', import.meta.url)))
-    const [out] = await powerpointToPdf([{ name: 'deck.pptx', type: '', bytes }], { hidden: false, fontFile: null, fontName: '' }, ctx)
+    const [out] = await powerpointToPdf([{ name: 'deck.pptx', type: '', bytes }], { hidden: false, localFonts: [] }, ctx, nodeFonts)
     expect(out.name).toBe('deck.pdf')
     const doc = await PdfDocument.load(out.bytes)
     expect(doc.pages()).toHaveLength(3)
@@ -316,8 +383,42 @@ describe('pdf to powerpoint and back', () => {
   test('hidden slides are left out unless asked for; other files are refused', async () => {
     const bytes = new Uint8Array(readFileSync(new URL('../../office-core/test/fixtures/deck.pptx', import.meta.url)))
     const hide = (b: Uint8Array) => b // the fixture has none hidden: the option must at least not change it
-    const [a] = await powerpointToPdf([{ name: 'd.pptx', type: '', bytes: hide(bytes) }], { hidden: true, fontFile: null, fontName: '' }, ctx)
+    const [a] = await powerpointToPdf([{ name: 'd.pptx', type: '', bytes: hide(bytes) }], { hidden: true, localFonts: [] }, ctx, nodeFonts)
     expect((await PdfDocument.load(a.bytes)).pages()).toHaveLength(3)
-    await expect(powerpointToPdf([{ name: 'bad.pptx', type: '', bytes: new TextEncoder().encode('not a presentation at all, not at all at all') }], { hidden: false, fontFile: null, fontName: '' }, ctx)).rejects.toThrow(/bad.pptx/)
+    await expect(powerpointToPdf([{ name: 'bad.pptx', type: '', bytes: new TextEncoder().encode('not a presentation at all, not at all at all') }], { hidden: false, localFonts: [] }, ctx, nodeFonts)).rejects.toThrow(/bad.pptx/)
+  })
+
+  test('charts are drawn from their values: title, categories, legend and axis numbers, not a marked gap', async () => {
+    const fx = (n: string): FileData => ({ name: n, type: '', bytes: new Uint8Array(readFileSync(new URL(`../../office-core/test/fixtures/${n}`, import.meta.url))) })
+    const [deck] = await powerpointToPdf([fx('charts.pptx')], { hidden: false, localFonts: [] }, ctx, nodeFonts)
+    const slide = (await textOf(deck)).replace(/\s+/g, ' ')
+    for (const w of ['Sales by region', 'North', 'South', 'East', '2024', '2025', '300']) expect(slide).toContain(w)
+    expect(slide).not.toContain('not shown')
+    const [sheet] = await excelToPdf([fx('charts.xlsx')], { setup: 'file', paper: 'a4', orientation: 'auto', fit: 'width', gridlines: false, localFonts: [] }, ctx, nodeFonts)
+    const page = (await textOf(sheet)).replace(/\s+/g, ' ')
+    for (const w of ['Traffic', 'Visitors', 'Jan', 'Mar']) expect(page).toContain(w)
+  })
+})
+
+describe('office previews', () => {
+  const fx = (n: string): FileData => ({ name: n, type: '', bytes: new Uint8Array(readFileSync(new URL(`../../office-core/test/fixtures/${n}`, import.meta.url))) })
+  const pageText = async (bytes: Uint8Array, page: number) => (await extractText(await PdfDocument.load(bytes), [page], { markdown: false }))[0].replace(/\s+/g, ' ')
+
+  test('a Word document is laid out on its pages: the page break starts page 2, text in order, a picture drawn', async () => {
+    const pdf = await docxToPdf(fx('report.docx').bytes, nodeFonts)
+    const doc = await PdfDocument.load(pdf)
+    expect(doc.pages()).toHaveLength(2)
+    expect(doc.pageSize(doc.pages()[0])).toEqual({ width: 612, height: 792 })
+    const one = await pageText(pdf, 0)
+    expect(one.indexOf('Annual report')).toBeLessThan(one.indexOf('bold red'))
+    expect(one).toContain('Step two')
+    expect(one).toContain('4.50')
+    expect(await pageText(pdf, 1)).toContain('Second page Closing words.')
+    expect(new TextDecoder('latin1').decode(pdf).match(/\/Subtype \/Image/g)).toHaveLength(1)
+  })
+
+  test('decks and workbooks preview through their converters', async () => {
+    expect((await PdfDocument.load(await officeToPdf(fx('charts.pptx'), 'pptx', nodeFonts))).pages()).toHaveLength(2)
+    expect(await pageText(await officeToPdf(fx('charts.xlsx'), 'xlsx', nodeFonts), 0)).toContain('Traffic')
   })
 })
