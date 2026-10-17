@@ -19,10 +19,15 @@ export type Glyph = {
 
 export type Type3 = { matrix: Matrix; procs: PdfDict; resources: PdfDict | null }
 
+export type FontKind = 'sans' | 'serif' | 'mono'
+
 export type Font = {
   family: string
   bold: boolean
   italic: boolean
+  /** the family name as people write it ("Times New Roman"), or '' when the font's name says nothing usable */
+  face: string
+  kind: FontKind
   type3: Type3 | null
   /** we can't draw the real glyph shapes, so a similar system font stands in */
   substituted: boolean
@@ -62,7 +67,9 @@ export function classify(baseFont: string, flags: number, weight?: number, itali
   const sans = /arial|helvetica|verdana|tahoma|calibri|sans|gothic|segoe|roboto|open/.test(lower)
   const generic = mono ? MONO : serif ? SERIF : sans ? SANS : (flags & 2) !== 0 ? SERIF : SANS
   const family = [...nameCandidates(baseFont).map((n) => `"${n}"`), generic].join(', ')
-  return { family, bold, italic }
+  const kind: FontKind = mono ? 'mono' : serif || (!sans && (flags & 2) !== 0) ? 'serif' : 'sans'
+  const cands = nameCandidates(baseFont)
+  return { family, bold, italic, face: cands[1] ?? cands[0] ?? '', kind }
 }
 
 const cache = new WeakMap<object, Promise<Font>>()
@@ -146,7 +153,7 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
     const procs = doc.resolve(dict.get('CharProcs'))
     const res = doc.resolve(dict.get('Resources'))
     return {
-      family: SANS, bold: false, italic: false, substituted: false, notes,
+      family: SANS, bold: false, italic: false, face: '', kind: 'sans' as const, substituted: false, notes,
       type3: { matrix: fm, procs: isDict(procs) ? procs : new Map(), resources: isDict(res) ? res : null },
       decode: (bytes) =>
         Array.from(bytes, (c) => ({

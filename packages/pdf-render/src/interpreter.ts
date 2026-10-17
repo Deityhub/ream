@@ -97,6 +97,11 @@ export type GlyphInfo = {
   size: number
   bold: boolean
   italic: boolean
+  /** the font's name as people write it, and its kind (see `Font`) */
+  face: string
+  kind: 'sans' | 'serif' | 'mono'
+  /** fill colour, 0..255 each */
+  color: [number, number, number]
   renderMode: number
 }
 
@@ -514,7 +519,7 @@ export class Interpreter {
         const to = mul(s.ctm, this.base)
         const from = mul([1, 0, 0, 1, 0, s.rise], mul(this.tm, to))
         const next = mul([1, 0, 0, 1, 0, s.rise], mul(mul([1, 0, 0, 1, tx, 0], this.tm), to))
-        this.onGlyph({ text: g.text, x0: from[4], y0: from[5], x1: next[4], y1: next[5], size: Math.abs(s.fontSize) * Math.hypot(from[2], from[3]), bold: font.bold, italic: font.italic, renderMode: mode })
+        this.onGlyph({ text: g.text, x0: from[4], y0: from[5], x1: next[4], y1: next[5], size: Math.abs(s.fontSize) * Math.hypot(from[2], from[3]), bold: font.bold, italic: font.italic, face: font.face, kind: font.kind, color: [s.fill.rgb[0], s.fill.rgb[1], s.fill.rgb[2]], renderMode: mode })
       }
       this.tm = mul([1, 0, 0, 1, tx, 0], this.tm)
     }

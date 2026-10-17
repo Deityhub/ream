@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { UserError, acceptsFile, checkLimits, crc32, formatBytes, zip } from './index.ts'
+import { UserError, acceptsFile, checkLimits, crc32, formatBytes, unzip, zip, zipPacked } from './index.ts'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
@@ -48,4 +48,40 @@ test('checkLimits explains what to do', () => {
   expect(() => checkLimits(Array.from({ length: 4 }, (_, i) => ({ name: `${i}`, size: 150 * 1024 ** 2 })))).toThrow(/in total/)
   expect(() => checkLimits([{ name: 'ok.pdf', size: 1000 }])).not.toThrow()
   expect(formatBytes(1536)).toBe('2 KB')
+})
+
+describe('unzip', () => {
+  const files = [
+    { name: 'a.xml', bytes: enc('<a>'.repeat(500)) },
+    { name: 'dir/b.txt', bytes: enc('tiny') },
+    { name: 'empty', bytes: new Uint8Array(0) },
+  ]
+  const sorted = (m: Map<string, Uint8Array>) => [...m].map(([k, v]) => [k, new TextDecoder().decode(v)])
+  const expected = files.map((f) => [f.name, new TextDecoder().decode(f.bytes)])
+
+  test('reads what zip wrote, stored', async () => {
+    expect(sorted(await unzip(zip(files)))).toEqual(expected)
+  })
+  test('reads deflated entries, and deflating shrinks the long one', async () => {
+    const packed = await zipPacked(files)
+    expect(packed.length).toBeLessThan(zip(files).length)
+    expect(sorted(await unzip(packed))).toEqual(expected)
+  })
+  test('refuses text that is not a zip, a flipped byte and a size past the limit', async () => {
+    await expect(unzip(enc('not a zip at all, long enough to look for a directory'))).rejects.toBeInstanceOf(UserError)
+    const packed = await zipPacked(files)
+    const broken = packed.slice()
+    broken[40] ^= 0xff
+    await expect(unzip(broken)).rejects.toBeInstanceOf(UserError)
+    await expect(unzip(packed, { maxEntryBytes: 100 })).rejects.toThrow('size limit')
+    await expect(unzip(packed, { maxEntries: 2 })).rejects.toThrow('more than')
+  })
+  test('a declared size smaller than the real one is not trusted', async () => {
+    const packed = await zipPacked(files)
+    const v = new DataView(packed.buffer)
+    // central directory entry 0: uncompressed size (offset 24) lowered; the stream is cut at that size and the check fails
+    const cd = v.getUint32(packed.length - 22 + 16, true)
+    v.setUint32(cd + 24, 10, true)
+    await expect(unzip(packed)).rejects.toBeInstanceOf(UserError)
+  })
 })

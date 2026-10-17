@@ -1,5 +1,9 @@
-export { zip, crc32 } from './zip.ts'
-export { inflate, deflate, pngPredictor } from './flate.ts'
+import { UserError } from './errors.ts'
+export { zip, zipPacked, crc32 } from './zip.ts'
+export { UserError } from './errors.ts'
+export { unzip } from './unzip.ts'
+export type { UnzipLimits } from './unzip.ts'
+export { inflate, deflate, deflateRaw, inflateRaw, pngPredictor } from './flate.ts'
 
 export type Category = 'pdf' | 'image'
 
@@ -19,14 +23,6 @@ export type Tool = {
   /** live: re-run on every change and show the result; manual: only on request; none: the options panel already shows it */
   preview: 'live' | 'manual' | 'none'
   status: 'ready' | 'soon'
-}
-
-/** An error whose message is safe and useful to show the user as-is. Anything else is shown as a generic failure. */
-export class UserError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'UserError'
-  }
 }
 
 export type FileData = { name: string; type: string; bytes: Uint8Array }

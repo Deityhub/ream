@@ -28,11 +28,23 @@ import { organizePdf } from './organize-pdf/manifest.ts'
 import { repairPdf } from './repair-pdf/manifest.ts'
 import { flattenPdfTool } from './flatten-pdf/manifest.ts'
 import { pdfToText } from './pdf-to-text/manifest.ts'
+import { pdfToImage } from './pdf-to-image/manifest.ts'
+import { pdfToExcel } from './pdf-to-excel/manifest.ts'
+import { pdfToWord } from './pdf-to-word/manifest.ts'
+import { pdfToPowerpoint } from './pdf-to-powerpoint/manifest.ts'
+import { powerpointToPdf } from './powerpoint-to-pdf/manifest.ts'
+import { excelToPdf } from './excel-to-pdf/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
   splitPdf,
   imagesToPdf,
+  pdfToImage,
+  pdfToWord,
+  pdfToExcel,
+  pdfToPowerpoint,
+  excelToPdf,
+  powerpointToPdf,
   watermark,
   pageNumbers,
   cropPdf,

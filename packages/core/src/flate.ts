@@ -6,6 +6,32 @@ async function pipe(data: Uint8Array, t: DecompressionStream | CompressionStream
 
 export const inflate = (data: Uint8Array) => pipe(data, new DecompressionStream('deflate'))
 export const deflate = (data: Uint8Array) => pipe(data, new CompressionStream('deflate'))
+/** raw deflate (no zlib header), the form inside ZIP archives */
+export const deflateRaw = (data: Uint8Array) => pipe(data, new CompressionStream('deflate-raw'))
+
+/** Raw inflate that gives up past `max` bytes, so a small hostile archive entry can't fill memory. Returns null when over. */
+export async function inflateRaw(data: Uint8Array, max: number): Promise<Uint8Array | null> {
+  const reader = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw') as ReadableWritablePair<Uint8Array, BufferSource>).getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.length
+    if (size > max) {
+      await reader.cancel()
+      return null
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
+  }
+  return out
+}
 
 /** undo PNG row filters: PDF /Predictor 10-15 and PNG scanlines share the format */
 export function pngPredictor(data: Uint8Array, columns: number, colors = 1, bpc = 8): Uint8Array {

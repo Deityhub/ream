@@ -111,7 +111,8 @@ export function addPrepared(b: PdfBuilder, img: PreparedImage): PdfRef {
   return b.add(new PdfStream(dict, img.rgb))
 }
 
-async function addImage(b: PdfBuilder, img: ImageInput): Promise<PdfRef> {
+/** the image object for a picture: a JPEG as it is, anything else compressed */
+export async function addImage(b: PdfBuilder, img: ImageInput): Promise<PdfRef> {
   if ('jpeg' in img) {
     const dict = new Map<string, PdfObj>([['Type', name('XObject')], ['Subtype', name('Image')], ['Width', img.width], ['Height', img.height], ['BitsPerComponent', 8], ['ColorSpace', name(CS[img.components])], ['Filter', name('DCTDecode')]])
     if (img.components === 4 && img.adobe) dict.set('Decode', [1, 0, 1, 0, 1, 0, 1, 0])

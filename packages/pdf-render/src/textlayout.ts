@@ -25,16 +25,16 @@ export function cleanText(s: string): string {
   return out
 }
 
-const median = (xs: number[]) => {
+export const median = (xs: number[]) => {
   if (!xs.length) return 0
   const s = [...xs].sort((a, b) => a - b)
   return s[Math.floor(s.length / 2)]
 }
 
 /** a character with its place in the frame text reads left to right in */
-type Placed = Omit<TextChar, 'x0' | 'y0' | 'x1' | 'y1'> & { x0: number; x1: number; y: number; src: TextChar }
+export type Placed = Omit<TextChar, 'x0' | 'y0' | 'x1' | 'y1'> & { x0: number; x1: number; y: number; src: TextChar }
 
-type Line = { chars: Placed[]; y: number; size: number; x0: number; x1: number; text: string }
+export type Line = { chars: Placed[]; y: number; size: number; x0: number; x1: number; text: string; /** the left edge of a bullet drawn as a shape in front of the line */ marker?: number }
 
 /** the most common font size, weighted by characters, rounded to half a point; 0 when there is no text */
 export function bodySizeOf(chars: { text: string; size: number; invisible: boolean }[], into: Map<number, number> = new Map()): number {
@@ -48,7 +48,7 @@ export function bodySizeOf(chars: { text: string; size: number; invisible: boole
 // ---------- lines ----------
 
 /** chars on the same baseline, left to right; single linkage in y so a raised or lowered letter stays on its line */
-function toLines(chars: Placed[]): Line[] {
+export function toLines(chars: Placed[]): Line[] {
   const sorted = [...chars].sort((a, b) => a.y - b.y || a.x0 - b.x0)
   const groups: Placed[][] = []
   for (const c of sorted) {
@@ -65,7 +65,7 @@ function toLines(chars: Placed[]): Line[] {
 }
 
 /** the gap between two characters that counts as a word break, as a share of the font size */
-const WORD_GAP = 0.2
+export const WORD_GAP = 0.2
 
 type Piece = { t: string; bold: boolean; italic: boolean }
 
@@ -140,11 +140,11 @@ function gutters(chars: Placed[], size: number): number[] {
 
 // ---------- paragraphs ----------
 
-const BULLET = /^(?:[•◦▪▫‣●○■□▸►·]|[-–—*])\s+/
+export const BULLET = /^(?:[•◦▪▫‣●○■□▸►·]|[-–—*])\s+/
 
-type Para = { lines: Line[] }
+export type Para = { lines: Line[] }
 
-function paragraphs(lines: Line[]): Para[] {
+export function paragraphs(lines: Line[]): Para[] {
   const gaps: number[] = []
   for (let i = 1; i < lines.length; i++) {
     const g = lines[i].y - lines[i - 1].y
@@ -159,8 +159,10 @@ function paragraphs(lines: Line[]): Para[] {
     const newPara =
       !prev ||
       (lead ? line.y - prev.y > 1.45 * lead : line.y - prev.y > 1.8 * line.size) ||
+      line.y - prev.y > 4 * Math.max(line.size, prev.size) || // far apart whatever the usual spacing says (it may be built from very few gaps)
       Math.abs(line.size - prev.size) > 0.15 * prev.size ||
-      BULLET.test(text)
+      BULLET.test(text) ||
+      line.marker !== undefined
     if (newPara) out.push({ lines: [line] })
     else out[out.length - 1].lines.push(line)
   }
@@ -206,9 +208,12 @@ function dominantTurn(chars: TextChar[]): number {
   return best
 }
 
-/** the text of one page. Characters drawn in render mode 3 are included: it is how scanned pages carry searchable text. */
-export function layoutPage(input: TextChar[], o: LayoutOptions): string {
-  // turn the page so the main text runs left to right
+/**
+ * The page's characters in reading position: turned so the main text runs left to right, letters printed twice at one spot
+ * (fake bold) counted once, and split into upright text (`flat`) and text at other angles (`turned`). `turn` is the quarter
+ * turn applied, so shapes can be put in the same frame.
+ */
+export function readingFrame(input: TextChar[]): { flat: Placed[]; turned: Placed[]; turn: number } {
   const turn = dominantTurn(input)
   const cos = Math.cos((turn * Math.PI) / 180)
   const sin = Math.sin((turn * Math.PI) / 180)
@@ -231,14 +236,23 @@ export function layoutPage(input: TextChar[], o: LayoutOptions): string {
     const dupe = seen.slice(-6).some((p) => p.text === c.text && Math.abs(p.x0 - c.x0) < 0.15 * c.size && Math.abs(p.y - c.y) < 0.15 * c.size)
     if (!dupe) seen.push(c)
   }
-  const flat = seen.filter((c) => Math.abs(c.angle) <= 15)
-  const turned = seen.filter((c) => Math.abs(c.angle) > 15)
+  return { flat: seen.filter((c) => Math.abs(c.angle) <= 15), turned: seen.filter((c) => Math.abs(c.angle) > 15), turn }
+}
+
+/** upright characters split into the page's text columns, left to right (one column when there is no gutter) */
+export function readingColumns(flat: Placed[], size: number): Placed[][] {
+  const columns: Placed[][] = []
+  const edges = [-Infinity, ...gutters(flat, size), Infinity]
+  for (let i = 0; i < edges.length - 1; i++) columns.push(flat.filter((c) => (c.x0 + c.x1) / 2 >= edges[i] && (c.x0 + c.x1) / 2 < edges[i + 1]))
+  return columns
+}
+
+/** the text of one page. Characters drawn in render mode 3 are included: it is how scanned pages carry searchable text. */
+export function layoutPage(input: TextChar[], o: LayoutOptions): string {
+  const { flat, turned } = readingFrame(input)
   const body = o.bodySize ?? bodySizeOf(flat)
   const size = median(flat.map((c) => c.size)) || body || 10
-  const cuts = gutters(flat, size)
-  const columns: Placed[][] = []
-  const edges = [-Infinity, ...cuts, Infinity]
-  for (let i = 0; i < edges.length - 1; i++) columns.push(flat.filter((c) => (c.x0 + c.x1) / 2 >= edges[i] && (c.x0 + c.x1) / 2 < edges[i + 1]))
+  const columns = readingColumns(flat, size)
   const blocks: string[] = []
   for (const col of columns) {
     if (!col.length) continue

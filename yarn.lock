@@ -570,6 +570,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ream/office-core@workspace:*, @ream/office-core@workspace:packages/office-core":
+  version: 0.0.0-use.local
+  resolution: "@ream/office-core@workspace:packages/office-core"
+  dependencies:
+    "@ream/core": "workspace:*"
+    "@ream/image-core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ream/pdf-core@workspace:*, @ream/pdf-core@workspace:packages/pdf-core":
   version: 0.0.0-use.local
   resolution: "@ream/pdf-core@workspace:packages/pdf-core"
@@ -597,6 +606,7 @@ __metadata:
     "@fontsource/great-vibes": "npm:^5.3.0"
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
+    "@ream/office-core": "workspace:*"
     "@ream/pdf-core": "workspace:*"
     "@ream/pdf-render": "workspace:*"
   peerDependencies:

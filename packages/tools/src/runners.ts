@@ -31,4 +31,10 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'repair-pdf': () => import('./repair-pdf/run.ts'),
   'flatten-pdf': () => import('./flatten-pdf/run.ts'),
   'pdf-to-text': () => import('./pdf-to-text/run.ts'),
+  'pdf-to-image': () => import('./pdf-to-image/run.ts'),
+  'pdf-to-excel': () => import('./pdf-to-excel/run.ts'),
+  'pdf-to-word': () => import('./pdf-to-word/run.ts'),
+  'pdf-to-powerpoint': () => import('./pdf-to-powerpoint/run.ts'),
+  'powerpoint-to-pdf': () => import('./powerpoint-to-pdf/run.ts'),
+  'excel-to-pdf': () => import('./excel-to-pdf/run.ts'),
 }

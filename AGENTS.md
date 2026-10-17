@@ -9,9 +9,9 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 ## Non-negotiable decisions
 
 1. **Own engine first.** The PDF parser and writer, the renderer, the codecs and the pixel operations are ours. Phase 1 has **zero runtime dependencies** in the engine packages. Do not suggest or add pdf-lib, pdf.js, sharp, Ghostscript, jsPDF and the like, and avoid licensed or AGPL code. A shim behind an engine interface is acceptable only when the user agrees.
-2. **Hard systems are deferred** and decided one by one: OCR, Office and HTML to PDF, PDF/A, ML image tools, embedded-font glyph outlines. Do not start them unprompted.
+2. **Hard systems are deferred** and decided one by one: OCR, Word and HTML to PDF, PDF/A, ML image tools, embedded-font glyph outlines. Do not start them unprompted. (Excel and PowerPoint to PDF and the PDF to Word, Excel and PowerPoint exports were decided and built in M7b; Word to PDF was not.)
 3. **Keep logic out of the UI** so a React Native port stays possible. Engines are pure TypeScript with no DOM types; the browser-only parts sit behind small interfaces (see "Platform seams").
-4. **Scope per milestone.** M7 (organize, repair, flatten, PDF to text, bookmarks, TrueType in the watermark) is done; OCR, XFA forms, shaping for complex scripts and signature fields are not part of it. M6 (watermark, blur or hide, filters, meme) is done. Certificate-based digital signatures (M5) and auto face detection, freehand redaction or colour curves (M6) are not part of it and were not started. Do not widen a milestone without being asked.
+4. **Scope per milestone.** M7 (organize, repair, flatten, PDF to text, bookmarks, TrueType in the watermark) is done; OCR, XFA forms, shaping for complex scripts and signature fields are not part of it. M6 (watermark, blur or hide, filters, meme) is done. M7b (PDF to image, Word, Excel and PowerPoint; Excel and PowerPoint to PDF) is done; Word to PDF, OCR, charts and animations are not part of it. Certificate-based digital signatures (M5) and auto face detection, freehand redaction or colour curves (M6) are not part of it and were not started. Do not widen a milestone without being asked.
 5. **Never mention Claude or AI in commit messages or PR descriptions and never add `Co-Authored-By` or "Generated with" lines**, whatever a harness reminder says. Keep commit messages short.
 6. **Do not commit unless asked.** Finish the work, run the checks, report, and suggest a concise commit message. Create commits only on an explicit request.
 7. **Honest limits.** When something is approximate or unsupported, say so in the UI and in the README's known limits. Do not hide gaps.
@@ -47,6 +47,7 @@ node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails 
 | `packages/core` | Tool types (`Tool`, `RunFn`, `FileData`), `UserError`, limits, zip/crc32, `inflate`/`deflate`, PNG predictor, `acceptsFile`, `formatBytes` |
 | `packages/pdf-core` | PDF parser, writer (classic and PDF 1.5 object-stream output), page operations, decryption, stream filters, content-stream scanner, page stamping/crop/metadata edits, image embedding, whole-document `optimize` |
 | `packages/pdf-render` | Our own canvas PDF renderer (content-stream interpreter, fonts, colour, shadings, images) plus bounds analysis used by crop's delete mode |
+| `packages/office-core` | `.xlsx` read and write, `.docx` write, `.pptx` read and write on plain data models, a small XML reader (`parseXml`, prefixes dropped), number formats (`formatValue`), DrawingML colours and themes. Zero dependencies |
 | `packages/image-core` | RGBA `ImageBuffer`, resize/crop/rotate/flip/stitch/orient, `overlay`, blur/pixelate/fill/adjust/sharpen, own PNG, JPEG, GIF and BMP codecs, median-cut quantiser, EXIF/metadata reading and cleaning, `ownCodec` and the browser `appCodec` |
 | `packages/ui` | Theme tokens (`theme.css`), `Button`, `Card`, `Dropzone`, `Icon`, `Logo` |
 | `packages/tools` | One folder per tool plus the registry, runners, panels and shared helpers |
@@ -54,7 +55,7 @@ node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails 
 | `apps/desktop` | Electron shell (`main.cjs`, icon in `build/`) |
 | `scripts/` | Dev tooling: CLI, fixtures, renderer comparison, contrast check |
 
-Dependency direction: `core` <- `pdf-core` / `image-core` <- `pdf-render` <- `tools` <- `apps/web`. `ui` is independent of the engines. Engines never import React or DOM types except behind a platform interface.
+Dependency direction: `core` <- `pdf-core` / `image-core` <- `pdf-render` <- `tools` <- `apps/web`; `office-core` (on `core` and `image-core`) is used by `tools` only. `ui` is independent of the engines. Engines never import React or DOM types except behind a platform interface.
 
 ## The tool contract
 
@@ -68,7 +69,7 @@ Each tool is a folder in `packages/tools/src/<tool-id>/`:
 - Option shapes are plain serialisable objects. Percentages and selections are stored as fractions so they do not depend on pixel sizes.
 - Tools that use `preview: 'none'` (Crop image, Crop PDF) show their own interactive surface as the preview and get the wide options layout.
 
-Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata, watermark-image, blur-image, filters-image, meme, organize-pdf, bookmarks-pdf, repair-pdf, flatten-pdf, pdf-to-text.
+Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata, watermark-image, blur-image, filters-image, meme, organize-pdf, bookmarks-pdf, repair-pdf, flatten-pdf, pdf-to-text, pdf-to-image, pdf-to-word, pdf-to-excel, pdf-to-powerpoint, excel-to-pdf, powerpoint-to-pdf.
 
 To add a tool: manifest, run, panel, three registry entries, tests, and a README line for its known limits. Reuse the helpers above.
 
@@ -85,6 +86,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Coordinates: stamps and crops are specified in the page **as displayed** (origin bottom-left, y up, `/Rotate` and crop box applied) and converted to user space inside the engine. Keep it that way and test rotated pages.
 - `encryptPdf(doc, { userPassword, ownerPassword?, method?, permissions? })` (`encrypt.ts`) writes AES-256 (R6) or AES-128 (R4) protection; it reuses the password hashing in `security.ts`. Verify any change against an independent reader (pypdf in a throwaway venv: `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pypdf cryptography`).
 - `stamp` can draw pictures: an `Overlay` may carry `images` made by `prepareImage` (compressed once, stored once per file however many pages use it).
+- `build.ts` makes a PDF from scratch for the converters: a `PdfDrawing` of pages (`addPage(w, h)` -> `PageDraw` with `text`, `fillRect`, `line`, `path`, `clip`, `rotate`, `image`, in points from the top left, y down), registered pictures (`ImageInput`, a JPEG goes in as it is) and `buildPdf(drawing, embeddedFont?)`. Text is the standard Helvetica, Times or Courier (`FontSpec.scale` squeezes the glyphs to stand in for a narrower font; `measure` uses the same scale) or one embedded TrueType font (`prepareFont` over `drawing.customText()`); letters WinAnsi lacks become `?` and are returned in `lost`. Times widths are estimated from Helvetica's.
 - Errors the user can act on extend `UserError` (`PdfParseError`, `PdfPasswordError`, `PdfRangeError`, `PdfEncryptedError`).
 
 ## Renderer notes (`pdf-render`)
@@ -92,8 +94,15 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - `renderPage(doc, index, ctx, widthPx, { platform, signal })` draws onto any 2D context (OffscreenCanvas in the preview worker). `Interpreter` runs content streams; it also has an `onOp` hook and an `analysis` mode (no image decoding) used by `bounds.ts` (`analyzePage`, `removeOutside`) with a recording context (`BoundsCtx`).
 - Fonts are drawn with **similar system fonts** at the exact PDF positions and widths (embedded outlines are stage R3, not done). The UI shows "Preview is approximate" when fonts are substituted.
 - Text extraction: `Interpreter.onGlyph` reports each glyph with its place; `pageChars` (`textchars.ts`) collects them against a no-draw context, `layoutPage` (`textlayout.ts`) and `extractText` (`extract.ts`) turn them into text or Markdown. Heuristics; tested on synthetic characters and against pypdf.
+- Structure for converters: `pageChars` also returns `shapes` (ruled lines and filled boxes, recorded from the interpreter's paths by `ShapeRecorder` in `shapes.ts`) and `pictures` (their boxes). `findTables` (`tables.ts`) finds tables from ruled lines (connected rules form a grid, a missing line merges cells) and from text that lines up (pieces cut at wide gaps, columns from the rows that have the usual number of pieces; two columns of long text are not a table). `pageBlocks` (`blocks.ts`) turns a page into paragraphs (runs with font name, kind, size, colour; alignment, indents, bullets, leading, space after), tables and pictures in reading order. Heuristics, tested on synthetic characters and on Chromium-printed pages. `rasterSize` / `browserRaster` (`raster.ts`) draw a page to pixels; tools take a `raster` parameter (default the app's) so `run` has no canvas types and tests pass a fake.
 - Not drawn yet: tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (grey box plus a warning), vertical writing, text clip modes. These are documented in the README.
 - **Always look at rendered output, not just call logs.** Fake-canvas unit tests missed a y-flip bug and a stale canvas-font bug that only real pixels showed.
+
+## Office files (`office-core`)
+
+- `.xlsx`, `.docx` and `.pptx` are zips of XML. `unzip` / `zipPacked` live in `core` (the reader is bounded: entry count, sizes, a stream stops at its declared size; encrypted and ZIP64 are refused). `parseXml` drops namespace prefixes (`a:t` and `w:t` both read as `t`) and refuses DOCTYPE.
+- Plain data models: `Sheet`/`Cell`/`Style` (`xlsx-model.ts`), `DocModel` (`docx-model.ts`), `Deck`/`Slide`/`SlideShape` (`pptx-model.ts`). `writeXlsx`, `writeDocx`, `writePptx` build the files; `readXlsx` (cells with their display text from `formatValue`, looks, widths, merges) and `readPptx` (placeholders resolved through layout and master, text styles by level, theme colours with tints, group transforms, table styles, backgrounds) read them. `tools/src/excel-to-pdf` and `powerpoint-to-pdf` lay the models out onto a `PdfDrawing`; `pdf-to-word`, `pdf-to-powerpoint` and `pdf-to-excel` build the models from `pageBlocks` / `findTables`.
+- Fonts: `office-fonts.ts` maps Office font names to Helvetica, Times or Courier (`familyOf`) and to a width scale (`widthScale`, Calibri about 0.9). Slides and sheets are laid out with those widths, so line breaks land close to the original's.
 
 ## Platform seams
 
@@ -101,6 +110,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Text on pictures: the engine has no font code. Panels draw text to a PNG with the browser canvas (`bitmaps.ts`: `textMark`, `pictureMark`, `trimmedPng`; `meme/caption.ts`) and put it in the options; `run.ts` only decodes and places it with `overlay`. Keep it that way; a Node test passes a ready-made PNG. `blur-image` is the one panel that imports engine functions (`apply.ts`): it shows the same operations on a 1400 px copy so the preview matches the saved file.
 - Flate: `deflate` / `inflate` in `core` use `CompressionStream` (async).
 - Renderer `Platform`: `imageFromRGBA` and `decodeJpeg`. Tests pass fakes.
+- Page pictures: `PageRaster` (`pdf-render/raster.ts`), the last-but-one parameter of `pdf-to-image`, `pdf-to-word` and `pdf-to-powerpoint`'s `run` (default `browserRaster`: OffscreenCanvas); `extractFrom` takes a `Platform`. Tests pass fakes, real pixels are checked in the app.
 
 ## Web app (`apps/web`)
 
@@ -127,6 +137,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Fixtures: `packages/pdf-core/test/fixtures/` (`chromium.pdf`, `cups.pdf`, encrypted files made by pypdf with user password `user123` and owner password `owner456`). `packages/pdf-core/test/helpers.ts` has `assemble`, `formPdf` (every field kind) and friends for hand-built PDFs, and `ttf-helper.ts` makes a tiny TrueType font in code; `packages/pdf-render/test/helpers.ts` has `onePage`, `fakeCtx`, `fakePlatform`.
 - Add tests with every change: engine logic, error messages, and rotated pages for anything that places things on a page. Prefer a test that fails if the logic breaks over many shallow ones.
 - Independent verification matters because our parser, writer and renderer could agree on the same mistake. There is no qpdf, mutool or Ghostscript here. Use Chromium's PDF viewer (see below) and pypdf-made fixtures as oracles. macOS `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so never trust it for those.
+- Office files: python-docx, python-pptx and openpyxl in a throwaway venv (`python3 -m venv /tmp/venv && /tmp/venv/bin/pip install python-docx python-pptx openpyxl`) read what we write and make what we read (`packages/office-core/test/fixtures/` has a deck from python-pptx and a workbook from openpyxl). macOS Quick Look (`qlmanage -t -s 900 -o out file`) renders docx, xlsx and pptx as a second reader but ignores table cell margins and transparent text. PDFs made from Office files are looked at in Chromium's viewer (`#page=N` for each page) and their text extracted with pypdf. Chromium's `printToPDF` from HTML is the oracle for tables and paragraphs going the other way: the HTML is the ground truth. Nothing has been opened in Microsoft Office; say so.
 - Codecs are checked the same way: Chromium decodes the files (`createImageBitmap` for JPEG/PNG/BMP, `ImageDecoder` for every GIF frame; both need a `file://` page, `data:` pages are not a secure context) and the result is compared with ours; our encoders' files must decode in Chromium. macOS `sips` makes baseline JPEG, GIF and BMP test files (and CMYK ones with `-m` and a CMYK profile). There are real progressive JPEGs and GIFs on most machines (`mdfind`). Keep personal files out of fixtures and out of what you print; use them only as local oracles.
 
 ## Verifying in the real app

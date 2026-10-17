@@ -60,4 +60,10 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'repair-pdf': () => import('./repair-pdf/Panel.tsx'),
   'flatten-pdf': () => import('./flatten-pdf/Panel.tsx'),
   'pdf-to-text': () => import('./pdf-to-text/Panel.tsx'),
+  'pdf-to-image': () => import('./pdf-to-image/Panel.tsx'),
+  'pdf-to-excel': () => import('./pdf-to-excel/Panel.tsx'),
+  'pdf-to-word': () => import('./pdf-to-word/Panel.tsx'),
+  'pdf-to-powerpoint': () => import('./pdf-to-powerpoint/Panel.tsx'),
+  'powerpoint-to-pdf': () => import('./powerpoint-to-pdf/Panel.tsx'),
+  'excel-to-pdf': () => import('./excel-to-pdf/Panel.tsx'),
 }
