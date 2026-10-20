@@ -16,6 +16,8 @@ export type Glyph = {
   code: number
   /** Type 3 only: the glyph procedure's name */
   name?: string
+  /** how many bytes of the string the code took (1 when not given; composite fonts use more) */
+  bytes?: number
 }
 
 export type Type3 = { matrix: Matrix; procs: PdfDict; resources: PdfDict | null }
@@ -343,7 +345,7 @@ async function type0(doc: PdfDocument, dict: PdfDict, baseFont: string): Promise
           unmapped = true
           notes.push('Some text has no character mapping and is left out')
         }
-        out.push({ text, code, space: len === 1 && code === 32, width: widthOf(code) })
+        out.push({ text, code, space: len === 1 && code === 32, width: widthOf(code), bytes: len })
       }
       return out
     },

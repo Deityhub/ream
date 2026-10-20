@@ -13,6 +13,13 @@ export const mul = (m: Matrix, n: Matrix): Matrix => [
   m[4] * n[1] + m[5] * n[3] + n[5],
 ]
 
+/** the transform that undoes `m` (identity when `m` flattens everything) */
+export function invert([a, b, c, d, e, f]: Matrix): Matrix {
+  const det = a * d - b * c
+  if (!det) return IDENTITY
+  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det]
+}
+
 export const apply = (m: Matrix, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
 
 /** how much the matrix scales lengths, on average */

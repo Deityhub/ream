@@ -1,0 +1,39 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, test } from 'vitest'
+import type { FileData } from '@ream/core'
+import { PdfDocument } from '@ream/pdf-core'
+import { extractText } from '@ream/pdf-render'
+import { fakePlatform } from '../../pdf-render/test/helpers.ts'
+import { run as redact } from './redact-pdf/run.ts'
+import { defaultOptions as redactDefaults } from './redact-pdf/areas.ts'
+
+const ctx = { progress: () => {} }
+const chromium: FileData = { name: 'chromium.pdf', type: 'application/pdf', bytes: new Uint8Array(readFileSync(new URL('../../pdf-core/test/fixtures/chromium.pdf', import.meta.url))) }
+const pages = async (f: FileData) => {
+  const doc = await PdfDocument.load(f.bytes)
+  return extractText(doc, doc.pages().map((_, i) => i), { markdown: false })
+}
+
+describe('redact-pdf', () => {
+  const title = { x: 0, y: 0.04, w: 1, h: 0.035 }
+  const platform = fakePlatform().platform
+
+  test('one page: the marked text is gone from the file, the rest of the page and the other pages stay', async () => {
+    const [out] = await redact([chromium], { ...redactDefaults, areasByPage: { 0: [title] } }, ctx, platform)
+    expect(out.name).toBe('chromium-redacted.pdf')
+    const [p1, p2] = await pages(out)
+    expect(p1).not.toContain('Chromium page 1')
+    expect(p1).toContain('Café résumé')
+    expect(p2).toContain('Chromium page 2')
+  })
+
+  test('all pages: the same areas everywhere', async () => {
+    const [out] = await redact([chromium], { ...redactDefaults, scope: 'all', areas: [title] }, ctx, platform)
+    const texts = await pages(out)
+    expect(texts.every((t) => !/Chromium page/.test(t) && t.includes('Café'))).toBe(true)
+  })
+
+  test('nothing marked is a clear error', async () => {
+    await expect(redact([chromium], redactDefaults, ctx, platform)).rejects.toThrow(/mark what to redact/)
+  })
+})

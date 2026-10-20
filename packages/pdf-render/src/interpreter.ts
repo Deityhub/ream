@@ -85,6 +85,23 @@ export type OpInfo = {
   renderMode: number
   /** a glyph shown by this operator had no width in its font, so the text advance is only an estimate */
   unknownWidth: boolean
+  /** the transform the operator ran under (paths are in this space) */
+  ctm: Matrix
+}
+
+/**
+ * One glyph of a string shown by the stream being recorded, for redaction: where its code sits in the operator's
+ * strings, how far it moved the text position, and the corners of its em box (descent to ascent over its advance).
+ */
+export type ShownGlyph = {
+  /** which string of a TJ array (0 for the other text operators) */
+  item: number
+  /** byte offset and length of the code in that string */
+  offset: number
+  length: number
+  /** the move along the line in text space units, character and word spacing included */
+  tx: number
+  quad: [number, number][]
 }
 
 /** one shown glyph with where it is, for text extraction: start and end of its baseline in the space `base` maps to */
@@ -130,7 +147,16 @@ export class Interpreter {
   /** draw the page without its text (it is still read: onGlyph sees it): the design of a page under editable text */
   skipText = false
   /** told about every picture XObject that is painted (at any depth), with the matrix that maps its unit square into the space the page's own content uses */
-  onImage?: (image: PdfStream, ctm: Matrix) => void
+  onImage?: (image: PdfStream, ctm: Matrix, inline?: boolean) => void
+  /** told about every glyph of the strings of the stream being recorded (not of the forms or glyph procedures it uses) */
+  onShow?: (glyph: ShownGlyph) => void
+  /** forms (and Type 3 glyph procedures) the interpreter is inside: hooks compare it with `recordDepth` */
+  get depth() {
+    return this.formDepth
+  }
+  /** the depth of the stream `run` was asked to record */
+  recordDepth = -1
+  private showItem = 0
   private unknownWidth = false
   state = new GState()
   private stack: GState[] = []
@@ -201,6 +227,7 @@ export class Interpreter {
 
   /** `record`: report each operator of this stream to `onOp` (only for the page's own stream, not forms or glyph procedures) */
   async run(content: Uint8Array, res: PdfDict, record = false) {
+    if (record) this.recordDepth = this.formDepth
     const p = new Parser(content)
     const depth = this.stack.length
     const args: PdfObj[] = []
@@ -237,7 +264,7 @@ export class Interpreter {
       }
       if (record) {
         const s = this.state
-        this.onOp?.({ op: v.value, args: args.slice(), start, end: p.pos, tmBefore, tmAfter: this.tm, fontSize: s.fontSize, hScale: s.hScale, renderMode: s.renderMode, unknownWidth: this.unknownWidth })
+        this.onOp?.({ op: v.value, args: args.slice(), start, end: p.pos, tmBefore, tmAfter: this.tm, fontSize: s.fontSize, hScale: s.hScale, renderMode: s.renderMode, unknownWidth: this.unknownWidth, ctm: s.ctm })
       }
       args.length = 0
       argStart = -1
@@ -321,17 +348,19 @@ export class Interpreter {
       case 'TD': s.leading = -n(1); this.moveLine(n(0), n(1)); break
       case 'Tm': this.tm = this.tlm = [n(0), n(1), n(2), n(3), n(4), n(5)]; break
       case 'T*': this.moveLine(0, -s.leading); break
-      case 'Tj': if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
-      case "'": this.moveLine(0, -s.leading); if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
+      case 'Tj': this.showItem = 0; if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
+      case "'": this.showItem = 0; this.moveLine(0, -s.leading); if (a[0] instanceof PdfString) await this.show(a[0].bytes, res); break
       case '"':
         s.wordSpace = n(0)
         s.charSpace = n(1)
         this.moveLine(0, -s.leading)
+        this.showItem = 0
         if (a[2] instanceof PdfString) await this.show(a[2].bytes, res)
         break
       case 'TJ':
         if (Array.isArray(a[0])) {
-          for (const item of a[0]) {
+          for (const [i, item] of a[0].entries()) {
+            this.showItem = i
             if (item instanceof PdfString) await this.show(item.bytes, res)
             // a number moves the text position back (positive) or forward, in thousandths of the font size
             else if (typeof item === 'number') this.tm = mul([1, 0, 0, 1, (-item / 1000) * s.fontSize * s.hScale, 0], this.tm)
@@ -530,6 +559,7 @@ export class Interpreter {
     // embedded outlines also give widths when the PDF has none; they are only drawn on a real page
     const shapeOf = font.shape ?? (draws ? await this.standardShapes(font) : null)
 
+    let offset = 0
     for (const g of glyphs) {
       let advance = g.width ?? 0
       const shape = shapeOf?.(g) ?? null
@@ -613,6 +643,13 @@ export class Interpreter {
         }
       }
       const tx = ((advance / 1000) * s.fontSize + s.charSpace + (g.space ? s.wordSpace : 0)) * s.hScale
+      if (this.onShow && this.formDepth === this.recordDepth) {
+        // the em box over the glyph's advance (a little wide for marks with none), descent to ascent
+        const m = mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(this.tm, mul(s.ctm, this.base)))
+        const w = Math.max(advance / 1000, 0.25)
+        this.onShow({ item: this.showItem, offset, length: g.bytes ?? 1, tx, quad: [apply(m, 0, -0.25), apply(m, w, -0.25), apply(m, w, 1), apply(m, 0, 1)] })
+      }
+      offset += g.bytes ?? 1
       if (this.onGlyph && g.text) {
         const to = mul(s.ctm, this.base)
         const from = mul([1, 0, 0, 1, 0, s.rise], mul(this.tm, to))
@@ -779,8 +816,10 @@ export class Interpreter {
     }
     const dataEnd = filtered ? (isWs(d[found - 1]) ? found - 1 : found) : Math.min(end, found)
     p.pos = found + 2
+    const image = new PdfStream(dict, d.subarray(start, dataEnd))
+    this.onImage?.(image, this.state.ctm, true)
     if (this.analysis) return this.paintRaster('unsupported')
-    this.paintRaster(await rasterizeImage({ doc: this.doc, platform: this.platform, resources: res, fill: this.state.fill.rgb, warn: (m) => this.warn(m) }, new PdfStream(dict, d.subarray(start, dataEnd))))
+    this.paintRaster(await rasterizeImage({ doc: this.doc, platform: this.platform, resources: res, fill: this.state.fill.rgb, warn: (m) => this.warn(m) }, image))
   }
 
   // ---------- annotations ----------

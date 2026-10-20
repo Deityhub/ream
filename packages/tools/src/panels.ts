@@ -46,6 +46,7 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   watermark: () => import('./watermark/Panel.tsx'),
   'page-numbers': () => import('./page-numbers/Panel.tsx'),
   'crop-pdf': () => import('./crop-pdf/Panel.tsx'),
+  'redact-pdf': () => import('./redact-pdf/Panel.tsx'),
   metadata: () => import('./metadata/Panel.tsx'),
   'extract-images': () => import('./extract-images/Panel.tsx'),
   'compress-image': () => import('./compress-image/Panel.tsx'),

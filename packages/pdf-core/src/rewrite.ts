@@ -19,6 +19,8 @@ export type Editing = {
   edit(ref: PdfRef): PdfDict
   /** the page objects in order (null for a page that is not an indirect object) */
   pageRefs: (PdfRef | null)[]
+  /** set to false to leave the document information dictionary (/Info) out of the result */
+  keepInfo: boolean
 }
 
 /**
@@ -46,7 +48,7 @@ export async function editDocument(doc: PdfDocument, change: (e: Editing) => voi
     return copy
   }
   const catalog = edit(root)
-  await change({
+  const editing: Editing = {
     catalog,
     doc,
     add: (o) => {
@@ -60,10 +62,12 @@ export async function editDocument(doc: PdfDocument, change: (e: Editing) => voi
     set: (ref, o) => void objects.set(ref.num, o),
     edit,
     pageRefs: doc.pages().map((p) => p.ref),
-  })
+    keepInfo: true,
+  }
+  await change(editing)
   const trailer: PdfDict = new Map([['Root', root]])
   const info = doc.trailer.get('Info')
-  if (info instanceof PdfRef) trailer.set('Info', info)
+  if (info instanceof PdfRef && editing.keepInfo) trailer.set('Info', info)
   const id = doc.trailer.get('ID')
   if (id) trailer.set('ID', id)
   return optimize(new PdfDocument(objects, trailer), { tidy: true, objectStreams: false })

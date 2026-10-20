@@ -10,6 +10,7 @@ import { cropImage } from './crop-image/manifest.ts'
 import { mergeImages } from './merge-images/manifest.ts'
 import { pageNumbers } from './page-numbers/manifest.ts'
 import { cropPdf } from './crop-pdf/manifest.ts'
+import { redactPdf } from './redact-pdf/manifest.ts'
 import { metadata } from './metadata/manifest.ts'
 import { extractImages } from './extract-images/manifest.ts'
 import { compressImage } from './compress-image/manifest.ts'
@@ -48,6 +49,7 @@ export const tools: Tool[] = [
   watermark,
   pageNumbers,
   cropPdf,
+  redactPdf,
   metadata,
   extractImages,
   compressPdf,

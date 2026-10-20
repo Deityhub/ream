@@ -39,6 +39,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M6 ✅ | Image edit | Watermark image, blur or hide parts, filters, meme maker |
 | M7 ✅ | PDF advanced | Organize pages, Repair, Flatten, PDF → text/Markdown, Bookmarks, TrueType embedding (watermark in any script) |
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
+| M7.5 | PDF redaction and forms | Redact PDF (removed for good, not covered) |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -78,6 +79,18 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - **Flatten PDF** draws the appearance of form fields and of markup annotations (notes, highlights, stamps, drawings) into the page and removes them; links and other kinds stay. A text field without a picture is drawn from its value. The placement matrix is shared with the renderer (`appearanceMatrix`). Digital signatures stop validating.
 - **PDF to text:** plain text or Markdown from where the text sits on the page: lines, words (from gaps and TJ spacing), columns (wide empty strips), paragraphs (line spacing), hyphenated words rejoined, ligatures spelled out, text turned to the page's reading direction. Markdown adds headings (type size against the body size), bullet lists, bold and italic. Text in render mode 3 (the invisible layer of scanned pages) is included. It does no OCR: a page that is a picture gives no text and says so. Tables come out as lines, CID fonts without a ToUnicode map and Type 3 fonts give nothing, and reading order is a heuristic. Checked against pypdf's extraction on the fixtures and on real documents: word recall and precision above 0.99 on all but a few pages whose only difference is words split or joined differently.
 - **TrueType fonts in stamps:** the watermark can draw with an uploaded .ttf (the first font of a .ttc works too): the glyphs of the text are cut out, embedded as a Type0/CIDFontType2 font with a ToUnicode map, so the text is selectable and searchable. Glyphs are placed one after another with the font's advance widths: no kerning, ligatures or shaping, so Arabic and Indic scripts do not work. Fonts with PostScript outlines (.otf), web fonts and fonts whose licence flag forbids embedding are refused. Checked in Chromium's PDF viewer and with pypdf's text extraction (Cyrillic, Greek, Vietnamese with composite glyphs). Page numbers still use Helvetica. Our own preview draws such text with its real letters.
+
+## Known M7.5 limits
+
+- **Redact PDF:** the content under each area is taken out of the file, which is then written again from scratch, so nothing of the old content is left in it. A black box marks each area.
+  - **Letters:** removed one by one, and the text after them keeps its place. A letter whose box touches an area goes whole, so a letter straddling the edge is removed too.
+  - **Shapes:** cut at the area's edge. Curves under the edge become short straight lines, and dashed lines restart their dashes where they were cut.
+  - **Pictures:** the pixels under an area are wiped, and the same picture elsewhere is untouched. JPEG pictures that are wiped are kept losslessly as RGB, so they grow and a CMYK JPEG's colours shift slightly. Pictures Ream can't decode (JPEG 2000, JBIG2, CCITT) are removed whole when they touch an area.
+  - **Forms (XObjects):** redacted as private copies.
+  - **Gradients (shadings):** kept under the box, since they hold no text.
+  - **Annotations:** comments, links and form fields whose rectangle meets an area are removed, the fields with their values.
+  - **Hidden data:** "Remove document properties and hidden data" (on by default) also drops the title and other document information, XMP metadata, page thumbnails and private application data. Bookmarks, other pages' content and attachments stay.
+  - **Not done:** finding text to redact (areas are drawn by hand), and text that is part of a scanned picture (that is wiped as pixels like any picture). Checked with pypdf's text extraction and Chromium's viewer on Chromium-printed pages.
 
 ## Known M7b limits
 
