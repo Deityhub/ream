@@ -28,7 +28,6 @@ import { meme } from './meme/manifest.ts'
 import { bookmarksPdf } from './bookmarks-pdf/manifest.ts'
 import { organizePdf } from './organize-pdf/manifest.ts'
 import { repairPdf } from './repair-pdf/manifest.ts'
-import { flattenPdfTool } from './flatten-pdf/manifest.ts'
 import { pdfToText } from './pdf-to-text/manifest.ts'
 import { pdfToImage } from './pdf-to-image/manifest.ts'
 import { pdfToExcel } from './pdf-to-excel/manifest.ts'
@@ -59,7 +58,6 @@ export const tools: Tool[] = [
   unlockPdf,
   signPdf,
   organizePdf,
-  flattenPdfTool,
   pdfToText,
   bookmarksPdf,
   repairPdf,

@@ -151,6 +151,13 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
             )
           })}
         </ul>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={o.lock} onChange={(e) => onChange({ ...o, lock: e.target.checked })} className="mt-0.5" />
+          <span>
+            Lock the answers
+            <span className="block text-xs text-muted">The answers are drawn into the pages and the fields removed, so nobody can change them, as some portals and printers ask. Keep a copy that isn't locked if you may need to edit it.</span>
+          </span>
+        </label>
         <p className="text-sm text-muted" role="status">
           {changed === 0 ? 'Values already in the file are shown; change any of them.' : `${changed} ${changed === 1 ? 'field' : 'fields'} changed.`}
         </p>

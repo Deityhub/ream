@@ -66,7 +66,6 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'bookmarks-pdf': () => import('./bookmarks-pdf/Panel.tsx'),
   'organize-pdf': () => import('./organize-pdf/Panel.tsx'),
   'repair-pdf': () => import('./repair-pdf/Panel.tsx'),
-  'flatten-pdf': () => import('./flatten-pdf/Panel.tsx'),
   'pdf-to-text': () => import('./pdf-to-text/Panel.tsx'),
   'pdf-to-image': () => import('./pdf-to-image/Panel.tsx'),
   'pdf-to-excel': () => import('./pdf-to-excel/Panel.tsx'),

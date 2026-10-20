@@ -46,18 +46,25 @@ describe('fill-pdf-form', () => {
   const fields = async (f: FileData) => Object.fromEntries(readForm(await PdfDocument.load(f.bytes)).fields.map((x) => [x.name, x.value]))
 
   test('changed fields are filled; the values already in the file stay', async () => {
-    const [out] = await fill([form], { values: { notes: 'Two\nlines', agree: true, size: 'L', country: 'it' } }, ctx)
+    const [out] = await fill([form], { values: { notes: 'Two\nlines', agree: true, size: 'L', country: 'it' }, lock: false }, ctx)
     expect(out.name).toBe('form-filled.pdf')
     expect(await fields(out)).toMatchObject({ name: 'Ann', notes: 'Two\nlines', agree: true, size: 'L', country: 'it' })
     // and the filled file can be filled again, changing what was there
-    const [again] = await fill([out], { values: { name: 'Bea', agree: false } }, ctx)
+    const [again] = await fill([out], { values: { name: 'Bea', agree: false }, lock: false }, ctx)
     expect(await fields(again)).toMatchObject({ name: 'Bea', agree: false, size: 'L' })
+  })
+
+  test('locked: the answers are part of the pages and the form has no fields left', async () => {
+    const [out] = await fill([form], { values: { name: 'Locked in' }, lock: true }, ctx)
+    const doc = await PdfDocument.load(out.bytes)
+    expect(readForm(doc).fields).toEqual([])
+    expect((await extractText(doc, [0], { markdown: false }))[0]).toContain('Locked in')
   })
 
   test('letters the form font cannot show, files without fields and XFA forms get clear messages', async () => {
     expect(unwritable('Café Łódź € Łx')).toEqual(['Ł', 'ź'])
-    await expect(fill([form], { values: { name: 'Łukasz' } }, ctx)).rejects.toThrow(/can't show Ł/)
-    await expect(fill([chromium], { values: {} }, ctx)).rejects.toThrow(/no form fields/)
-    await expect(fill([{ ...form, bytes: formPdf('/XFA [(a) 5 0 R]') }], { values: {} }, ctx)).resolves.toHaveLength(1)
+    await expect(fill([form], { values: { name: 'Łukasz' }, lock: false }, ctx)).rejects.toThrow(/can't show Ł/)
+    await expect(fill([chromium], { values: {}, lock: false }, ctx)).rejects.toThrow(/no form fields/)
+    await expect(fill([{ ...form, bytes: formPdf('/XFA [(a) 5 0 R]') }], { values: {}, lock: false }, ctx)).resolves.toHaveLength(1)
   })
 })

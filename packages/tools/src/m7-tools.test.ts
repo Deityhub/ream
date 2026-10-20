@@ -6,7 +6,6 @@ import { run as bookmarks } from './bookmarks-pdf/run.ts'
 import { run as organize } from './organize-pdf/run.ts'
 import { duplicate, isOriginal, moveTo, original, removeAt, turn } from './organize-pdf/pages.ts'
 import { run as repair } from './repair-pdf/run.ts'
-import { run as flatten } from './flatten-pdf/run.ts'
 import { run as toText } from './pdf-to-text/run.ts'
 import { run as watermark, type WatermarkOptions } from './watermark/run.ts'
 import { makeTtf } from '../../pdf-core/test/ttf-helper.ts'
@@ -144,22 +143,6 @@ describe('repair-pdf', () => {
 })
 
 const form = (): FileData => ({ name: 'form.pdf', type: 'application/pdf', bytes: formPdf() })
-
-describe('flatten-pdf', () => {
-  test('flattens a form: no fields left, page content stays', async () => {
-    const filled: FileData = { ...form(), bytes: await fillForm(await PdfDocument.load(formPdf()), { name: 'Zed' }) }
-    const [out] = await flatten([filled], { forms: true, comments: true }, ctx)
-    expect(out.name).toBe('form-flattened.pdf')
-    const doc = await PdfDocument.load(out.bytes)
-    expect(readForm(doc).fields).toEqual([])
-    expect(doc.pages().length).toBe(1)
-  })
-
-  test('says when there is nothing to do', async () => {
-    await expect(flatten([form()], { forms: false, comments: false }, ctx)).rejects.toThrow('Choose what to flatten')
-    await expect(flatten([pdf(1)], { forms: true, comments: true }, ctx)).rejects.toThrow('nothing to flatten')
-  })
-})
 
 describe('pdf-to-text', () => {
   const decode = (f: FileData) => new TextDecoder().decode(f.bytes)

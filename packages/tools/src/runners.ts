@@ -31,7 +31,6 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'bookmarks-pdf': () => import('./bookmarks-pdf/run.ts'),
   'organize-pdf': () => import('./organize-pdf/run.ts'),
   'repair-pdf': () => import('./repair-pdf/run.ts'),
-  'flatten-pdf': () => import('./flatten-pdf/run.ts'),
   'pdf-to-text': () => import('./pdf-to-text/run.ts'),
   'pdf-to-image': () => import('./pdf-to-image/run.ts'),
   'pdf-to-excel': () => import('./pdf-to-excel/run.ts'),

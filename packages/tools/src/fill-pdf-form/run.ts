@@ -1,5 +1,5 @@
 import { UserError, type RunFn } from '@ream/core'
-import { fillForm, readForm } from '@ream/pdf-core'
+import { PdfDocument, fillForm, flattenPdf, readForm } from '@ream/pdf-core'
 import { baseName, loadPdf, pdfFile } from '../pdf-common.ts'
 import { unwritable, type FillFormOptions } from './values.ts'
 
@@ -14,7 +14,9 @@ export const run: RunFn<FillFormOptions> = async (files, o, { progress }) => {
     if (bad.length) throw new UserError(`The field "${name}" can't show ${bad.join(' ')}: PDF forms written by Ream take Western European letters only.`)
   }
   progress(0.2)
-  const bytes = await fillForm(doc, o.values)
+  let bytes = await fillForm(doc, o.values)
+  // locked: the fields become part of the pages (comments stay as they are)
+  if (o.lock) bytes = (await flattenPdf(await PdfDocument.load(bytes), { forms: true, comments: false })).bytes
   progress(1)
   return [pdfFile(`${baseName(files[0].name)}-filled.pdf`, bytes)]
 }

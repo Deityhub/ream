@@ -3,9 +3,11 @@
 export type FillFormOptions = {
   /** only the fields changed from the file's own values, by full field name */
   values: Record<string, string | boolean>
+  /** draw the answers into the pages and remove the fields, so they can't be changed */
+  lock: boolean
 }
 
-export const defaultOptions: FillFormOptions = { values: {} }
+export const defaultOptions: FillFormOptions = { values: {}, lock: false }
 
 // the letters a form's standard font can show (Windows-1252): field pictures are drawn with it
 const EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
