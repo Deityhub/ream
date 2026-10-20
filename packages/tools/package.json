@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./runners": "./src/runners.ts",
     "./panels": "./src/panels.ts",
-    "./office-preview": "./src/office-preview.ts"
+    "./office-preview": "./src/office-preview.ts",
+    "./standard-fonts": "./src/fonts/standard-browser.ts"
   },
   "dependencies": {
     "@fontsource/anton": "^5.3.0",

@@ -15,7 +15,8 @@ import {
   type PdfObj,
 } from '@ream/pdf-core'
 import { DeviceCMYK, DeviceGray, DeviceRGB, css, loadColorSpace, type ColorSpace, type RGB } from './color.ts'
-import { fallbackFont, loadFont, type Font, type Glyph } from './font.ts'
+import { fallbackFont, loadFont, type Font, type Glyph, type GlyphShape } from './font.ts'
+import { readTrueType, tracePath, type TrueTypeProgram } from './outlines/index.ts'
 import { numbers } from './function.ts'
 import { rasterizeImage, type Raster } from './image.ts'
 import { IDENTITY, apply, mul, scaleOf, type Matrix } from './matrix.ts'
@@ -105,6 +106,12 @@ export type GlyphInfo = {
   renderMode: number
 }
 
+function pathOf(path: GlyphShape['path']): Path2D {
+  const p = new Path2D()
+  tracePath(p, path)
+  return p
+}
+
 /** Runs PDF content streams against a 2D canvas context. One instance draws one page. */
 export class Interpreter {
   doc: PdfDocument
@@ -137,6 +144,12 @@ export class Interpreter {
   private fontString = ''
   private measured = new Map<string, number>()
   private images = new Map<PdfStream, Promise<Raster | 'unsupported'>>()
+  /** a browser canvas (not a test's recorder or the bounds context): glyphs can be drawn as cached Path2D objects */
+  private realCanvas: boolean
+  /** the bundled look-alikes for standard fonts, by kind, weight and slant */
+  private standards = new Map<string, Promise<TrueTypeProgram[]>>()
+  /** glyphs shown in a clipping render mode in this text object, each with its device matrix: the clip at ET */
+  private textClip: { m: Matrix; path: GlyphShape['path'] | null; w: number }[] | null = null
 
   constructor(doc: PdfDocument, ctx: Ctx2D, platform: Platform, base: Matrix, signal?: AbortSignal) {
     this.doc = doc
@@ -144,6 +157,8 @@ export class Interpreter {
     this.platform = platform
     this.base = base
     this.signal = signal
+    const canvasTypes = [globalThis.OffscreenCanvasRenderingContext2D, globalThis.CanvasRenderingContext2D].filter(Boolean)
+    this.realCanvas = typeof Path2D === 'function' && canvasTypes.some((t) => ctx instanceof t)
   }
 
   warn(message: string) {
@@ -288,8 +303,8 @@ export class Interpreter {
       case 'Do': await this.xobject(a[0], res); break
 
       // text
-      case 'BT': this.tm = this.tlm = IDENTITY; break
-      case 'ET': break
+      case 'BT': this.tm = this.tlm = IDENTITY; this.textClip = null; break
+      case 'ET': this.clipToText(); break
       case 'Tc': s.charSpace = n(0); break
       case 'Tw': s.wordSpace = n(0); break
       case 'Tz': s.hScale = n(0) / 100; break
@@ -454,9 +469,45 @@ export class Interpreter {
     return w
   }
 
+  /** a bundled look-alike's glyph for a standard font the file doesn't embed, found by the glyph's text */
+  private async standardShapes(font: Font): Promise<((g: Glyph) => GlyphShape | null) | null> {
+    const std = font.standard
+    if (!std || !this.platform.standardFont || this.analysis) return null
+    const key = `${std.kind}${std.bold ? 'b' : ''}${std.italic ? 'i' : ''}`
+    let parts = this.standards.get(key)
+    if (!parts) {
+      parts = this.platform.standardFont(std.kind, std.bold, std.italic).then(
+        (files) => files.flatMap((f) => { try { return [readTrueType(f)] } catch { return [] } }),
+        () => [],
+      )
+      this.standards.set(key, parts)
+    }
+    const programs = await parts
+    if (!programs.length) return null
+    const seen = new Map<string, GlyphShape | null>()
+    return (g) => {
+      if (!g.text) return null
+      let shape = seen.get(g.text)
+      if (shape === undefined) {
+        shape = null
+        for (const p of programs) {
+          const gid = p.byUnicode(g.text)
+          const path = gid === undefined ? null : p.glyph(gid)
+          if (path) {
+            shape = { path, matrix: p.matrix, width: p.advance(gid!) }
+            break
+          }
+        }
+        seen.set(g.text, shape)
+      }
+      return shape
+    }
+  }
+
   /**
    * Draw a shown string glyph by glyph. Each glyph goes where the PDF puts it, and the position advances by the PDF's
-   * own width for it, so layout is exact even though the letter shapes come from a similar system font.
+   * own width for it. The letter's shape comes from the embedded font program; without one, from a similar system
+   * font squeezed to the PDF's width.
    */
   private async show(bytes: Uint8Array, res: PdfDict) {
     const { ctx, state: s } = this
@@ -471,14 +522,54 @@ export class Interpreter {
     const glyphs = font.decode(bytes)
     for (const note of font.notes) this.warn(note)
     const mode = s.renderMode
-    if (mode >= 4) this.warn("Text used as a clipping path isn't applied")
     const fillIt = mode === 0 || mode === 2 || mode === 4 || mode === 6
     const strokeIt = mode === 1 || mode === 2 || mode === 5 || mode === 6
+    const clipIt = mode >= 4
+    if (clipIt) this.textClip ??= []
+    const draws = !this.skipText && !this.analysis
+    // embedded outlines also give widths when the PDF has none; they are only drawn on a real page
+    const shapeOf = font.shape ?? (draws ? await this.standardShapes(font) : null)
 
     for (const g of glyphs) {
       let advance = g.width ?? 0
+      const shape = shapeOf?.(g) ?? null
       if (font.type3) {
         if (mode !== 3 && !this.skipText) await this.type3Glyph(font, g, res)
+      } else if (shape && draws) {
+        if (g.width === null) {
+          advance = shape.width ?? 0
+          if (shape.width === undefined) this.unknownWidth = true
+        }
+        const m = mul(shape.matrix, mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(this.tm, mul(s.ctm, this.base))))
+        if ((fillIt || strokeIt) && shape.path.length) {
+          ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5])
+          // a real canvas fills a Path2D made once per glyph: one call instead of one per curve
+          let p2d: Path2D | undefined
+          if (this.realCanvas) p2d = shape.path2d ??= pathOf(shape.path)
+          else {
+            ctx.beginPath()
+            tracePath(ctx, shape.path)
+          }
+          ctx.globalCompositeOperation = s.blend
+          if (fillIt) {
+            ctx.globalAlpha = s.fillAlpha
+            ctx.fillStyle = css(s.fill.rgb)
+            if (p2d) ctx.fill(p2d, 'nonzero')
+            else ctx.fill('nonzero')
+          }
+          if (strokeIt) {
+            ctx.globalAlpha = s.strokeAlpha
+            ctx.strokeStyle = css(s.stroke.rgb)
+            ctx.lineWidth = (s.lineWidth * scaleOf(mul(s.ctm, this.base))) / (scaleOf(m) || 1)
+            if (p2d) ctx.stroke(p2d)
+            else ctx.stroke()
+          }
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.beginPath()
+          this.applyCtm()
+        }
+        if (clipIt) this.textClip!.push({ m, path: shape.path, w: 0 })
       } else if (g.text) {
         const fontString = `${font.italic ? 'italic ' : ''}${font.bold ? 'bold ' : ''}${drawSize}px ${font.family}`
         if (this.fontString !== fontString) {
@@ -487,9 +578,10 @@ export class Interpreter {
         }
         const natural = this.measure(fontString, g.text)
         if (g.width === null) {
-          advance = (natural / drawSize) * 1000
-          this.unknownWidth = true
+          advance = shape?.width ?? (natural / drawSize) * 1000
+          if (shape?.width === undefined) this.unknownWidth = true
         }
+        if (draws && shapeOf && !shape && g.text.trim() !== '' && !font.standard) this.warn('Some letters are shown with a similar font')
         if ((fillIt || strokeIt) && g.text.trim() !== '' && !this.skipText) {
           // a stand-in font's letters are rarely as wide as the original's: squeeze or stretch each to its slot
           let fit = 1
@@ -515,6 +607,10 @@ export class Interpreter {
           ctx.globalCompositeOperation = 'source-over'
           this.applyCtm()
         }
+        if (clipIt && g.text.trim() !== '') {
+          // ponytail: a letter without an outline clips as its box (the em square over its advance); exact only with outlines
+          this.textClip!.push({ m: mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(this.tm, mul(s.ctm, this.base))), path: null, w: advance / 1000 })
+        }
       }
       const tx = ((advance / 1000) * s.fontSize + s.charSpace + (g.space ? s.wordSpace : 0)) * s.hScale
       if (this.onGlyph && g.text) {
@@ -525,6 +621,24 @@ export class Interpreter {
       }
       this.tm = mul([1, 0, 0, 1, tx, 0], this.tm)
     }
+  }
+
+  /** ET after text in a clipping render mode: the union of those glyphs is intersected with the clip (PDF 9.3.6) */
+  private clipToText() {
+    const glyphs = this.textClip
+    this.textClip = null
+    if (!glyphs || this.analysis) return
+    const { ctx } = this
+    ctx.beginPath()
+    // canvas maps each point through the transform current when it is added, so one path can mix glyph matrices
+    for (const g of glyphs) {
+      ctx.setTransform(g.m[0], g.m[1], g.m[2], g.m[3], g.m[4], g.m[5])
+      if (g.path) tracePath(ctx, g.path)
+      else ctx.rect(0, -0.2, g.w, 1)
+    }
+    ctx.clip('nonzero')
+    ctx.beginPath()
+    this.applyCtm()
   }
 
   /** a Type 3 glyph is a little content stream, drawn in glyph space scaled up by the font matrix and size */

@@ -4,11 +4,14 @@ import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
 import { pageGeometry, renderPage } from '@ream/pdf-render'
 import { usedFonts } from '@ream/office-core'
 import { officeToPdf, type OfficeKind } from '@ream/tools/office-preview'
+import { installStandardFonts } from '@ream/tools/standard-fonts'
 
 // One worker for everything that looks at a file without changing it: page counts, thumbnails, page renders and
 // unlocking. The main thread never parses a PDF. Documents stay loaded here (a few at a time) so that thumbnails and
 // page renders of the same file don't parse it again. Office files are converted to a PDF once (the converters with
 // their default settings) and previewed as that PDF.
+
+installStandardFonts()
 
 export type PdfInfo =
   | { kind: 'ok'; pages: { width: number; height: number }[]; /** the file's index was wrong and the objects were found by scanning */ rebuilt: boolean }

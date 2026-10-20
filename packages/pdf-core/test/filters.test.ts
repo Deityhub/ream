@@ -94,6 +94,12 @@ describe('decodeStream filter chains', () => {
     expect(text(await decodeStream(s))).toBe('chained')
   })
 
+  test('Flate data followed by a stray byte (a line break counted in Length) still decodes; garbage alone is damaged', async () => {
+    const z = await deflate(enc('trailing'))
+    expect(text(await decodeStream(stream(Uint8Array.from([...z, 10]), name('FlateDecode'))))).toBe('trailing')
+    await expect(decodeStream(stream(enc('not flate at all'), name('FlateDecode')))).rejects.toThrow(/damaged/)
+  })
+
   test('image filters stop the chain and report what is left', async () => {
     const jpeg = Uint8Array.of(0xff, 0xd8, 0xff, 0xd9)
     const d = await decodeUntilImage(stream(await deflate(jpeg), [name('FlateDecode'), name('DCTDecode')]))

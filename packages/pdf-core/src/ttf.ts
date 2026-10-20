@@ -37,7 +37,7 @@ const u32 = (v: DataView, o: number) => v.getUint32(o)
 const tag = (b: Uint8Array, o: number) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3])
 
 /** the table directory of the font at `base` in the file (0 for a plain font) */
-function readTables(bytes: Uint8Array, base: number): Tables {
+export function readTables(bytes: Uint8Array, base = 0): Tables {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const count = u16(v, base + 4)
   const tables: Tables = new Map()

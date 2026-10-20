@@ -10,6 +10,11 @@ export interface Platform {
   imageFromRGBA(width: number, height: number, rgba: Uint8ClampedArray): CanvasImageSource
   /** decode a JPEG into RGBA pixels */
   decodeJpeg(bytes: Uint8Array): Promise<{ width: number; height: number; rgba: Uint8ClampedArray }>
+  /**
+   * TrueType files that stand in for Helvetica, Times or Courier when a PDF doesn't embed them (parts of one face, such
+   * as its latin and latin-ext subsets); without it, a similar system font is used
+   */
+  standardFont?(kind: 'sans' | 'serif' | 'mono', bold: boolean, italic: boolean): Promise<Uint8Array[]>
 }
 
 export const browserPlatform: Platform = {

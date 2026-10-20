@@ -1,7 +1,7 @@
 // Runs inside an Electron page (bundled by scripts/render-compare.ts): renders a PDF page with our renderer and
 // compares it with a reference raster of the same page made by another renderer.
 import { PdfDocument } from '@ream/pdf-core'
-import { pageGeometry, renderPage } from '@ream/pdf-render'
+import { browserPlatform, pageGeometry, renderPage } from '@ream/pdf-render'
 
 const bytesOf = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 const png = async (c: OffscreenCanvas) => {
@@ -66,4 +66,9 @@ export async function compare(pdfB64: string, refB64: string, page = 0) {
   }
 }
 
-;(globalThis as unknown as { Harness: unknown }).Harness = { compare }
+/** the bundled look-alikes for the standard fonts, as the app's workers have them */
+export function setFonts(fonts: Record<string, string[]>) {
+  browserPlatform.standardFont = async (kind, bold, italic) => (fonts[`${kind}${bold}${italic}`] ?? []).map(bytesOf)
+}
+
+;(globalThis as unknown as { Harness: unknown }).Harness = { compare, setFonts }

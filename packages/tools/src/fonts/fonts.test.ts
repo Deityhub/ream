@@ -4,6 +4,8 @@ import { FontBook, type InstalledFont } from './book.ts'
 import { downloadFreeFont } from './download.ts'
 import { closestFamily, weightOf, withoutWeight } from './match.ts'
 import { nodeFonts } from './node.ts'
+import { standardFonts } from './standard.ts'
+import { fontFamilyName } from '@ream/pdf-core'
 
 describe('finding the font a file asks for', () => {
   test('close names: weight and edition words drop, a different kind of type never matches', () => {
@@ -73,5 +75,17 @@ describe('free fonts', () => {
     asked.length = 0
     expect(await downloadFreeFont('Gill Sans Nova Light', fake)).toBeNull()
     expect(asked).toEqual(['https://api.fontsource.org/v1/fonts/gill-sans-nova-light', 'https://api.fontsource.org/v1/fonts/gill-sans-nova'])
+  })
+})
+
+describe('standard fonts for the renderer', () => {
+  test('Helvetica, Times and Courier get Arimo, Tinos and Cousine: latin and latin-ext, as TrueType', async () => {
+    const fonts = standardFonts(nodeFonts)
+    const bold = await fonts('sans', true, false)
+    expect(bold).toHaveLength(2)
+    expect(bold.map(fontFamilyName)).toEqual(['Arimo', 'Arimo'])
+    expect(fontFamilyName((await fonts('serif', false, true))[0])).toBe('Tinos')
+    expect(fontFamilyName((await fonts('mono', false, false))[0])).toBe('Cousine')
+    expect(await fonts('sans', true, false)).toBe(bold) // loaded once
   })
 })

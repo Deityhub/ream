@@ -3,7 +3,9 @@ import { renderPage } from '../src/index.ts'
 import { baseEncodings, glyphToUnicode, macRoman, standard, winAnsi } from '../src/encodings.ts'
 import { parseToUnicode } from '../src/cmap.ts'
 import { classify, loadFont, nameCandidates } from '../src/font.ts'
-import { fakeCtx, hex, onePage, stream } from './helpers.ts'
+import { fakeCtx, fakePlatform, hex, onePage, stream } from './helpers.ts'
+import { makeCff, makeTtf, makeType1 } from '../../pdf-core/test/ttf-helper.ts'
+import type { Platform } from '../src/platform.ts'
 
 describe('encodings', () => {
   test('every table has 256 entries', () => {
@@ -206,9 +208,13 @@ describe('showing text', () => {
     expect(both.drawn.map((d) => d.text)).toEqual(['A', 'stroke:A'])
   })
 
-  test('clip render modes are reported rather than silently ignored', async () => {
-    const { result } = await shown(SIMPLE, 'BT /F1 10 Tf 7 Tr (A) Tj ET')
-    expect(result.warnings).toContain("Text used as a clipping path isn't applied")
+  test('clip render modes clip what follows to the letters (a letter without an outline clips as its box)', async () => {
+    const { calls } = await shown(SIMPLE, 'q BT /F1 10 Tf 7 Tr 0 0 Td (A) Tj ET 0 0 100 100 re f Q')
+    const clip = calls.findIndex((c) => c[0] === 'clip')
+    expect(clip).toBeGreaterThan(-1)
+    expect(calls.slice(0, clip).some((c) => c[0] === 'rect' && c[3] === 0.5)).toBe(true) // the em box over the 500-unit advance
+    expect(calls.slice(clip).some((c) => c[0] === 'fill')).toBe(true)
+    expect(calls.some((c) => c[0] === 'fillText')).toBe(false) // 7 draws nothing itself
   })
 
   test('text is filled with the current colour, alpha and blend', async () => {
@@ -354,5 +360,98 @@ describe('Type 3 fonts', () => {
   test('a glyph that has no procedure is skipped without breaking the line', async () => {
     const { all } = await shown(font, 'BT /F1 10 Tf (abz) Tj ET', objects)
     expect(all('rect')).toHaveLength(1)
+  })
+})
+
+describe('embedded fonts: the letters are the font program\'s own shapes', () => {
+  const file = (bytes: Uint8Array, extra = '') => stream(`/Filter /ASCIIHexDecode ${extra}`, hex(...bytes))
+  const simple = (subtype: string, encoding = '/Encoding /WinAnsiEncoding') =>
+    `<< /Type /Font /Subtype /${subtype} /BaseFont /ABCDEF+Test /FirstChar 32 /LastChar 126 /Widths [${Array(95).fill(600).join(' ')}] ${encoding} /FontDescriptor 12 0 R >>`
+  const descriptor = (key: string, flags = 32) => `<< /Type /FontDescriptor /FontName /ABCDEF+Test /Flags ${flags} /${key} 11 0 R >>`
+
+  async function drawn(font: string, content: string, objects: Record<number, string>, platform?: Platform) {
+    const doc = await withFont(font, content, objects)
+    const f = fakeCtx()
+    const result = await renderPage(doc, 0, f.ctx, 100, { platform: platform ?? fakePlatform().platform })
+    // the first point of each glyph, with the transform it was drawn under
+    const glyphs = f.calls.flatMap((c, i) => {
+      if (c[0] !== 'moveTo' || f.calls[i - 1]?.[0] !== 'beginPath') return []
+      const tf = f.calls.slice(0, i).reverse().find((x) => x[0] === 'setTransform')!
+      return [{ at: c.slice(1) as number[], matrix: tf.slice(1) as number[] }]
+    })
+    return { ...f, result, glyphs }
+  }
+
+  test('a TrueType font: glyph paths in glyph space, scaled by size and placed by the text matrix; no system font, no note', async () => {
+    const { glyphs, all, result } = await drawn(simple('TrueType'), 'BT /F1 10 Tf 1 0 0 1 20 30 Tm (AA) Tj ET', { 11: file(makeTtf()), 12: descriptor('FontFile2') })
+    expect(all('fillText')).toEqual([])
+    expect(glyphs.map((g) => g.at)).toEqual([[50, 0], [50, 0]])
+    expect(glyphs[0].matrix).toEqual([0.01, 0, 0, -0.01, 20, 70])
+    expect(glyphs[1].matrix[4]).toBeCloseTo(26) // the PDF's 600 width at 10 pt
+    expect(all('fill').at(-1)).toEqual(['nonzero'])
+    expect(result.warnings).toEqual([])
+  })
+
+  test('which TrueType glyph a code is: Differences names through the Unicode cmap; symbol fonts at 0xF000 + code', async () => {
+    const zhe = await drawn(simple('TrueType', '/Encoding << /BaseEncoding /WinAnsiEncoding /Differences [65 /uni0416] >>'), 'BT /F1 10 Tf (A) Tj ET', { 11: file(makeTtf()), 12: descriptor('FontFile2') })
+    expect(zhe.glyphs.map((g) => g.at)).toEqual([[40, 0]])
+    const sym = await drawn(simple('TrueType', ''), 'BT /F1 10 Tf (A) Tj ET', { 11: file(makeTtf({ symbol: true })), 12: descriptor('FontFile2', 4) })
+    expect(sym.glyphs.map((g) => g.at)).toEqual([[50, 0]])
+  })
+
+  test('a letter the program lacks is drawn with a similar font, and the page says so', async () => {
+    const { all, glyphs, result } = await drawn(simple('TrueType'), 'BT /F1 10 Tf (AQ) Tj ET', { 11: file(makeTtf()), 12: descriptor('FontFile2') })
+    expect(glyphs).toHaveLength(1)
+    expect(all('fillText').map((c) => c[0])).toEqual(['Q'])
+    expect(result.warnings).toEqual(['Some letters are shown with a similar font'])
+  })
+
+  test('Type 1 (FontFile, its own encoding) and CFF (FontFile3 /Type1C)', async () => {
+    const t1 = makeType1()
+    const type1 = await drawn(simple('Type1', ''), 'BT /F1 10 Tf (AB) Tj ET', { 11: file(t1.bytes, `/Length1 ${t1.length1}`), 12: descriptor('FontFile') })
+    expect(type1.glyphs.map((g) => g.at)).toEqual([[50, 0], [0, 0]])
+    expect(type1.all('bezierCurveTo')).toHaveLength(2) // O is two flex curves
+    const cff = await drawn(simple('Type1'), 'BT /F1 10 Tf (A) Tj ET', { 11: file(makeCff(), '/Subtype /Type1C'), 12: descriptor('FontFile3') })
+    expect(cff.glyphs.map((g) => g.at)).toEqual([[50, 0]])
+    expect(cff.result.warnings).toEqual([])
+  })
+
+  test('CID fonts: CIDToGIDMap for TrueType, the charset for CID-keyed CFF; text without ToUnicode is still drawn', async () => {
+    const type0 = '<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Test /Encoding /Identity-H /DescendantFonts [13 0 R] >>'
+    const tt = await drawn(type0, 'BT /F1 10 Tf <0001> Tj ET', {
+      11: file(makeTtf()), 12: descriptor('FontFile2'), 14: file(Uint8Array.of(0, 0, 0, 2)),
+      13: '<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+Test /CIDToGIDMap 14 0 R /FontDescriptor 12 0 R >>',
+    })
+    expect(tt.glyphs.map((g) => g.at)).toEqual([[50, 0]])
+    expect(tt.result.warnings).toEqual([])
+    const cff = await drawn(type0, 'BT /F1 10 Tf <0065> Tj ET', {
+      11: file(makeCff({ cid: true }), '/Subtype /CIDFontType0C'), 12: descriptor('FontFile3'),
+      13: '<< /Type /Font /Subtype /CIDFontType0 /BaseFont /ABCDEF+Test /FontDescriptor 12 0 R >>',
+    })
+    expect(cff.glyphs.map((g) => g.at)).toEqual([[0.05, 0]])
+  })
+
+  test('a standard font the file does not embed is drawn with the platform\'s look-alike, advancing by its widths', async () => {
+    const { platform } = fakePlatform()
+    const asked: string[] = []
+    platform.standardFont = async (kind, bold, italic) => (asked.push(`${kind}${bold ? ' bold' : ''}${italic ? ' italic' : ''}`), [makeTtf()])
+    const helvetica = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'
+    const { glyphs, all, result } = await drawn(helvetica, 'BT /F1 10 Tf (AA) Tj ET', {}, platform)
+    expect(asked).toEqual(['sans bold'])
+    expect(all('fillText')).toEqual([])
+    expect(glyphs[1].matrix[4] - glyphs[0].matrix[4]).toBeCloseTo(6) // A is 600 wide in the look-alike
+    expect(result.warnings).toEqual([])
+    // other fonts keep the system's
+    const other = await drawn('<< /Type /Font /Subtype /Type1 /BaseFont /Futura >>', 'BT /F1 10 Tf (A) Tj ET', {}, platform)
+    expect(other.all('fillText')).toHaveLength(1)
+  })
+
+  test('text extraction and analysis never trace glyph outlines', async () => {
+    const { pageChars } = await import('../src/index.ts')
+    const doc = await withFont(simple('TrueType'), 'BT /F1 10 Tf (A) Tj ET', { 11: file(makeTtf()), 12: descriptor('FontFile2') })
+    const page = await pageChars(doc, 0)
+    expect(page.chars.map((c) => c.text)).toEqual(['A'])
+    expect(page.shapes.rules).toEqual([])
+    expect(page.shapes.fills).toEqual([])
   })
 })

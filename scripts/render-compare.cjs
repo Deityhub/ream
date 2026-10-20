@@ -1,5 +1,5 @@
 // Electron side of scripts/render-compare.ts.  Usage: electron render-compare.cjs <job.json>
-// job: { bundle: path, items: [{ name, pdf, ref, out }] }  ->  prints one JSON line of results
+// job: { bundle: path, items: [{ name, pdf, ref, out }], fonts: { [kind+bold+italic]: base64[] } }  ->  prints one JSON line of results
 const { app, BrowserWindow } = require('electron')
 const fs = require('node:fs')
 
@@ -8,6 +8,7 @@ app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false })
   await win.loadURL('about:blank')
   await win.webContents.executeJavaScript(fs.readFileSync(job.bundle, 'utf8'))
+  await win.webContents.executeJavaScript(`Harness.setFonts(${JSON.stringify(job.fonts ?? {})})`)
   const results = []
   for (const it of job.items) {
     const pdf = fs.readFileSync(it.pdf).toString('base64')

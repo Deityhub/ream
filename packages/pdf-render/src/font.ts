@@ -3,6 +3,7 @@ import { parseToUnicode, type ToUnicode } from './cmap.ts'
 import { baseEncodings, glyphToUnicode, standard, winAnsi } from './encodings.ts'
 import { numbers } from './function.ts'
 import type { Matrix } from './matrix.ts'
+import { embeddedFile, readProgram, type EmbeddedFile, type GlyphPath, type Program } from './outlines/index.ts'
 
 /** one character of a shown string, ready to be drawn and to advance the text position */
 export type Glyph = {
@@ -21,6 +22,9 @@ export type Type3 = { matrix: Matrix; procs: PdfDict; resources: PdfDict | null 
 
 export type FontKind = 'sans' | 'serif' | 'mono'
 
+/** a glyph outline and the matrix to text space; `width` (thousandths of the em) is the font's own advance, if known */
+export type GlyphShape = { path: GlyphPath; matrix: Matrix; width?: number; /** the path built once for a real canvas */ path2d?: Path2D }
+
 export type Font = {
   family: string
   bold: boolean
@@ -29,8 +33,10 @@ export type Font = {
   face: string
   kind: FontKind
   type3: Type3 | null
-  /** we can't draw the real glyph shapes, so a similar system font stands in */
-  substituted: boolean
+  /** the glyph's real shape from the embedded font program; null when there is none and a similar system font stands in */
+  shape?(g: Glyph): GlyphShape | null
+  /** a standard font the file doesn't embed: drawn with a bundled look-alike when the platform has one */
+  standard?: { kind: FontKind; bold: boolean; italic: boolean }
   decode(bytes: Uint8Array): Glyph[]
   /** reasons the text can only be approximate */
   notes: string[]
@@ -83,14 +89,13 @@ const STAND_INS: Record<string, string> = {
  * (/ReamFamily), else the embedded font's own family name, else the name read from BaseFont; an open stand-in for an
  * Office font gives that Office font's name.
  */
-async function faceOf(doc: PdfDocument, dict: PdfDict, desc: PdfDict | null, fromName: string): Promise<string> {
+function faceOf(doc: PdfDocument, dict: PdfDict, file: EmbeddedFile | null, fromName: string): string {
   const asked = doc.resolve(dict.get('ReamFamily'))
   if (asked instanceof PdfString) return decodeTextString(asked.bytes)
   let face = fromName
-  const file = desc && (['FontFile2', 'FontFile3'] as const).map((k) => doc.resolve(desc.get(k))).find((f) => f instanceof PdfStream)
-  if (file instanceof PdfStream) {
+  if (file?.kind === 'sfnt') {
     try {
-      face = fontFamilyName(await decodeStream(file)) ?? face
+      face = fontFamilyName(file.bytes) ?? face
     } catch {
       // a damaged font program keeps the name from BaseFont
     }
@@ -99,13 +104,71 @@ async function faceOf(doc: PdfDocument, dict: PdfDict, desc: PdfDict | null, fro
   return STAND_INS[base] ?? face
 }
 
+/** the standard 14 names (and Windows' names for them): fonts a reader is expected to have without embedding */
+const STANDARD = /^(Helvetica|Arial|Times|Courier|Symbol|ZapfDingbats)/i
+
+type SimpleEncoding = { symbolic: boolean; named: boolean; differences: Map<number, string>; base: string[] }
+
+/**
+ * Which glyph of the embedded program a single-byte code draws (PDF 9.6.5): a TrueType font goes through its cmap
+ * subtables, by Unicode from the glyph name when it can, else the Microsoft symbol (3,0) or Mac (1,0) tables by code;
+ * a Type 1 or CFF font by glyph name, else its own built-in encoding.
+ */
+function simpleShapes(program: Program, enc: SimpleEncoding): (g: Glyph) => GlyphShape | null {
+  const gidOf = (code: number): number | undefined => {
+    const name = enc.differences.get(code)
+    const text = (name !== undefined ? glyphToUnicode(name) : undefined) ?? enc.base[code] ?? ''
+    if ('cmap' in program) {
+      const uni = program.cmap(3, 1)
+      const sym = program.cmap(3, 0)
+      const mac = program.cmap(1, 0)
+      let g = 0
+      if (uni && text && !(enc.symbolic && sym && name === undefined && !enc.named)) g = uni(text.codePointAt(0)!)
+      if (!g && sym) for (const k of [code, 0xf000 + code, 0xf100 + code, 0xf200 + code]) if ((g = sym(k))) break
+      if (!g && mac) g = mac(code)
+      // no cmap at all: codes are glyph numbers
+      if (!g && !uni && !sym && !mac) g = code
+      return g || undefined
+    }
+    if (name !== undefined) return program.byName(name) ?? (text ? program.byUnicode(text) : undefined)
+    if (enc.named && !enc.symbolic && text) return program.byUnicode(text) ?? program.builtin?.(code)
+    return program.builtin?.(code) ?? (text ? program.byUnicode(text) : undefined)
+  }
+  return shapesBy(program, gidOf)
+}
+
+/** a CIDFontType2 maps CIDs to glyphs with CIDToGIDMap; a CID-keyed CFF font with its charset */
+async function cidShapes(doc: PdfDocument, program: Program, cidDict: PdfDict): Promise<(g: Glyph) => GlyphShape | null> {
+  if ('byCid' in program) return shapesBy(program, (cid) => program.byCid(cid))
+  const map = doc.resolve(cidDict.get('CIDToGIDMap'))
+  if (map instanceof PdfStream) {
+    const bytes = await decodeStream(map).catch(() => new Uint8Array(0))
+    return shapesBy(program, (cid) => (cid * 2 + 1 < bytes.length ? (bytes[cid * 2] << 8) | bytes[cid * 2 + 1] : undefined))
+  }
+  return shapesBy(program, (cid) => cid)
+}
+
+function shapesBy(program: Program, gidOf: (code: number) => number | undefined): (g: Glyph) => GlyphShape | null {
+  const seen = new Map<number, GlyphShape | null>()
+  return (g) => {
+    let shape = seen.get(g.code)
+    if (shape === undefined) {
+      const gid = gidOf(g.code)
+      // glyph 0 is the font's "missing" box: a similar system font does better
+      const path = gid ? program.glyph(gid) : null
+      shape = path ? { path, matrix: program.matrix, width: 'advance' in program ? program.advance(gid!) : undefined } : null
+      seen.set(g.code, shape)
+    }
+    return shape
+  }
+}
+
 const cache = new WeakMap<object, Promise<Font>>()
 
 /** used when a text operator names a font the page doesn't have */
 export const fallbackFont: Font = {
   ...classify('', 0),
   type3: null,
-  substituted: true,
   notes: ['A font is missing; a default one is used'],
   decode: (bytes) => Array.from(bytes, (c) => ({ text: winAnsi[c] ?? '', width: null, space: c === 32, code: c })),
 }
@@ -142,18 +205,22 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
     return typeof v === 'number' ? v : undefined
   }
   const embedded = !!desc && ['FontFile', 'FontFile2', 'FontFile3'].some((k) => desc.has(k))
-  const style = classify(baseFont, num('Flags') ?? 0, num('FontWeight'), num('ItalicAngle'))
-  style.face = await faceOf(doc, dict, desc, style.face)
+  const flags = num('Flags') ?? 0
+  const style = classify(baseFont, flags, num('FontWeight'), num('ItalicAngle'))
+  const file = subtype === 'Type3' ? null : await embeddedFile(doc, desc)
+  style.face = faceOf(doc, dict, file, style.face)
   const toUni = await toUnicodeOf(doc, dict)
 
   // code -> text: glyph names from the encoding first (they say which shape is drawn), then ToUnicode, then the base table
   const enc = doc.resolve(dict.get('Encoding'))
   let base: string[] = embedded ? winAnsi : standard
+  /** the file names a base encoding, so it, not the font program's own, says which glyph a code is */
+  let named = false
   const differences = new Map<number, string>()
-  if (enc instanceof PdfName && baseEncodings[enc.value]) base = baseEncodings[enc.value]
+  if (enc instanceof PdfName && baseEncodings[enc.value]) { base = baseEncodings[enc.value]; named = true }
   else if (isDict(enc)) {
     const b = nameOf(doc, enc.get('BaseEncoding'))
-    if (b && baseEncodings[b]) base = baseEncodings[b]
+    if (b && baseEncodings[b]) { base = baseEncodings[b]; named = true }
     const diff = doc.resolve(enc.get('Differences'))
     if (Array.isArray(diff)) {
       let code = 0
@@ -181,7 +248,7 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
     const procs = doc.resolve(dict.get('CharProcs'))
     const res = doc.resolve(dict.get('Resources'))
     return {
-      family: SANS, bold: false, italic: false, face: '', kind: 'sans' as const, substituted: false, notes,
+      family: SANS, bold: false, italic: false, face: '', kind: 'sans' as const, notes,
       type3: { matrix: fm, procs: isDict(procs) ? procs : new Map(), resources: isDict(res) ? res : null },
       decode: (bytes) =>
         Array.from(bytes, (c) => ({
@@ -194,11 +261,16 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
     }
   }
 
-  const symbolic = /symbol|dingbats/i.test(baseFont)
-  if (symbolic) notes.push('Symbol fonts are only approximated')
-  if (embedded || !/^(Helvetica|Arial|Times|Courier|Symbol|ZapfDingbats)/i.test(baseFont.replace(/^[A-Z]{6}\+/, ''))) notes.push('Fonts are shown with similar ones')
+  const program = file ? readProgram(file) : null
+  const bare = baseFont.replace(/^[A-Z]{6}\+/, '')
+  if (!program) {
+    if (/symbol|dingbats/i.test(baseFont)) notes.push('Symbol fonts are only approximated')
+    if (embedded || !STANDARD.test(bare)) notes.push('Fonts are shown with similar ones')
+  }
+  const shape = program ? simpleShapes(program, { symbolic: (flags & 4) !== 0, named, differences, base }) : undefined
   return {
-    ...style, type3: null, substituted: true, notes,
+    ...style, type3: null, notes, shape,
+    standard: !embedded && STANDARD.test(bare) && !/symbol|dingbats|narrow|condensed|compressed/i.test(bare) ? { kind: style.kind, bold: style.bold, italic: style.italic } : undefined,
     decode: (bytes) =>
       Array.from(bytes, (c) => {
         const w = widths && typeof first === 'number' ? widths[c - first] : undefined
@@ -220,7 +292,8 @@ async function type0(doc: PdfDocument, dict: PdfDict, baseFont: string): Promise
     return typeof v === 'number' ? v : undefined
   }
   const style = classify(baseFont || nameOf(doc, cidDict.get('BaseFont')) || '', num('Flags') ?? 0, num('FontWeight'), num('ItalicAngle'))
-  style.face = await faceOf(doc, dict, desc, style.face)
+  const file = await embeddedFile(doc, desc)
+  style.face = faceOf(doc, dict, file, style.face)
   const toUni = await toUnicodeOf(doc, dict)
 
   // /W: either  c [w1 w2 ...]  or  cFirst cLast w
@@ -249,11 +322,15 @@ async function type0(doc: PdfDocument, dict: PdfDict, baseFont: string): Promise
   const widthOf = (cidCode: number) => widthMap.get(cidCode) ?? ranges.find((r) => cidCode >= r.lo && cidCode <= r.hi)?.w ?? defaultWidth
 
   const lengths = toUni?.codeLengths.length ? toUni.codeLengths : [2]
-  const notes = ['Fonts are shown with similar ones']
-  let unmapped = false
+  // codes are CIDs only under the Identity CMaps; ponytail: other CMaps (embedded or predefined) keep the system font
+  const encoding = nameOf(doc, dict.get('Encoding'))
+  const program = file && (encoding === 'Identity-H' || encoding === 'Identity-V') ? readProgram(file) : null
+  const notes = program ? [] : ['Fonts are shown with similar ones']
+  let unmapped = !!program // drawn from the font program, unmapped text is still drawn: only extraction misses it
+  const shape = program ? await cidShapes(doc, program, cidDict) : undefined
 
   return {
-    ...style, type3: null, substituted: true, notes,
+    ...style, type3: null, notes, shape,
     decode(bytes) {
       const out: Glyph[] = []
       for (let i = 0; i < bytes.length; ) {

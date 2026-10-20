@@ -6,6 +6,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { assemble } from '../packages/pdf-core/test/helpers.ts'
 import { createImage, encodePng } from '../packages/image-core/src/index.ts'
+import { parseTtf, readTables } from '../packages/pdf-core/src/ttf.ts'
+import { makeCff, makeType1 } from '../packages/pdf-core/test/ttf-helper.ts'
+import { nodeFonts } from '../packages/tools/src/fonts/node.ts'
+import { standardFonts } from '../packages/tools/src/fonts/standard.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const out = resolve(process.argv[2] ?? join(root, '.render-compare'))
@@ -158,6 +162,50 @@ BT /F1 11 Tf 10 14 Td (Caf\\351 na\\357ve \\200 \\223quotes\\224) Tj ET`,
   },
 }
 
+// ---------- embedded fonts ----------
+// Real font programs come from this Mac's own fonts, read at run time (never committed); the small test fonts are made in code.
+const SYSTEM = '/System/Library/Fonts/Supplemental'
+const fontFile = (bytes: Uint8Array, extra = '') => stream(extra, latin1(bytes))
+/** a simple font of a real font file, widths from the file itself, WinAnsi codes */
+function realFont(path: string, key: 'FontFile2' | 'FontFile3', fileExtra: string, obj: number, bytesOf = (b: Uint8Array) => b) {
+  const raw = new Uint8Array(readFileSync(path))
+  const f = parseTtf(raw)
+  const widths = Array.from({ length: 95 }, (_, i) => Math.round((f.advance(f.glyphFor(32 + i)) / f.unitsPerEm) * 1000))
+  return {
+    font: `<< /Type /Font /Subtype /${key === 'FontFile2' ? 'TrueType' : 'Type1'} /BaseFont /${f.name} /FirstChar 32 /LastChar 126 /Widths [${widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${obj + 1} 0 R >>`,
+    objects: {
+      [obj + 1]: `<< /Type /FontDescriptor /FontName /${f.name} /Flags 32 /FontBBox [${f.bbox.join(' ')}] /ItalicAngle 0 /Ascent ${f.ascent} /Descent ${f.descent} /CapHeight ${f.capHeight} /StemV 80 /${key} ${obj + 2} 0 R >>`,
+      [obj + 2]: fontFile(bytesOf(raw), fileExtra),
+    },
+  }
+}
+function embeddedFonts(): Case {
+  const georgia = realFont(`${SYSTEM}/Georgia.ttf`, 'FontFile2', '', 20)
+  const stix = realFont(`${SYSTEM}/STIXGeneral.otf`, 'FontFile3', '/Subtype /Type1C', 30, (b) => readTables(b).get('CFF ')!)
+  const t1 = makeType1()
+  const objects: Record<number, string> = {
+    ...georgia.objects, ...stix.objects,
+    10: georgia.font, 11: stix.font,
+    12: '<< /Type /Font /Subtype /Type1 /BaseFont /Test /FirstChar 65 /LastChar 66 /Widths [600 700] /FontDescriptor 13 0 R >>',
+    13: '<< /Type /FontDescriptor /FontName /Test /Flags 32 /FontBBox [0 0 700 900] /ItalicAngle 0 /Ascent 900 /Descent 0 /CapHeight 700 /StemV 80 /FontFile 14 0 R >>',
+    14: stream(`/Length1 ${t1.length1} /Length2 ${t1.length2} /Length3 ${t1.bytes.length - t1.length1 - t1.length2}`, latin1(t1.bytes)),
+    15: '<< /Type /Font /Subtype /Type0 /BaseFont /Test /Encoding /Identity-H /DescendantFonts [16 0 R] >>',
+    16: '<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Test /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /DW 600 /FontDescriptor 17 0 R >>',
+    17: '<< /Type /FontDescriptor /FontName /Test /Flags 32 /FontBBox [0 0 700 900] /ItalicAngle 0 /Ascent 900 /Descent 0 /CapHeight 700 /StemV 80 /FontFile3 18 0 R >>',
+    18: stream('/Subtype /CIDFontType0C', latin1(makeCff({ cid: true }))),
+  }
+  return {
+    box: '[0 0 300 200]',
+    resources: '/Font << /F1 10 0 R /F2 11 0 R /F3 12 0 R /F4 15 0 R >>',
+    objects,
+    content: `BT /F1 22 Tf 10 170 Td (Hamburgefonstiv &?) Tj 0 -26 Td /F1 11 Tf (The quick brown fox jumps over the lazy dog.) Tj
+/F2 22 Tf 0 -34 Td (Hamburgefonstiv &?) Tj 0 -24 Td /F2 11 Tf (The quick brown fox jumps over the lazy dog.) Tj
+/F3 30 Tf 0 -44 Td (ABAB) Tj /F4 30 Tf 90 0 Td <0065006400650068> Tj ET
+q BT /F1 48 Tf 7 Tr 200 15 Td (Ag) Tj ET 0 0 0.8 rg 0 0 300 80 re f Q`,
+  }
+}
+cases.embeddedFonts = embeddedFonts()
+
 async function main() {
   const items: { name: string; pdf: string; ref: string; out: string }[] = []
   const add = (name: string, bytes: Uint8Array) => {
@@ -179,8 +227,12 @@ async function main() {
   // bundle the harness for the Electron page
   const bundle = join(out, 'harness.js')
   execFileSync(join(root, 'node_modules/.bin/esbuild'), [join(root, 'scripts/render-harness.ts'), '--bundle', '--format=iife', '--platform=browser', `--outfile=${bundle}`, '--log-level=error'], { cwd: root })
+  // the renderer draws unembedded Helvetica, Times and Courier with the app's bundled look-alikes, as the app does
+  const standard = standardFonts(nodeFonts)
+  const fonts: Record<string, string[]> = {}
+  for (const kind of ['sans', 'serif', 'mono'] as const) for (const bold of [false, true]) for (const italic of [false, true]) fonts[`${kind}${bold}${italic}`] = (await standard(kind, bold, italic)).map((b) => Buffer.from(b).toString('base64'))
   const job = join(out, 'job.json')
-  writeFileSync(job, JSON.stringify({ bundle, items }))
+  writeFileSync(job, JSON.stringify({ bundle, items, fonts }))
   const r = spawnSync(join(root, 'node_modules/.bin/electron'), [join(root, 'scripts/render-compare.cjs'), job], { encoding: 'utf8', maxBuffer: 1 << 28 })
   const line = r.stdout.split('\n').find((l) => l.startsWith('RESULTS '))
   if (!line) throw new Error('Electron produced no results:\n' + r.stdout.slice(-2000) + r.stderr.slice(-2000))
@@ -194,9 +246,10 @@ async function main() {
 
   // Regression guard: the most pixels that may differ noticeably from CoreGraphics, with a little headroom over today's
   // numbers. Not checked: `annotation` and `cropOffset` (sips draws those wrongly; ours matches Chromium's engine). The
-  // remaining `shapes` gap is CMYK (macOS and our fit use different print profiles); text and the fixtures differ only in
-  // letter shapes, since embedded fonts are drawn with similar system fonts.
-  const limits: Record<string, number> = { shapes: 5.5, starFill: 1, clip: 1, alpha: 2, shading: 1, images: 1.5, form: 1, jpeg: 1, text: 8, 'fixture-cups': 4, 'fixture-chromium': 3 }
+  // remaining `shapes` gap is CMYK (macOS and our fit use different print profiles). Embedded fonts are drawn from their own
+  // outlines, so the fixtures and `embeddedFonts` differ by macOS's hinting and anti-aliasing of small text only; `text`
+  // uses the standard fonts unembedded, which we draw with Arimo, Tinos and Cousine where macOS has Helvetica and Times.
+  const limits: Record<string, number> = { shapes: 5.5, starFill: 1, clip: 1, alpha: 2, shading: 1, images: 1.5, form: 1, jpeg: 1, text: 10.5, embeddedFonts: 4, 'fixture-cups': 4.5, 'fixture-chromium': 1.5 }
   const over = results.filter((x) => limits[x.name] !== undefined && (x.error || x.badPercent > limits[x.name]))
   for (const x of over) console.error(`FAIL ${x.name}: ${x.error ?? `${x.badPercent}% differ, limit ${limits[x.name]}%`}`)
   if (over.length) process.exitCode = 1
