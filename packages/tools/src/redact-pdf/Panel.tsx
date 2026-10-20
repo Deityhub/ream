@@ -3,6 +3,7 @@ import { Icon } from '@ream/ui'
 import { CropSurface } from '../CropSurface.tsx'
 import { WHOLE, type Rect } from '../rect.ts'
 import type { PanelProps } from '../panels.ts'
+import { usePageZoom } from '../PageZoom.tsx'
 import { areasFor, defaultOptions, pagesToRedact, type RedactPdfOptions as O } from './areas.ts'
 
 export { defaultOptions }
@@ -36,6 +37,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file])
+
+  // the page's zoom (the whole page in view to start with)
+  const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
 
   if (!file || !pdfHost) return <Waiting actions={actions}>Add a PDF, then drag on a page to mark what to redact.</Waiting>
   if (failed) return <Waiting actions={actions}>This PDF can't be shown here, so there's nothing to mark on.</Waiting>
@@ -82,16 +86,19 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
           <button type="button" onClick={() => go(1)} disabled={current >= pages.length - 1} aria-label="Next page" className={button}>
             Next
           </button>
+          <span className="ml-auto">{zoom.bar}</span>
         </div>
-        <CropSurface rect={active === null ? null : areas[active]} onChange={choose} dim={false} inside={<span className="block size-full" style={{ background: 'rgb(0 0 0 / 0.6)' }} />} className="mx-auto" style={{ aspectRatio: `${size.width} / ${size.height}`, width: `min(100%, calc(62vh * ${size.width / size.height}))` }}>
-          <PdfPage key={current} file={file} page={current} renderWidth={900} />
-          {areas.map((r, i) =>
-            i === active ? null : (
-              // the black the saved file will have, in both themes (not a theme colour)
-              <span key={i} className="pointer-events-none absolute outline-2 outline-dashed outline-accent" style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%`, background: 'rgb(0 0 0 / 0.8)' }} />
-            ),
-          )}
-        </CropSurface>
+        <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
+          <CropSurface rect={active === null ? null : areas[active]} onChange={choose} dim={false} inside={<span className="block size-full" style={{ background: 'rgb(0 0 0 / 0.6)' }} />} className="mx-auto" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+            <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+            {areas.map((r, i) =>
+              i === active ? null : (
+                // the black the saved file will have, in both themes (not a theme colour)
+                <span key={i} className="pointer-events-none absolute outline-2 outline-dashed outline-accent" style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%`, background: 'rgb(0 0 0 / 0.8)' }} />
+              ),
+            )}
+          </CropSurface>
+        </div>
         <p className="text-xs text-muted">Drag on the page to mark an area. With an area selected, drag inside it to move it or a corner to resize it.</p>
       </div>
 

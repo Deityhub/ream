@@ -52,7 +52,7 @@ export function PdfPage({ file, page, renderWidth, className = '', onWarnings }:
 }
 
 /** A page that reserves its space up front and only renders once it scrolls near the viewport. */
-export function LazyPdfPage({ file, page, size, renderWidth, onWarnings }: { file: Blob; page: number; size: { width: number; height: number }; renderWidth: number; onWarnings?: (w: string[]) => void }) {
+export function LazyPdfPage({ file, page, size, renderWidth, width, onWarnings }: { file: Blob; page: number; size: { width: number; height: number }; renderWidth: number; /** CSS pixels across; the full width of its container when not given */ width?: number; onWarnings?: (w: string[]) => void }) {
   const box = useRef<HTMLDivElement>(null)
   const [near, setNear] = useState(false)
   useEffect(() => {
@@ -63,7 +63,7 @@ export function LazyPdfPage({ file, page, size, renderWidth, onWarnings }: { fil
     return () => io.disconnect()
   }, [])
   return (
-    <div ref={box} style={{ aspectRatio: `${size.width} / ${size.height}` }} className="w-full overflow-hidden bg-white shadow-sm ring-1 ring-line">
+    <div ref={box} style={{ aspectRatio: `${size.width} / ${size.height}`, width: width ?? '100%' }} className="mx-auto shrink-0 overflow-hidden bg-white shadow-sm ring-1 ring-line">
       {near && <PdfPage file={file} page={page} renderWidth={renderWidth} onWarnings={onWarnings} />}
     </div>
   )

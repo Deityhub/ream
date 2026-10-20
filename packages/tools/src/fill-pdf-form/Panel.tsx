@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import type { FormField, FormInfo } from '@ream/pdf-core'
 import { inputClass } from '../fields.tsx'
 import type { PanelProps } from '../panels.ts'
+import { usePageZoom } from '../PageZoom.tsx'
 import { defaultOptions, unwritable, type FillFormOptions as O } from './values.ts'
 
 export { defaultOptions }
@@ -53,6 +54,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
     return () => cancelAnimationFrame(id)
   }, [focus, current])
 
+  // the page's zoom (the whole page in view to start with)
+  const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
+
   if (!file || !pdfHost) return <Waiting actions={actions}>Add a PDF form, then type into its fields on the page.</Waiting>
   if (failed) return <Waiting actions={actions}>This PDF can't be shown here, so its fields can't be filled in.</Waiting>
   if (!pages || !form) return <Waiting actions={actions}>Reading the form…</Waiting>
@@ -95,18 +99,21 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
           <button type="button" onClick={() => go(1)} disabled={current >= pages.length - 1} aria-label="Next page" className={button}>
             Next
           </button>
+          <span className="ml-auto">{zoom.bar}</span>
         </div>
-        <div className="relative mx-auto [container-type:size]" style={{ aspectRatio: `${size.width} / ${size.height}`, width: `min(100%, calc(70vh * ${size.width / size.height}))` }}>
-          <PdfPage key={current} file={file} page={current} renderWidth={1000} />
-          {form.fields.map((f, i) =>
-            f.unsupported
-              ? null
-              : f.widgets.map((w, k) => {
-                  if (w.page !== current || !w.box) return null
-                  const style: CSSProperties = { left: `${w.box.x * 100}%`, top: `${w.box.y * 100}%`, width: `${w.box.w * 100}%`, height: `${w.box.h * 100}%`, fontSize: `min(${w.box.h * 60}cqh, 2.6cqh)` }
-                  return <FieldControl key={`${i}-${k}`} id={idOf(i, k)} field={f} state={w.state} value={valueOf(f)} onChange={(v) => set(f, v)} className={onPage} style={style} />
-                }),
-          )}
+        <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
+          <div className="relative mx-auto [container-type:size]" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+            <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+            {form.fields.map((f, i) =>
+              f.unsupported
+                ? null
+                : f.widgets.map((w, k) => {
+                    if (w.page !== current || !w.box) return null
+                    const style: CSSProperties = { left: `${w.box.x * 100}%`, top: `${w.box.y * 100}%`, width: `${w.box.w * 100}%`, height: `${w.box.h * 100}%`, fontSize: `min(${w.box.h * 60}cqh, 2.6cqh)` }
+                    return <FieldControl key={`${i}-${k}`} id={idOf(i, k)} field={f} state={w.state} value={valueOf(f)} onChange={(v) => set(f, v)} className={onPage} style={style} />
+                  }),
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted">Click a field on the page to fill it in. The list of fields has every one, including any you can't reach on the page.</p>
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CropSurface } from '../CropSurface.tsx'
 import type { PanelProps } from '../panels.ts'
+import { usePageZoom } from '../PageZoom.tsx'
 import { SignaturePad } from './SignaturePad.tsx'
 import { defaultOptions, defaultRect, pagesToSign, type SignPdfOptions as O } from './place.ts'
 
@@ -46,6 +47,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
     return () => URL.revokeObjectURL(url)
   }, [o.image])
 
+  // the page's zoom (the whole page in view to start with)
+  const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
+
   if (!file || !pdfHost) return <Waiting actions={actions}>Add a PDF, then make a signature and place it on a page.</Waiting>
   if (failed) return <Waiting actions={actions}>This PDF can't be shown here, so a signature can't be placed on it.</Waiting>
   if (!pages) return <Waiting actions={actions}>Reading the pages…</Waiting>
@@ -79,17 +83,20 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
           <button type="button" onClick={() => go(1)} disabled={current >= pages.length - 1} aria-label="Next page" className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40">
             Next
           </button>
+          <span className="ml-auto">{zoom.bar}</span>
         </div>
-        <CropSurface
-          rect={o.rect}
-          onChange={(rect) => onChange({ ...o, rect })}
-          dim={false}
-          inside={here && preview ? <img src={preview} alt="" className="size-full object-contain" /> : undefined}
-          className="mx-auto"
-          style={{ aspectRatio: `${size.width} / ${size.height}`, width: `min(100%, calc(62vh * ${size.width / size.height}))` }}
-        >
-          <PdfPage key={current} file={file} page={current} renderWidth={900} />
-        </CropSurface>
+        <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
+          <CropSurface
+            rect={o.rect}
+            onChange={(rect) => onChange({ ...o, rect })}
+            dim={false}
+            inside={here && preview ? <img src={preview} alt="" className="size-full object-contain" /> : undefined}
+            className="mx-auto"
+            style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}
+          >
+            <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+          </CropSurface>
+        </div>
         <p className="text-xs text-muted">Drag on the page to draw the box for the signature, drag inside it to move it, or drag a corner to resize it. The signature fits inside the box.</p>
       </div>
 

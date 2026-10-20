@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Icon } from '@ream/ui'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { Button, Icon, ZoomBar, renderWidthFor, useWidth, useZoom, zoomedWidth, type Zoom } from '@ream/ui'
 import { formatBytes, type FileData, type Tool } from '@ream/core'
 import type { PreviewState } from './previewController'
 import { toFile } from './download'
@@ -21,6 +21,9 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
   const hasResult = preview.kind !== 'idle'
   const shown = tab === 'result' && hasResult ? 'result' : 'original'
   const original = files[Math.min(active, files.length - 1)]
+  // one zoom for the pages shown (original or result); the page view says how big that is, or null when it shows no pages
+  const [zoom, setZoom] = useZoom('width', original)
+  const [percent, setPercent] = useState<number | null>(null)
 
   if (!original) {
     return (
@@ -32,8 +35,9 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
 
   const busy = preview.kind === 'ready' && preview.computing
   return (
+    <ZoomContext.Provider value={{ zoom, report: setPercent }}>
     <section aria-label="Preview" className="space-y-3 rounded-xl border border-line bg-surface p-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Preview of" className="inline-flex rounded-lg border border-line p-0.5 text-sm">
           {(['original', 'result'] as const).map((t) => (
             <button
@@ -53,6 +57,11 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
             Updating…
           </span>
         )}
+        {percent !== null && (
+          <span className="ml-auto">
+            <ZoomBar zoom={zoom} onChange={setZoom} percent={percent} fitPage />
+          </span>
+        )}
       </div>
 
       {shown === 'original' ? (
@@ -63,6 +72,7 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
         </div>
       )}
     </section>
+    </ZoomContext.Provider>
   )
 }
 
@@ -175,17 +185,29 @@ function PdfView({ file, was }: { file: File; was?: number }) {
   const [warnings, setWarnings] = useState<string[]>([])
   const noteWarnings = useCallback((w: string[]) => w.length && setWarnings((prev) => [...new Set([...prev, ...w])]), [])
   useEffect(() => setWarnings([]), [file])
+  // the zoom chosen in the pane's header: pages fill the width to start with, or fit whole in the visible height
+  const { zoom, report } = useContext(ZoomContext)
+  const [scroller, room] = useWidth()
+  const pages = info !== 'loading' && info.kind === 'ok' ? info.pages : []
+  const visible = typeof window === 'undefined' ? 600 : Math.max(200, window.innerHeight - PANE_CHROME)
+  const widthOf = (size: { width: number; height: number }) => zoomedWidth(zoom, size, { width: room, height: visible })
+  const percent = pages[0] && room ? (widthOf(pages[0]) / (pages[0].width * (4 / 3))) * 100 : null
+  useEffect(() => report(percent), [report, percent])
+  useEffect(() => () => report(null), [report])
   return (
     <figure className="space-y-2">
       {info === 'loading' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm text-muted">Reading…</p>}
       {info !== 'loading' && info.kind === 'error' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">{info.message}</p>}
       {info !== 'loading' && info.kind === 'encrypted' && <p className="rounded-lg border border-line bg-surface-2 p-6 text-center text-sm">This PDF is password protected.</p>}
       {info !== 'loading' && info.kind === 'ok' && (
-        <div className="max-h-[calc(100vh-10rem)] space-y-3 overflow-auto rounded-lg border border-line bg-surface-2 p-3">
-          {info.pages.map((size, i) => (
-            <LazyPdfPage key={i} file={file} page={i} size={size} renderWidth={PAGE_WIDTH} onWarnings={noteWarnings} />
-          ))}
-        </div>
+        <>
+          <div ref={scroller} className="flex max-h-[calc(100vh-12rem)] flex-col gap-3 overflow-auto rounded-lg border border-line bg-surface-2 p-3">
+            {info.pages.map((size, i) => {
+              const w = room ? widthOf(size) : undefined
+              return <LazyPdfPage key={i} file={file} page={i} size={size} width={zoom === 'width' ? undefined : w} renderWidth={renderWidthFor(w ?? PAGE_WIDTH)} onWarnings={noteWarnings} />
+            })}
+          </div>
+        </>
       )}
       {warnings.length > 0 && <p className="rounded-md bg-warning-soft px-2 py-1 text-xs text-warning">Preview is approximate: {warnings.map((w) => w.replace(/^./, (c) => c.toLowerCase())).join('; ')}.</p>}
       <Facts name={file.name} parts={[pageCount(info, file.name) ?? undefined, sizeText(file.size, was)]} />
@@ -194,6 +216,11 @@ function PdfView({ file, was }: { file: File; was?: number }) {
 }
 
 const PAGE_WIDTH = 800
+/** what of the window's height isn't the page area: the header, the tabs and the pane's padding (fit page fits in the rest) */
+const PANE_CHROME = 12 * 16 + 24
+
+/** the zoom of the pane's page view, set in the pane's header */
+const ZoomContext = createContext<{ zoom: Zoom; report: (percent: number | null) => void }>({ zoom: 'width', report: () => {} })
 
 const sizeText = (size: number, was?: number) => (was !== undefined && was !== size ? `${formatBytes(size)} (was ${formatBytes(was)})` : formatBytes(size))
 

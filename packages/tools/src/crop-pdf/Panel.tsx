@@ -3,6 +3,7 @@ import { inputClass } from '../fields.tsx'
 import { CropSurface } from '../CropSurface.tsx'
 import { WHOLE, isWhole, withSide, type Rect } from '../rect.ts'
 import type { PanelProps } from '../panels.ts'
+import { usePageZoom } from '../PageZoom.tsx'
 import { MM } from '../images-to-pdf/sizes.ts'
 import { defaultOptions, pagesToCrop, type CropPdfOptions as O } from './margins.ts'
 
@@ -34,6 +35,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file])
+
+  // the page's zoom (the whole page in view to start with)
+  const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
 
   if (!file || !pdfHost) return <Waiting actions={actions}>Add a PDF, then drag on a page to choose the area to keep.</Waiting>
   if (failed) return <Waiting actions={actions}>This PDF can't be shown here, so it can't be cropped by dragging.</Waiting>
@@ -75,10 +79,13 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
           <button type="button" onClick={() => go(1)} disabled={current >= pages.length - 1} aria-label="Next page" className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40">
             Next
           </button>
+          <span className="ml-auto">{zoom.bar}</span>
         </div>
-        <CropSurface rect={rect} onChange={setRect} className="mx-auto" style={{ aspectRatio: `${size.width} / ${size.height}`, width: `min(100%, calc(62vh * ${size.width / size.height}))` }}>
-          <PdfPage key={current} file={file} page={current} renderWidth={900} />
-        </CropSurface>
+        <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
+          <CropSurface rect={rect} onChange={setRect} className="mx-auto" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+            <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+          </CropSurface>
+        </div>
       </div>
 
       <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
