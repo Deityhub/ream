@@ -10,6 +10,6 @@ export const compressPdf: Tool = {
   action: 'Compress PDF',
   multiple: false,
   minFiles: 1,
-  preview: 'live',
+  preview: 'size',
   status: 'ready',
 }

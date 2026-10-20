@@ -11,6 +11,7 @@ import { PasswordDialog } from './PasswordDialog'
 import { inspectPdf, markUnlocked, readFontFile, readImageMetadata, readOfficeFonts, readPdfMetadata, readPdfOutline, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
+import { SizeEstimate } from './SizeEstimate'
 import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 
@@ -45,12 +46,14 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const [options, setOptions] = useState<unknown>(null)
   const [active, setActive] = useState(0)
   const job = useRef<Running | null>(null)
-  const showPreview = !!tool && tool.status === 'ready' && tool.preview !== 'none'
+  // the preview pane; tools whose preview is only the new size (compress) run it too, and show the size beside the options
+  const showPreview = !!tool && tool.status === 'ready' && (tool.preview === 'live' || tool.preview === 'manual')
+  const sizeOnly = !!tool && tool.status === 'ready' && tool.preview === 'size'
   // password protected PDFs found among the files, in the order they were added
   const [locked, setLocked] = useState<File[]>([])
   const waiting = files.filter((f) => locked.includes(f)) // in the order the files are listed, not the order they were inspected
   const asking = waiting[0]
-  const preview = usePreview(tool, files, options, showPreview && state.kind !== 'running' && !asking)
+  const preview = usePreview(tool, files, options, (showPreview || sizeOnly) && state.kind !== 'running' && !asking)
 
   useEffect(() => {
     let live = true
@@ -153,7 +156,10 @@ export function ToolPage({ tool }: { tool?: Tool }) {
     ? 'mx-auto max-w-2xl'
     : showPreview
       ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[18rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]'
-      : 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[22rem_minmax(0,1fr)]'
+      : panel?.placesActions
+        ? 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[22rem_minmax(0,1fr)]'
+        : // no preview and no surface of its own (metadata, compress): the options card stays a readable width
+          'grid gap-6 lg:grid-cols-[18rem_minmax(0,40rem)] 2xl:grid-cols-[22rem_minmax(0,44rem)]'
   const railPos = empty ? '' : showPreview ? 'lg:col-start-1 lg:row-start-1' : 'lg:col-start-1 lg:row-start-1'
   const optionsPos = showPreview ? 'order-2 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-4 xl:order-3 xl:col-start-3 xl:row-span-1' : 'lg:col-start-2 lg:row-start-1 lg:row-span-2'
   const canvasPos = 'order-3 lg:col-start-1 lg:row-start-2 xl:col-start-2 xl:row-start-1 xl:order-2'
@@ -245,6 +251,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
               ) : (
                 <>
                   {panelBody}
+                  {sizeOnly && files.length >= tool.minFiles && !asking && <SizeEstimate files={files} preview={preview.state} onRefresh={preview.refresh} />}
                   {actionBar}
                 </>
               )}

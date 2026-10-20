@@ -10,6 +10,6 @@ export const metadata: Tool = {
   action: 'Save metadata',
   multiple: false,
   minFiles: 1,
-  preview: 'live',
+  preview: 'none',
   status: 'ready',
 }

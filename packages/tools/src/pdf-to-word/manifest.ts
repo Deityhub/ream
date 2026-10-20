@@ -10,6 +10,6 @@ export const pdfToWord: Tool = {
   action: 'Save as Word',
   multiple: false,
   minFiles: 1,
-  preview: 'live',
+  preview: 'none',
   status: 'ready',
 }

@@ -10,6 +10,6 @@ export const flattenPdfTool: Tool = {
   action: 'Flatten PDF',
   multiple: false,
   minFiles: 1,
-  preview: 'live',
+  preview: 'none',
   status: 'ready',
 }

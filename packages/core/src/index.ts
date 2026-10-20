@@ -20,8 +20,11 @@ export type Tool = {
   /** takes several input files; false means one */
   multiple: boolean
   minFiles: number
-  /** live: re-run on every change and show the result; manual: only on request; none: the options panel already shows it */
-  preview: 'live' | 'manual' | 'none'
+  /**
+   * live: re-run on every change and show the result; manual: only on request; size: re-run on every change but show only
+   * the result's size, beside the options; none: no preview (the options panel shows what is needed, or nothing is)
+   */
+  preview: 'live' | 'manual' | 'size' | 'none'
   status: 'ready' | 'soon'
 }
 

@@ -61,13 +61,13 @@ Dependency direction: `core` <- `pdf-core` / `image-core` <- `pdf-render` <- `to
 
 Each tool is a folder in `packages/tools/src/<tool-id>/`:
 
-- `manifest.ts`: a `Tool` (`id`, `title`, `description`, `category` `'pdf' | 'image'`, `icon`, `accept`, `action`, `multiple`, `minFiles`, `preview: 'live' | 'manual' | 'none'`, `status: 'ready' | 'soon'`). Register it in `index.ts`.
+- `manifest.ts`: a `Tool` (`id`, `title`, `description`, `category` `'pdf' | 'image'`, `icon`, `accept`, `action`, `multiple`, `minFiles`, `preview: 'live' | 'manual' | 'size' | 'none'`, `status: 'ready' | 'soon'`). Register it in `index.ts`.
 - `run.ts`: **pure bytes to bytes** `RunFn<Options>(files, options, { progress })`. It runs in a Web Worker in the app and directly in tests. No DOM, no React, no globals. Throw `UserError` (or a subclass) for anything the user can act on; any other error shows a generic message.
 - `Panel.tsx`: the options UI, exporting `Panel` and `defaultOptions`. Panels receive `{ options, onChange, files, readMetadata?, readImageMetadata?, pdfHost? }`. They must not import from `apps/web`; anything they need from the app (page sizes, a rendered page, metadata) arrives through those injected props.
 - Register `run.ts` in `runners.ts` and `Panel.tsx` in `panels.ts` (both lazy, so the UI bundle never pulls engine code). Constants used by both a panel and a run live in a **constants-only** module (for example `image-formats.ts`, `images-to-pdf/sizes.ts`, `rect.ts`) so panels do not import engine code, and `run.ts` does not import React.
 - Shared helpers: `pdf-common.ts` (`loadPdf`, `pdfFile`, `selectPages`, `rgb`, `spotCentre`, `clampInt`), `image-common.ts` (`decodeFile`, `encodeFile`), `fields.tsx` (`inputClass`, `RangeField`, `SpotPicker`, `FormatFields`), `CropSurface.tsx` + `rect.ts` (drag-to-select).
 - Option shapes are plain serialisable objects. Percentages and selections are stored as fractions so they do not depend on pixel sizes.
-- Tools that use `preview: 'none'` (Crop image, Crop PDF) show their own interactive surface as the preview and get the wide options layout.
+- `preview`: `live` and `manual` show the Original/Result pane. `size` (Compress PDF) runs the same live preview but shows only the new size beside the options (`SizeEstimate.tsx`); Run still reuses a fresh result. `none` has no pane: tools with their own surface (Crop image, Crop PDF, Sign) set `placesActions` and get the wide layout; the others (Edit metadata, Flatten, PDF to Word) get files and an options card of readable width.
 
 Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata, watermark-image, blur-image, filters-image, meme, organize-pdf, bookmarks-pdf, repair-pdf, flatten-pdf, pdf-to-text, pdf-to-image, pdf-to-word, pdf-to-excel, pdf-to-powerpoint, excel-to-pdf, powerpoint-to-pdf.
 
