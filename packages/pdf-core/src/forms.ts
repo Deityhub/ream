@@ -27,8 +27,20 @@ export type FormField = {
   page: number | null
   /** where it is on that page: left, bottom, right, top in points */
   rect: [number, number, number, number] | null
+  /** every place the field is shown (a radio button each, or a field repeated on several pages) */
+  widgets: FieldWidget[]
+  /** a choice that also takes text of one's own */
+  editable: boolean
   /** the form says people can't fill it in with these tools (several choices at once, files, ...) */
   unsupported: boolean
+}
+
+/** one place a field is shown: its page and its box as fractions of the page as displayed (rotation applied, y from the top) */
+export type FieldWidget = {
+  page: number | null
+  box: { x: number; y: number; w: number; h: number } | null
+  /** radio buttons and checkboxes: the value this widget stands for */
+  state: string | null
 }
 
 export type FormInfo = {
@@ -44,6 +56,7 @@ const PASSWORD = 1 << 13
 const RADIO = 1 << 15
 const PUSH = 1 << 16
 const COMBO = 1 << 17
+const EDIT = 1 << 18
 const MULTI_SELECT = 1 << 21
 const FILE_SELECT = 1 << 20
 const COMB = 1 << 24
@@ -61,6 +74,10 @@ export type Terminal = {
   widgets: Widget[]
   /** an inheritable attribute, from the field or the nearest group above it */
   attr(key: (typeof INHERITED)[number]): PdfObj
+  /** the field the form lists in its place, when the pages show this copy instead (see `terminalFields`) */
+  replaces?: PdfRef
+  /** for a field taken from the pages: the topmost field above it, which the form's list should name */
+  top?: PdfRef
 }
 
 export const acroForm = (doc: PdfDocument): PdfDict | null => {
@@ -112,7 +129,69 @@ export function terminalFields(doc: PdfDocument): Terminal[] {
     })
   }
   for (const f of top) visit(f, [], '')
+  adoptPageWidgets(doc, form, out)
   return out
+}
+
+/**
+ * Some files list one copy of each field in the form and show another on the pages (an editor rewrote one and not the
+ * other). Viewers show and fill the page's widgets, so a field whose widgets are on no page takes the page widgets of
+ * the same name, and page widgets with a name the form lacks become fields of their own.
+ */
+function adoptPageWidgets(doc: PdfDocument, form: PdfDict | null, out: Terminal[]) {
+  const known = new Set<PdfDict>()
+  for (const t of out) for (const w of t.widgets) known.add(w.dict)
+  const shown = new Set<PdfDict>()
+  const orphans: { ref: PdfRef | null; dict: PdfDict }[] = []
+  for (const p of doc.pages()) {
+    const annots = doc.resolve(p.dict.get('Annots'))
+    for (const a of Array.isArray(annots) ? annots : []) {
+      const d = doc.resolve(a)
+      if (!isDict(d) || !isName(doc.resolve(d.get('Subtype')), 'Widget')) continue
+      shown.add(d)
+      if (!known.has(d)) orphans.push({ ref: a instanceof PdfRef ? a : null, dict: d })
+    }
+  }
+  if (!orphans.length) return
+  // the chain of groups above a widget, top first, by /Parent
+  const chainOf = (d: PdfDict): PdfDict[] => {
+    const chain = [d]
+    for (let p = doc.resolve(d.get('Parent')); isDict(p) && chain.length < 32 && !chain.includes(p); p = doc.resolve(p.get('Parent'))) chain.unshift(p)
+    return chain
+  }
+  const byName = new Map(out.map((t) => [t.name, t]))
+  for (const o of orphans) {
+    const chain = chainOf(o.dict)
+    // a widget without a name of its own belongs to the field above it
+    const fieldChain = o.dict.has('T') ? chain : chain.slice(0, -1)
+    const name_ = fieldChain.map((d) => textOf(doc, d.get('T'))).filter(Boolean).join('.')
+    if (!name_) continue
+    const fieldDict = fieldChain[fieldChain.length - 1]
+    const fieldRef = o.dict.has('T') ? o.ref : ((o.dict.get('Parent') instanceof PdfRef ? o.dict.get('Parent') : null) as PdfRef | null)
+    const attr: Terminal['attr'] = (key) => {
+      for (let i = fieldChain.length - 1; i >= 0; i--) if (fieldChain[i].has(key)) return doc.resolve(fieldChain[i].get(key))
+      return doc.resolve(key === 'DA' || key === 'Q' ? form?.get(key) : undefined)
+    }
+    // the topmost field above the widget, which the form's list should name
+    let top: PdfRef | null = o.ref
+    for (let d: PdfObj = o.dict, i = 0; isDict(d) && d.get('Parent') instanceof PdfRef && i < 32; i++) {
+      top = d.get('Parent') as PdfRef
+      d = doc.resolve(top)
+    }
+    const listed = byName.get(name_)
+    if (listed && !listed.widgets.some((w) => shown.has(w.dict))) {
+      // the form's copy is shown nowhere: the page's copy takes its place
+      const t: Terminal = { ...listed, ref: fieldRef, dict: fieldDict, widgets: [o], attr, replaces: listed.ref ?? undefined, top: top ?? undefined }
+      out[out.indexOf(listed)] = t
+      byName.set(name_, t)
+    } else if (listed && listed.dict === fieldDict) listed.widgets.push(o) // another widget of a field taken from the page
+    else if (!listed) {
+      const t: Terminal = { name: name_, ref: fieldRef, dict: fieldDict, widgets: [o], attr, top: top ?? undefined }
+      out.push(t)
+      byName.set(name_, t)
+    }
+    // ponytail: a page widget whose name the form uses for a field shown elsewhere is left out; merge them if files need it
+  }
 }
 
 const num = (v: PdfObj) => (typeof v === 'number' ? v : 0)
@@ -157,16 +236,38 @@ function options(doc: PdfDocument, t: Terminal, kind: FieldKind): { value: strin
   })
 }
 
+/** a rectangle in page user space as fractions of the page as displayed (rotation applied, y from the top) */
+function displayedBox(doc: PdfDocument, page: number, r: [number, number, number, number]): FieldWidget['box'] {
+  const { box, rotate } = doc.pageBox(doc.pages()[page])
+  const [w, h] = [box[2] - box[0], box[3] - box[1]]
+  if (w <= 0 || h <= 0) return null
+  // user space -> displayed points from the top left, as the renderer turns pages
+  const at = (x: number, y: number): [number, number] => {
+    const [u, v] = [x - box[0], y - box[1]]
+    return rotate === 90 ? [v, u] : rotate === 180 ? [w - u, v] : rotate === 270 ? [h - v, w - u] : [u, h - v]
+  }
+  const [W, H] = rotate % 180 === 90 ? [h, w] : [w, h]
+  const [a, b] = [at(r[0], r[1]), at(r[2], r[3])]
+  return { x: Math.min(a[0], b[0]) / W, y: Math.min(a[1], b[1]) / H, w: Math.abs(a[0] - b[0]) / W, h: Math.abs(a[1] - b[1]) / H }
+}
+
 /** the form's fields as plain data, for a panel to show */
 export function readForm(doc: PdfDocument): FormInfo {
   const form = acroForm(doc)
   const xfa = !!form && form.has('XFA')
   const pageOf = new Map<number, number>()
+  const pageOfDict = new Map<PdfDict, number>()
   const pages = doc.pages()
   pages.forEach((p, i) => {
     const annots = doc.resolve(p.dict.get('Annots'))
-    if (Array.isArray(annots)) for (const a of annots) if (a instanceof PdfRef && !pageOf.has(a.num)) pageOf.set(a.num, i)
+    if (!Array.isArray(annots)) return
+    for (const a of annots) {
+      if (a instanceof PdfRef && !pageOf.has(a.num)) pageOf.set(a.num, i)
+      const d = doc.resolve(a)
+      if (isDict(d) && !pageOfDict.has(d)) pageOfDict.set(d, i)
+    }
   })
+  const widgetPage = (w: Widget) => (w.ref ? pageOf.get(w.ref.num) : undefined) ?? pageOfDict.get(w.dict) ?? null
   const fields = terminalFields(doc).map((t): FormField => {
     const kind = kindOf(t)
     const ff = num(t.attr('Ff'))
@@ -180,7 +281,12 @@ export function readForm(doc: PdfDocument): FormInfo {
     } else if (kind === 'radio') value = v instanceof PdfName && v.value !== 'Off' ? v.value : ''
     else if (kind === 'text' || kind === 'choice') value = Array.isArray(v) ? textOf(doc, v[0]) : isDict(v) ? '' : textOf(doc, v)
     const maxLen = t.attr('MaxLen')
-    const page = first?.ref ? (pageOf.get(first.ref.num) ?? null) : t.ref ? (pageOf.get(t.ref.num) ?? null) : null
+    const page = first ? widgetPage(first) : t.ref ? (pageOf.get(t.ref.num) ?? null) : null
+    const widgets = t.widgets.map((w): FieldWidget => {
+      const p = widgetPage(w)
+      const r = rectOf(doc, w)
+      return { page: p, box: p !== null && r ? displayedBox(doc, p, r) : null, state: kind === 'radio' || kind === 'checkbox' ? (onStates(doc, w)[0] ?? null) : null }
+    })
     return {
       name: t.name,
       kind,
@@ -194,6 +300,8 @@ export function readForm(doc: PdfDocument): FormInfo {
       maxLength: typeof maxLen === 'number' && maxLen > 0 ? maxLen : null,
       page,
       rect: first ? rectOf(doc, first) : null,
+      widgets,
+      editable: kind === 'choice' && !!(ff & EDIT),
       unsupported: kind === 'signature' || kind === 'button' || !!(ff & (MULTI_SELECT | FILE_SELECT | RICH)) || (kind === 'checkbox' && !first),
     }
   })
@@ -333,6 +441,12 @@ export async function fillForm(doc: PdfDocument, values: FormValues): Promise<Ui
       if (touched && (ff & READ_ONLY)) throw new PdfRangeError(`The field "${t.name}" is read only.`)
       const field = t.ref ? e.edit(t.ref) : null
       if (kind === 'text' || kind === 'choice') {
+        if (touched) {
+          const text = String(given)
+          const max = t.attr('MaxLen')
+          if (kind === 'text' && typeof max === 'number' && max > 0 && [...text].length > max) throw new PdfRangeError(`The field "${t.name}" takes at most ${max} characters.`)
+          if (kind === 'choice' && text && !(ff & EDIT) && !options(doc, t, kind).some((o) => o.value === text)) throw new PdfRangeError(`"${text}" is not one of the choices of "${t.name}".`)
+        }
         if (touched && field) field.set('V', encodeTextString(String(given)))
         const text = shownText(doc, t, kind, touched ? String(given) : undefined)
         // untouched fields are redrawn only when the file asked viewers to (or never had a picture)
@@ -355,15 +469,24 @@ export async function fillForm(doc: PdfDocument, values: FormValues): Promise<Ui
         }
       }
     }
-    // every field now has a picture, so viewers needn't redraw them
+    // every field now has a picture, so viewers needn't redraw them; and the form lists the copies the pages show
     if (form) {
       const r = doc.catalog().get('AcroForm')
-      if (r instanceof PdfRef) e.edit(r).delete('NeedAppearances')
-      else {
-        const copy = new Map(form)
-        copy.delete('NeedAppearances')
-        e.catalog.set('AcroForm', copy)
+      const target = r instanceof PdfRef ? e.edit(r) : new Map(form)
+      target.delete('NeedAppearances')
+      const listed = doc.resolve(form.get('Fields'))
+      const swap = new Map<number, PdfRef>()
+      const extra: PdfRef[] = []
+      for (const t of terminals) {
+        if (t.replaces && t.top) swap.set(t.replaces.num, t.top)
+        else if (t.top && !t.replaces) extra.push(t.top)
       }
+      if (swap.size || extra.length) {
+        const fields = (Array.isArray(listed) ? listed : []).map((f) => (f instanceof PdfRef && swap.has(f.num) ? swap.get(f.num)! : f))
+        for (const x of extra) if (!fields.some((f) => f instanceof PdfRef && f.num === x.num)) fields.push(x)
+        target.set('Fields', fields)
+      }
+      if (!(r instanceof PdfRef)) e.catalog.set('AcroForm', target)
     }
   })
 }

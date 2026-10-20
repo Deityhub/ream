@@ -39,7 +39,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M6 ✅ | Image edit | Watermark image, blur or hide parts, filters, meme maker |
 | M7 ✅ | PDF advanced | Organize pages, Repair, Flatten, PDF → text/Markdown, Bookmarks, TrueType embedding (watermark in any script) |
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
-| M7.5 | PDF redaction and forms | Redact PDF (removed for good, not covered) |
+| M7.5 | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -91,6 +91,12 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **Annotations:** comments, links and form fields whose rectangle meets an area are removed, the fields with their values.
   - **Hidden data:** "Remove document properties and hidden data" (on by default) also drops the title and other document information, XMP metadata, page thumbnails and private application data. Bookmarks, other pages' content and attachments stay.
   - **Not done:** finding text to redact (areas are drawn by hand), and text that is part of a scanned picture (that is wiped as pixels like any picture). Checked with pypdf's text extraction and Chromium's viewer on Chromium-printed pages.
+- **Fill PDF form:** fields are filled on the page, or from the list of every field beside it.
+  - **What works:** text (multi-line, password, comb, maximum length), tick boxes, radio buttons and lists (drop-down or with text of one's own). Values already in the file show when it opens, and fields left alone stay exactly as they were. Each changed field gets a new picture, so every viewer shows it.
+  - **Not filled:** read-only fields stay as they are. Signature fields are not signed (Sign PDF adds a visible signature). Push buttons, lists that take several entries, file fields and rich text are left alone. XFA forms (an XML kind made by Adobe LiveCycle) can't be filled.
+  - **Letters:** values take the letters of the form's Western European fonts (Windows-1252) only, and others are flagged before saving.
+  - **Copies:** a file whose form lists other copies of its fields than the pages show is filled where the pages show them, and the form is pointed at those.
+  - **Not checked:** opening the result in Microsoft Office or Adobe Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7b limits
 

@@ -14,6 +14,7 @@ export const runners: Record<string, () => Promise<{ run: RunFn<any> }>> = {
   'page-numbers': () => import('./page-numbers/run.ts'),
   'crop-pdf': () => import('./crop-pdf/run.ts'),
   'redact-pdf': () => import('./redact-pdf/run.ts'),
+  'fill-pdf-form': () => import('./fill-pdf-form/run.ts'),
   metadata: () => import('./metadata/run.ts'),
   'extract-images': () => import('./extract-images/run.ts'),
   'compress-image': () => import('./compress-image/run.ts'),

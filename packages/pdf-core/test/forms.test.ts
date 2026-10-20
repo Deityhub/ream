@@ -35,6 +35,51 @@ describe('readForm', () => {
     expect(f.sig.unsupported).toBe(true)
   })
 
+  test('every widget of a field, as a box on the page as displayed, with the state it stands for', async () => {
+    const f = byName(readForm(await load()).fields)
+    // the page is 300 x 400: the name field at [20 340 200 360] sits near the top
+    expect(f.name.widgets).toEqual([{ page: 0, box: { x: 20 / 300, y: 40 / 400, w: 180 / 300, h: 20 / 400 }, state: null }])
+    expect(f.size.widgets.map((w) => w.state)).toEqual(['S', 'L'])
+    expect(f.size.widgets.every((w) => w.page === 0 && w.box !== null)).toBe(true)
+  })
+
+  test('boxes follow the page rotation; values inherited from a parent field are read', async () => {
+    const doc = await PdfDocument.load(
+      assemble([
+        [1, '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] >> >>'],
+        [2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'],
+        [3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Rotate 90 /Annots [6 0 R] >>'],
+        [5, '<< /FT /Tx /T (parent) /V (From the parent) /Kids [6 0 R] >>'],
+        [6, '<< /Type /Annot /Subtype /Widget /Parent 5 0 R /Rect [0 0 50 20] /P 3 0 R >>'],
+      ]).bytes,
+    )
+    const [field] = readForm(doc).fields
+    expect(field.value).toBe('From the parent')
+    // turned a quarter clockwise: user x runs down the displayed page, user y across it (displayed 100 wide, 200 tall)
+    expect(field.widgets[0].box).toEqual({ x: 0, y: 0, w: 0.2, h: 0.25 })
+  })
+
+  test('a form that lists one copy of a field while the page shows another fills the one on the page', async () => {
+    const doc = await PdfDocument.load(
+      assemble([
+        [1, '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] /DA (/Helv 0 Tf 0 g) >> >>'],
+        [2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'],
+        [3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Annots [6 0 R 7 0 R] >>'],
+        [5, '<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (old copy) /Rect [0 0 50 20] >>'],
+        [6, '<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (shown) /Rect [0 0 50 20] /P 3 0 R >>'],
+        [7, '<< /Type /Annot /Subtype /Widget /FT /Tx /T (extra) /Rect [60 0 110 20] /P 3 0 R >>'],
+      ]).bytes,
+    )
+    const f = byName(readForm(doc).fields)
+    expect(f.name).toMatchObject({ value: 'shown', page: 0 })
+    expect(f.extra.page).toBe(0)
+    const out = await load(await fillForm(doc, { name: 'new', extra: 'x' }))
+    expect(byName(readForm(out).fields).name.value).toBe('new')
+    const fields = (out.resolve((out.resolve(out.catalog().get('AcroForm')) as Map<string, never>).get('Fields')) as { num: number }[]).map((r) => r.num)
+    const annots = (out.resolve(out.pages()[0].dict.get('Annots')) as { num: number }[]).map((r) => r.num)
+    expect(fields.sort()).toEqual(annots.sort())
+  })
+
   test('a file without a form, and an XFA form, are reported', async () => {
     const plain = await PdfDocument.load((await import('./helpers.ts')).classicPdf(['x']))
     expect(readForm(plain)).toEqual({ fields: [], xfa: false })
@@ -43,6 +88,13 @@ describe('readForm', () => {
 })
 
 describe('fillForm', () => {
+  test('a text longer than the field allows, and a choice that is not offered, are refused', async () => {
+    await expect(fillForm(await load(), { code: '12345' })).rejects.toThrow(/at most 4 characters/)
+    await expect(fillForm(await load(), { country: 'Spain' })).rejects.toThrow(/not one of the choices/)
+    // clearing a choice is fine
+    expect(byName(readForm(await load(await fillForm(await load(), { country: '' }))).fields).country.value).toBe('')
+  })
+
   test('values are saved and read back, and the text shows in the field', async () => {
     const out = await fillForm(await load(), { name: 'Jean Dupont', notes: 'First line\nSecond line', code: '1234', country: 'it' })
     const doc = await load(out)

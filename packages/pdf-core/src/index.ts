@@ -1,7 +1,7 @@
 export { PdfDocument, type Page, type LoadOptions } from './document.ts'
 export { merge, extract, remove, split, rotate, compose, decryptPdf } from './ops.ts'
 export { readOutline, writeOutline, remapOutline, namedDestinations, explicitDestination, type OutlineItem } from './outline.ts'
-export { readForm, fillForm, terminalFields, type FormField, type FormInfo, type FormValues, type FieldKind } from './forms.ts'
+export { readForm, fillForm, terminalFields, type FormField, type FieldWidget, type FormInfo, type FormValues, type FieldKind } from './forms.ts'
 export { appearanceMatrix, normalAppearance, normalAppearanceRef, isVisibleAnnotation, type Matrix6 } from './annot.ts'
 export { flattenPdf, type FlattenOptions } from './flatten.ts'
 export { editDocument, type Editing } from './rewrite.ts'

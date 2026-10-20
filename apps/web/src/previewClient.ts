@@ -1,7 +1,7 @@
 import { officeKind } from './usePdfInfo'
-import type { FontFileInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
+import type { FontFileInfo, FormInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult } from './previewWorker'
 
-export type { FontFileInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult }
+export type { FontFileInfo, FormInfo, ImageMetadata, OutlineItem, PdfInfo, RenderedPage, UnlockResult }
 
 let worker: Worker | undefined
 let seq = 0
@@ -69,6 +69,7 @@ export const readPdfMetadata = (file: Blob) => withDoc<Record<string, string>>(f
 
 /** the bookmarks of a PDF, read in the worker */
 export const readPdfOutline = (file: Blob) => withDoc<OutlineItem[]>(file, { op: 'outline' })
+export const readPdfForm = (file: Blob) => withDoc<FormInfo>(file, { op: 'form' })
 
 // Rendered pages are kept briefly so a thumbnail and a bigger preview of the same page, or a re-mounted component,
 // don't render twice. Oldest entries are closed to give the memory back.

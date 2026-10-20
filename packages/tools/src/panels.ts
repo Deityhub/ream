@@ -1,12 +1,14 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { MetadataSummary } from '@ream/image-core'
-import type { OutlineItem } from '@ream/pdf-core'
+import type { FormInfo, OutlineItem } from '@ream/pdf-core'
 
 /** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
 export type PdfHost = {
   pages(file: File): Promise<{ width: number; height: number }[]>
   /** the bookmarks of a PDF (0-based pages) */
   outline(file: File): Promise<OutlineItem[]>
+  /** the form fields with every place they are shown */
+  form(file: File): Promise<FormInfo>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
   PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number }>
@@ -47,6 +49,7 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'page-numbers': () => import('./page-numbers/Panel.tsx'),
   'crop-pdf': () => import('./crop-pdf/Panel.tsx'),
   'redact-pdf': () => import('./redact-pdf/Panel.tsx'),
+  'fill-pdf-form': () => import('./fill-pdf-form/Panel.tsx'),
   metadata: () => import('./metadata/Panel.tsx'),
   'extract-images': () => import('./extract-images/Panel.tsx'),
   'compress-image': () => import('./compress-image/Panel.tsx'),

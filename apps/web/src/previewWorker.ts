@@ -1,5 +1,5 @@
 import { UserError } from '@ream/core'
-import { PdfDocument, PdfPasswordError, decryptPdf, fontFaces, readInfo, readOutline, woffToSfnt, type FontFaceInfo, type OutlineItem } from '@ream/pdf-core'
+import { PdfDocument, PdfPasswordError, decryptPdf, fontFaces, readForm, readInfo, readOutline, woffToSfnt, type FontFaceInfo, type FormInfo, type OutlineItem } from '@ream/pdf-core'
 import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
 import { pageGeometry, renderPage } from '@ream/pdf-render'
 import { usedFonts } from '@ream/office-core'
@@ -19,7 +19,7 @@ export type PdfInfo =
   | { kind: 'error'; message: string }
 
 export type UnlockResult = { kind: 'unlocked'; bytes: Uint8Array } | { kind: 'wrong' } | { kind: 'error'; message: string }
-export type { OutlineItem }
+export type { FormInfo, OutlineItem }
 export type ImageMetadata = MetadataSummary | null
 export type RenderedPage = { bitmap: ImageBitmap; width: number; height: number; warnings: string[] }
 /** a font file someone added: its faces, and the file itself (a web font unpacked to TrueType or OpenType) */
@@ -29,6 +29,7 @@ type Request =
   | { id: number; op: 'inspect'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'metadata'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
+  | { id: number; op: 'form'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
   | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
@@ -92,6 +93,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     if (req.op === 'inspect') post({ id: req.id, ok: true, result: await inspect(req.docId, req.bytes, req.office) })
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'outline') post({ id: req.id, ok: true, result: readOutline(await getDoc(req.docId, req.bytes, req.office)) })
+    else if (req.op === 'form') post({ id: req.id, ok: true, result: readForm(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })
     else if (req.op === 'officeFonts') post({ id: req.id, ok: true, result: await usedFonts(req.bytes) })
     else if (req.op === 'fontFile') {

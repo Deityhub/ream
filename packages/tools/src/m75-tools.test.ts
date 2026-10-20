@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import type { FileData } from '@ream/core'
-import { PdfDocument } from '@ream/pdf-core'
+import { PdfDocument, readForm } from '@ream/pdf-core'
+import { formPdf } from '../../pdf-core/test/helpers.ts'
 import { extractText } from '@ream/pdf-render'
 import { fakePlatform } from '../../pdf-render/test/helpers.ts'
 import { run as redact } from './redact-pdf/run.ts'
 import { defaultOptions as redactDefaults } from './redact-pdf/areas.ts'
+import { run as fill } from './fill-pdf-form/run.ts'
+import { unwritable } from './fill-pdf-form/values.ts'
 
 const ctx = { progress: () => {} }
 const chromium: FileData = { name: 'chromium.pdf', type: 'application/pdf', bytes: new Uint8Array(readFileSync(new URL('../../pdf-core/test/fixtures/chromium.pdf', import.meta.url))) }
@@ -35,5 +38,26 @@ describe('redact-pdf', () => {
 
   test('nothing marked is a clear error', async () => {
     await expect(redact([chromium], redactDefaults, ctx, platform)).rejects.toThrow(/mark what to redact/)
+  })
+})
+
+describe('fill-pdf-form', () => {
+  const form: FileData = { name: 'form.pdf', type: 'application/pdf', bytes: formPdf() }
+  const fields = async (f: FileData) => Object.fromEntries(readForm(await PdfDocument.load(f.bytes)).fields.map((x) => [x.name, x.value]))
+
+  test('changed fields are filled; the values already in the file stay', async () => {
+    const [out] = await fill([form], { values: { notes: 'Two\nlines', agree: true, size: 'L', country: 'it' } }, ctx)
+    expect(out.name).toBe('form-filled.pdf')
+    expect(await fields(out)).toMatchObject({ name: 'Ann', notes: 'Two\nlines', agree: true, size: 'L', country: 'it' })
+    // and the filled file can be filled again, changing what was there
+    const [again] = await fill([out], { values: { name: 'Bea', agree: false } }, ctx)
+    expect(await fields(again)).toMatchObject({ name: 'Bea', agree: false, size: 'L' })
+  })
+
+  test('letters the form font cannot show, files without fields and XFA forms get clear messages', async () => {
+    expect(unwritable('Café Łódź € Łx')).toEqual(['Ł', 'ź'])
+    await expect(fill([form], { values: { name: 'Łukasz' } }, ctx)).rejects.toThrow(/can't show Ł/)
+    await expect(fill([chromium], { values: {} }, ctx)).rejects.toThrow(/no form fields/)
+    await expect(fill([{ ...form, bytes: formPdf('/XFA [(a) 5 0 R]') }], { values: {} }, ctx)).resolves.toHaveLength(1)
   })
 })
