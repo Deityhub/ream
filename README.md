@@ -95,6 +95,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **What works:** text (multi-line, password, comb, maximum length), tick boxes, radio buttons and lists (drop-down or with text of one's own). Values already in the file show when it opens, and fields left alone stay exactly as they were. Each changed field gets a new picture, so every viewer shows it.
   - **Not filled:** read-only fields stay as they are. Signature fields are not signed (Sign PDF adds a visible signature). Push buttons, lists that take several entries, file fields and rich text are left alone. XFA forms (an XML kind made by Adobe LiveCycle) can't be filled.
   - **Letters:** values take the letters of the form's Western European fonts (Windows-1252) only, and others are flagged before saving.
+  - **Radio buttons:** buttons of one field that stand for different values work as a radio group (choosing one turns the others off), even when the file has lost its radio flag, as Acrobat treats them. Tick boxes are separate unless they are widgets of the same field, which by the PDF rules always match.
   - **Lock the answers:** draws the values into the pages and removes the fields, so they can't be changed. Comments stay.
   - **Copies:** a file whose form lists other copies of its fields than the pages show is filled where the pages show them, and the form is pointed at those.
   - **Not checked:** opening the result in Microsoft Office or Adobe Acrobat. It was checked with pypdf and Chromium's viewer.

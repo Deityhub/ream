@@ -80,6 +80,37 @@ describe('readForm', () => {
     expect(fields.sort()).toEqual(annots.sort())
   })
 
+  test('buttons of one field with different values are a radio group even without the radio flag; separate tick boxes stay separate', async () => {
+    const box = (rect: string, state: string, extra = '') => `<< /Type /Annot /Subtype /Widget /Rect [${rect}] /P 3 0 R /AS /Off /AP << /N << /${state} 20 0 R /Off 21 0 R >> >> ${extra} >>`
+    const doc = await PdfDocument.load(
+      assemble([
+        [1, '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R 8 0 R 9 0 R] >> >>'],
+        [2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'],
+        [3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Annots [6 0 R 7 0 R 8 0 R 9 0 R] >>'],
+        // a group whose radio flag an editor dropped: two buttons, two values
+        [5, '<< /FT /Btn /T (group) /V /Off /Kids [6 0 R 7 0 R] >>'],
+        [6, box('0 0 10 10', 'Yes', '/Parent 5 0 R')],
+        [7, box('20 0 30 10', 'No', '/Parent 5 0 R')],
+        // two tick boxes with the same on value, but fields of their own
+        [8, box('40 0 50 10', 'On', '/FT /Btn /T (first)')],
+        [9, box('60 0 70 10', 'On', '/FT /Btn /T (second)')],
+        [20, '<< /Length 0 >>\nstream\n\nendstream'],
+        [21, '<< /Length 0 >>\nstream\n\nendstream'],
+      ]).bytes,
+    )
+    const f = byName(readForm(doc).fields)
+    expect(f.group).toMatchObject({ kind: 'radio', options: [{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }] })
+    expect(f.group.widgets.map((w) => w.state)).toEqual(['Yes', 'No'])
+    expect([f.first.kind, f.second.kind]).toEqual(['checkbox', 'checkbox'])
+    const as = (d: PdfDocument) => (d.resolve(d.pages()[0].dict.get('Annots')) as unknown[]).map((a) => ((d.resolve(a as never) as Map<string, { value: string }>).get('AS')!).value)
+    // choosing one button turns the other off, and back
+    const yes = await load(await fillForm(doc, { group: 'Yes', first: true }))
+    expect(as(yes)).toEqual(['Yes', 'Off', 'On', 'Off'])
+    const no = await load(await fillForm(yes, { group: 'No' }))
+    expect(as(no)).toEqual(['Off', 'No', 'On', 'Off'])
+    expect(byName(readForm(no).fields).group.value).toBe('No')
+  })
+
   test('a file without a form, and an XFA form, are reported', async () => {
     const plain = await PdfDocument.load((await import('./helpers.ts')).classicPdf(['x']))
     expect(readForm(plain)).toEqual({ fields: [], xfa: false })

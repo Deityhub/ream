@@ -196,14 +196,19 @@ function adoptPageWidgets(doc: PdfDocument, form: PdfDict | null, out: Terminal[
 
 const num = (v: PdfObj) => (typeof v === 'number' ? v : 0)
 
-export function kindOf(t: Terminal): FieldKind {
+export function kindOf(doc: PdfDocument, t: Terminal): FieldKind {
   const ft = t.attr('FT')
   const ff = num(t.attr('Ff'))
   if (isName(ft, 'Tx')) return 'text'
   if (isName(ft, 'Ch')) return 'choice'
   if (isName(ft, 'Sig')) return 'signature'
-  if (isName(ft, 'Btn')) return ff & PUSH ? 'button' : ff & RADIO ? 'radio' : 'checkbox'
-  return 'text'
+  if (!isName(ft, 'Btn')) return 'text'
+  if (ff & PUSH) return 'button'
+  if (ff & RADIO) return 'radio'
+  // buttons of one field that stand for different values are a radio group, whatever the flag says: viewers
+  // (Acrobat among them) treat them so, and some editors drop the flag when they save
+  const states = new Set(t.widgets.map((w) => onStates(doc, w)[0]).filter(Boolean))
+  return states.size > 1 ? 'radio' : 'checkbox'
 }
 
 /** the names of the appearance states a widget has, besides Off */
@@ -269,7 +274,7 @@ export function readForm(doc: PdfDocument): FormInfo {
   })
   const widgetPage = (w: Widget) => (w.ref ? pageOf.get(w.ref.num) : undefined) ?? pageOfDict.get(w.dict) ?? null
   const fields = terminalFields(doc).map((t): FormField => {
-    const kind = kindOf(t)
+    const kind = kindOf(doc, t)
     const ff = num(t.attr('Ff'))
     const v = t.attr('V')
     const first = t.widgets[0]
@@ -434,7 +439,7 @@ export async function fillForm(doc: PdfDocument, values: FormValues): Promise<Ui
     const needAll = !!form && doc.resolve(form.get('NeedAppearances')) === true
     const fonts = new Map<string, FontLook>()
     for (const t of terminals) {
-      const kind = kindOf(t)
+      const kind = kindOf(doc, t)
       const ff = num(t.attr('Ff'))
       const given = normalise(values[t.name], kind)
       const touched = given !== undefined

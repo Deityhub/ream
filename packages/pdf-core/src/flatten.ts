@@ -54,7 +54,7 @@ export async function flattenPdf(doc: PdfDocument, o: FlattenOptions): Promise<{
           const known = widgets.get(a)
           // a text box with no picture (or a form that asks viewers to draw their own) is drawn from its value
           if (known && (!stream || redraw)) {
-            const kind = kindOf(known.t)
+            const kind = kindOf(doc, known.t)
             if (kind === 'text' || kind === 'choice') {
               const made = textPicture(doc, e, known.t, known.w, kind, shownText(doc, known.t, kind), fonts)
               if (made) {
