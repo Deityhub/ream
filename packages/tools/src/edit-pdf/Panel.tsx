@@ -1,0 +1,350 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Icon } from '@ream/ui'
+import type { PanelProps } from '../panels.ts'
+import { usePageZoom } from '../PageZoom.tsx'
+import { Overlay, type Style, type Tool } from './Overlay.tsx'
+import { Properties } from './Properties.tsx'
+import { moved, pickText as pickFrom } from './geometry.ts'
+import { defaultOptions, itemsOn, type EditPdfOptions as O, type Item } from './items.ts'
+
+export { defaultOptions }
+export const placesActions = true
+
+type Size = { width: number; height: number }
+
+const START: Style = {
+  text: { font: 'Arial', size: 14, colour: '#111111', bold: false, italic: false, align: 'left', spacing: 1.2, opacity: 1 },
+  shape: { fill: null, stroke: '#1f6feb', width: 2, opacity: 1 },
+  line: { colour: '#1f6feb', width: 2, opacity: 1 },
+  pen: { colour: '#1f2937', width: 2 },
+  highlighter: { colour: '#facc15', width: 14 },
+  whiteout: { colour: '#ffffff' },
+  markup: { highlight: '#fde047', underline: '#2563eb', strike: '#dc2626' },
+  note: { colour: '#fde68a' },
+}
+
+const TOOLS: { tool: Tool; label: string; icon: string; key?: string }[] = [
+  { tool: 'select', label: 'Select and move', icon: 'cursor', key: 'v' },
+  { tool: 'text', label: 'Text', icon: 'type', key: 't' },
+  { tool: 'image', label: 'Picture', icon: 'image' },
+  { tool: 'rect', label: 'Rectangle', icon: 'square', key: 'r' },
+  { tool: 'ellipse', label: 'Ellipse', icon: 'circle', key: 'o' },
+  { tool: 'line', label: 'Line', icon: 'line', key: 'l' },
+  { tool: 'arrow', label: 'Arrow', icon: 'arrow', key: 'a' },
+  { tool: 'pen', label: 'Pen', icon: 'pen', key: 'p' },
+  { tool: 'highlighter', label: 'Highlighter pen', icon: 'highlighter' },
+  { tool: 'whiteout', label: 'Whiteout', icon: 'whiteout' },
+  { tool: 'highlight', label: 'Highlight text', icon: 'highlight' },
+  { tool: 'underline', label: 'Underline text', icon: 'underline' },
+  { tool: 'strike', label: 'Strike through text', icon: 'strike' },
+  { tool: 'note', label: 'Note', icon: 'note' },
+  { tool: 'link', label: 'Link', icon: 'link' },
+]
+
+const button = 'rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 pointer-coarse:min-h-11'
+const iconButton = 'flex size-8 items-center justify-center rounded-md hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:size-11'
+const HISTORY = 200
+
+export function Panel({ options: o, onChange, files, pdfHost, actions, readFontFile }: PanelProps<O>) {
+  const file = files[0]
+  const [pages, setPages] = useState<Size[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [current, setCurrent] = useState(0)
+  const [tool, setTool] = useState<Tool>('select')
+  const [style, setStyle] = useState<Style>(START)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const past = useRef<Item[][]>([])
+  const future = useRef<Item[][]>([])
+  const clipboard = useRef<Item | null>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const latest = useRef(o)
+  latest.current = o
+  const counter = useRef(0)
+  const newId = useCallback(() => `i${Date.now().toString(36)}${(counter.current++).toString(36)}`, [])
+
+  useEffect(() => {
+    setPages(null)
+    setFailed(false)
+    setCurrent(0)
+    setSelected(null)
+    setEditing(null)
+    past.current = []
+    future.current = []
+    onChange(defaultOptions)
+    if (!file || !pdfHost) return
+    let live = true
+    pdfHost.pages(file).then(
+      (p) => live && setPages(p),
+      () => live && setFailed(true),
+    )
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file])
+
+  const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
+  // shortcuts work wherever the focus is while the editor is open (clicking the page leaves it on the document), except in fields
+  const keys = useRef<(e: KeyboardEvent) => void>(() => {})
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keys.current(e)
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+
+  if (!file || !pdfHost) return <Waiting actions={actions}>Add a PDF, then add text, pictures, shapes, drawings and comments on its pages.</Waiting>
+  if (failed) return <Waiting actions={actions}>This PDF can't be shown here, so it can't be edited on its pages.</Waiting>
+  if (!pages) return <Waiting actions={actions}>Reading the pages…</Waiting>
+
+  const { PdfPage } = pdfHost
+  const size = pages[Math.min(current, pages.length - 1)]
+  const items = o.items
+
+  // every change to the items is one step that can be undone
+  const commit = (next: Item[], select?: string | null) => {
+    past.current = [...past.current.slice(-HISTORY + 1), latest.current.items]
+    future.current = []
+    onChange({ ...latest.current, items: next })
+    if (select !== undefined) setSelected(select)
+    setNote('')
+  }
+  const undo = () => {
+    const prev = past.current.pop()
+    if (!prev) return
+    future.current.push(latest.current.items)
+    onChange({ ...latest.current, items: prev })
+    setSelected(null)
+  }
+  const redo = () => {
+    const next = future.current.pop()
+    if (!next) return
+    past.current.push(latest.current.items)
+    onChange({ ...latest.current, items: next })
+    setSelected(null)
+  }
+  const sel = items.find((i) => i.id === selected) ?? null
+  const update = (item: Item) => commit(items.map((i) => (i.id === item.id ? item : i)))
+  const remove = (id: string) => commit(items.filter((i) => i.id !== id), null)
+  const duplicate = (item: Item, page = item.page, offset = 0.02) => {
+    const copy = { ...moved(item, offset, offset), id: newId(), page } as Item
+    commit([...items, copy], copy.id)
+  }
+  const reorder = (id: string, by: 1 | -1) => {
+    const i = items.findIndex((x) => x.id === id)
+    const j = i + by
+    if (i < 0 || j < 0 || j >= items.length) return
+    const next = [...items]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    commit(next)
+  }
+  const go = (by: number) => {
+    setCurrent((c) => Math.min(pages.length - 1, Math.max(0, c + by)))
+    setSelected(null)
+    setEditing(null)
+  }
+  const choose = (t: Tool) => {
+    setEditing(null)
+    if (t === 'image') {
+      picker.current?.click()
+      return
+    }
+    setTool(t)
+    if (t !== 'select') setSelected(null)
+  }
+
+  // a picture: placed in the middle of the page at a usual size, its shape kept
+  const addPicture = async (f: File) => {
+    try {
+      const { data, type, width, height } = await pictureOf(f)
+      const w = Math.min(0.5, (width / size.width) * 0.75)
+      const h = (w * size.width * (height / width)) / size.height
+      const id = newId()
+      commit([...items, { id, page: current, kind: 'image', box: { x: (1 - w) / 2, y: Math.max(0, (1 - h) / 2), w, h: Math.min(1, h) }, data, type, turns: 0, opacity: 1 }], id)
+      setTool('select')
+    } catch {
+      setNote(`${f.name} can't be read as a picture. PNG, JPEG, WebP and GIF pictures work.`)
+    }
+  }
+
+  keys.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest?.('input, textarea, select, [contenteditable], dialog')) return
+    const mod = e.metaKey || e.ctrlKey
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault()
+      if (e.shiftKey) redo()
+      else undo()
+    } else if (mod && e.key.toLowerCase() === 'y') {
+      e.preventDefault()
+      redo()
+    } else if (mod && e.key.toLowerCase() === 'd' && sel) {
+      e.preventDefault()
+      duplicate(sel)
+    } else if (mod && e.key.toLowerCase() === 'c' && sel) clipboard.current = sel
+    else if (mod && e.key.toLowerCase() === 'v' && clipboard.current) {
+      e.preventDefault()
+      duplicate(clipboard.current, current, clipboard.current.page === current ? 0.02 : 0)
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
+      e.preventDefault()
+      remove(sel.id)
+    } else if (e.key === 'Escape') {
+      setSelected(null)
+      setTool('select')
+    } else if (e.key.startsWith('Arrow') && sel) {
+      e.preventDefault()
+      const step = (e.shiftKey ? 10 : 1) / zoom.width
+      const [dx, dy] = e.key === 'ArrowLeft' ? [-step, 0] : e.key === 'ArrowRight' ? [step, 0] : e.key === 'ArrowUp' ? [0, -step * (size.width / size.height)] : [0, step * (size.width / size.height)]
+      update(moved(sel, dx, dy))
+    } else if (!mod && !e.altKey) {
+      const t = TOOLS.find((x) => x.key === e.key.toLowerCase())
+      if (t) choose(t.tool)
+    }
+  }
+
+  const pickText = pdfHost.chars
+    ? async (area: { x: number; y: number; w: number; h: number }) => {
+        const chars = await pdfHost.chars!(file, current)
+        const got = pickFrom(chars, area)
+        if (!got.quads.length) setNote('There is no text under that box to mark. Scanned pages have no text.')
+        return got
+      }
+    : undefined
+
+  const here = itemsOn(items, current).length
+  const addedFonts = [...new Set(o.fonts.map((f) => f.for ?? f.family))]
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+      <div className="min-w-0 space-y-3 rounded-xl border border-line bg-surface p-4">
+        <div role="toolbar" aria-label="Tools" className="flex flex-wrap items-center gap-0.5 rounded-lg border border-line p-1">
+          {TOOLS.map((t) => (
+            <button key={t.tool} type="button" title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label} aria-label={t.label} aria-pressed={tool === t.tool && t.tool !== 'image'} onClick={() => choose(t.tool)} className={iconButton}>
+              <Icon name={t.icon} className="size-4" />
+            </button>
+          ))}
+          <span className="mx-1 h-6 w-px bg-line" aria-hidden="true" />
+          <button type="button" title="Undo (Ctrl or Cmd+Z)" aria-label="Undo" onClick={undo} disabled={!past.current.length} className={iconButton}>
+            <Icon name="undo" className="size-4" />
+          </button>
+          <button type="button" title="Redo (Shift+Ctrl or Cmd+Z)" aria-label="Redo" onClick={redo} disabled={!future.current.length} className={iconButton}>
+            <Icon name="redo" className="size-4" />
+          </button>
+          <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" tabIndex={-1} onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (f) await addPicture(f)
+          }} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => go(-1)} disabled={current === 0} aria-label="Previous page" className={button}>
+            Previous
+          </button>
+          <span role="status" className="text-sm tabular-nums">
+            Page {current + 1} of {pages.length}
+          </span>
+          <button type="button" onClick={() => go(1)} disabled={current >= pages.length - 1} aria-label="Next page" className={button}>
+            Next
+          </button>
+          <span className="ml-auto">{zoom.bar}</span>
+        </div>
+        <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
+          <div className="relative mx-auto bg-white shadow-sm ring-1 ring-line" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+            <Overlay
+              page={current}
+              size={size}
+              width={zoom.width || 600}
+              items={items}
+              tool={tool}
+              style={style}
+              fonts={o.fonts}
+              selected={selected}
+              editing={editing}
+              onSelect={setSelected}
+              onEditing={setEditing}
+              onChange={(next, select) => {
+                commit(next, select)
+                // after placing a shape or a box the pointer goes back to selecting, so it can be moved at once
+                if (!['pen', 'highlighter', 'highlight', 'underline', 'strike'].includes(tool)) setTool('select')
+              }}
+              pickText={pickText}
+              newId={newId}
+            >
+              <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+            </Overlay>
+          </div>
+        </div>
+        {note && <p role="status" className="text-sm text-warning">{note}</p>}
+        <p className="text-xs text-muted">Pick a tool, then click or drag on the page. Double-click text to change it. Alt turns snapping off while you move something.</p>
+      </div>
+
+      <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
+        <Properties
+          item={sel}
+          tool={tool}
+          style={style}
+          onStyle={setStyle}
+          onItem={update}
+          onRemove={() => sel && remove(sel.id)}
+          onDuplicate={() => sel && duplicate(sel)}
+          onOrder={(by) => sel && reorder(sel.id, by)}
+          onEdit={() => sel?.kind === 'text' && setEditing(sel.id)}
+          pageCount={pages.length}
+          fonts={addedFonts}
+          onAddFont={
+            readFontFile
+              ? async (f) => {
+                  const info = await readFontFile(f).catch(() => null)
+                  const faces = (info?.faces ?? []).filter((x) => x.embeddable)
+                  if (!info || !faces.length) {
+                    setNote(`${f.name} can't be used: it isn't a font file, or its licence doesn't allow embedding it.`)
+                    return null
+                  }
+                  const family = faces[0].typographic ?? faces[0].family
+                  onChange({ ...latest.current, fonts: [...latest.current.fonts, ...faces.map((x) => ({ family: x.family, style: x.style, postscript: x.postscript, bytes: info.bytes, for: family, source: 'file' as const }))] })
+                  return family
+                }
+              : undefined
+          }
+        />
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={o.flattenComments} onChange={(e) => onChange({ ...o, flattenComments: e.target.checked })} className="mt-0.5" />
+          <span>
+            Flatten comments into the pages<span className="block text-xs text-muted">Highlights and notes become part of the page, so they can't be changed or removed. Links stay links.</span>
+          </span>
+        </label>
+        <p className="text-sm text-muted" role="status">
+          {items.length === 0 ? 'Nothing added yet.' : `${here} ${here === 1 ? 'thing' : 'things'} on this page, ${items.length} in all.`}
+        </p>
+        {actions}
+      </div>
+    </div>
+  )
+}
+
+/** a picture file as PNG or JPEG bytes the PDF can hold, with its size */
+async function pictureOf(f: File): Promise<{ data: Uint8Array; type: 'image/png' | 'image/jpeg'; width: number; height: number }> {
+  const bitmap = await createImageBitmap(f)
+  const { width, height } = bitmap
+  if (f.type === 'image/jpeg' || f.type === 'image/png') {
+    bitmap.close()
+    // ponytail: a JPEG goes in as it is, so a camera photo turned by its EXIF orientation shows unturned; draw it through a canvas if that comes up
+    return { data: new Uint8Array(await f.arrayBuffer()), type: f.type, width, height }
+  }
+  const canvas = new OffscreenCanvas(width, height)
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  const blob = await canvas.convertToBlob({ type: 'image/png' })
+  return { data: new Uint8Array(await blob.arrayBuffer()), type: 'image/png', width, height }
+}
+
+/** a message in place of the panel, with the run button still there */
+function Waiting({ children, actions }: { children: string; actions: PanelProps['actions'] }) {
+  return (
+    <div className="space-y-4 rounded-xl border border-line bg-surface p-4">
+      <p className="text-sm text-muted">{children}</p>
+      {actions}
+    </div>
+  )
+}

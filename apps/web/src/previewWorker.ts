@@ -1,7 +1,7 @@
 import { UserError } from '@ream/core'
 import { PdfDocument, PdfPasswordError, decryptPdf, fontFaces, readForm, readInfo, readOutline, woffToSfnt, type FontFaceInfo, type FormInfo, type OutlineItem } from '@ream/pdf-core'
 import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
-import { pageGeometry, renderPage } from '@ream/pdf-render'
+import { pageChars, pageGeometry, renderPage } from '@ream/pdf-render'
 import { usedFonts } from '@ream/office-core'
 import { officeToPdf, type OfficeKind } from '@ream/tools/office-preview'
 import { installStandardFonts } from '@ream/tools/standard-fonts'
@@ -30,6 +30,7 @@ type Request =
   | { id: number; op: 'metadata'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'form'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
+  | { id: number; op: 'chars'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
   | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
@@ -94,6 +95,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'outline') post({ id: req.id, ok: true, result: readOutline(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'form') post({ id: req.id, ok: true, result: readForm(await getDoc(req.docId, req.bytes, req.office)) })
+    else if (req.op === 'chars') post({ id: req.id, ok: true, result: await letterBoxes(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })
     else if (req.op === 'officeFonts') post({ id: req.id, ok: true, result: await usedFonts(req.bytes) })
     else if (req.op === 'fontFile') {
@@ -112,4 +114,11 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     if (code !== 'missing') console.error(err)
     post({ id: req.id, ok: false, code, message: 'Something went wrong while reading this file.' })
   }
+}
+
+/** the letters of a page with their boxes, as fractions of the page as displayed (y from the top), for marking text */
+async function letterBoxes(doc: PdfDocument, page: number): Promise<{ text: string; x0: number; y0: number; x1: number; y1: number }[]> {
+  const { chars, width, height } = await pageChars(doc, page)
+  // a letter's box: from its baseline up by most of its size, and a little below for descenders
+  return chars.filter((c) => !c.invisible && Math.abs(c.angle) < 1).map((c) => ({ text: c.text, x0: c.x0 / width, x1: c.x1 / width, y0: (c.y0 - c.size * 0.8) / height, y1: (c.y0 + c.size * 0.2) / height }))
 }

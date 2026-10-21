@@ -40,6 +40,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M7 ✅ | PDF advanced | Organize pages, Repair, Flatten (now Lock the answers in Fill PDF form), PDF → text/Markdown, Bookmarks, TrueType embedding (watermark in any script) |
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
+| M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links (form fields and editing the PDF's own content come next) |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -79,6 +80,21 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - **Flattening** (the engine's `flattenPdf`) draws the appearance of form fields and of markup annotations into the page and removes them; links and other kinds stay. It is no longer a tool of its own: Fill PDF form's "Lock the answers" uses it for form fields, and digital signatures stop validating.
 - **PDF to text:** plain text or Markdown from where the text sits on the page: lines, words (from gaps and TJ spacing), columns (wide empty strips), paragraphs (line spacing), hyphenated words rejoined, ligatures spelled out, text turned to the page's reading direction. Markdown adds headings (type size against the body size), bullet lists, bold and italic. Text in render mode 3 (the invisible layer of scanned pages) is included. It does no OCR: a page that is a picture gives no text and says so. Tables come out as lines, CID fonts without a ToUnicode map and Type 3 fonts give nothing, and reading order is a heuristic. Checked against pypdf's extraction on the fixtures and on real documents: word recall and precision above 0.99 on all but a few pages whose only difference is words split or joined differently.
 - **TrueType fonts in stamps:** the watermark can draw with an uploaded .ttf (the first font of a .ttc works too): the glyphs of the text are cut out, embedded as a Type0/CIDFontType2 font with a ToUnicode map, so the text is selectable and searchable. Glyphs are placed one after another with the font's advance widths: no kerning, ligatures or shaping, so Arabic and Indic scripts do not work. Fonts with PostScript outlines (.otf), web fonts and fonts whose licence flag forbids embedding are refused. Checked in Chromium's PDF viewer and with pypdf's text extraction (Cyrillic, Greek, Vietnamese with composite glyphs). Page numbers still use Helvetica. Our own preview draws such text with its real letters.
+
+## Known M7.6 limits
+
+- **Edit PDF** adds things on top of pages; it doesn't change what the PDF already has (that, and form fields, are the next parts).
+  - **Into the page:** text, pictures, shapes, lines and arrows, freehand drawings and whiteout become part of the page, so every viewer and printer shows them. The text stays real text that can be selected and searched.
+  - **As comments:** highlights, underlines, strike-throughs, notes and links are annotations, with their own pictures so viewers that only draw pictures show them too. "Flatten comments into the pages" bakes highlights and notes in.
+  - **Text:**
+    - Lines break where the editor shows them: the same fonts and widths, without kerning.
+    - The bundled fonts (Arimo, Tinos, Cousine, Carlito, Caladea) have Latin, Greek and Cyrillic letters. Other scripts need an added font file that has them, and scripts whose letters join (Arabic, Indic) don't show correctly. Letters a font lacks are refused before saving.
+    - Fonts installed on the computer can't be picked yet; add their files.
+  - **Whiteout** covers what is under it without removing it; Redact PDF removes.
+  - **Items:** rotate in quarter turns only (pictures). Text on a turned page follows the page as it is shown.
+  - **Pictures:** a JPEG goes in as it is, so a phone photo that relies on its EXIF orientation shows unturned.
+  - **Markup** needs the page's own text: scanned pages have none.
+  - **Not checked:** Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7.5 limits
 

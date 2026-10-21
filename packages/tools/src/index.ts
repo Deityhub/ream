@@ -12,6 +12,7 @@ import { pageNumbers } from './page-numbers/manifest.ts'
 import { cropPdf } from './crop-pdf/manifest.ts'
 import { redactPdf } from './redact-pdf/manifest.ts'
 import { fillPdfForm } from './fill-pdf-form/manifest.ts'
+import { editPdf } from './edit-pdf/manifest.ts'
 import { metadata } from './metadata/manifest.ts'
 import { extractImages } from './extract-images/manifest.ts'
 import { compressImage } from './compress-image/manifest.ts'
@@ -51,6 +52,7 @@ export const tools: Tool[] = [
   cropPdf,
   redactPdf,
   fillPdfForm,
+  editPdf,
   metadata,
   extractImages,
   compressPdf,

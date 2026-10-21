@@ -159,3 +159,36 @@ describe('edit-pdf: comments', () => {
     await expect(run([pdfOf(page())], defaultOptions, ctx, nodeFonts)).rejects.toThrow(/Add something/)
   })
 })
+
+describe('editing on the page', async () => {
+  const { boxOf, moved, pickText, resized, snap } = await import('./geometry.ts')
+  test('moving and resizing; pictures keep their shape from a corner', () => {
+    const line: Item = { id: 'l', page: 0, kind: 'line', from: { x: 0.1, y: 0.2 }, to: { x: 0.3, y: 0.1 }, colour: '#000000', width: 1, arrow: 'none', opacity: 1 }
+    expect(boxOf(line)).toEqual({ x: 0.1, y: 0.1, w: 0.19999999999999998, h: 0.1 })
+    expect((moved(line, 0.1, 0) as typeof line).from).toEqual({ x: 0.2, y: 0.2 })
+    const wide = resized({ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }, 'e', { x: 0.5, y: 0.9 })
+    expect([wide.x, wide.y, wide.w, wide.h].map((v) => +v.toFixed(6))).toEqual([0.1, 0.1, 0.4, 0.2])
+    const kept = resized({ x: 0, y: 0, w: 0.2, h: 0.1 }, 'se', { x: 0.4, y: 0.1 }, true)
+    expect(kept.w / kept.h).toBeCloseTo(2)
+    // a side can't pass the opposite side
+    expect(resized({ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }, 'w', { x: 0.9, y: 0 }).w).toBeCloseTo(0.01)
+  })
+
+  test('snapping to the page middle and to other items, with guides', () => {
+    const s = snap({ x: 0.395, y: 0.2, w: 0.2, h: 0.1 }, [{ x: 0.7, y: 0.25, w: 0.1, h: 0.1 }], { x: 0.01, y: 0.01 })
+    expect(s.dx).toBeCloseTo(0.005) // its middle onto the page's middle
+    expect(s.dy).toBe(0)
+    expect(s.guides.x).toContain(0.5)
+    expect(snap({ x: 0.3, y: 0.3, w: 0.1, h: 0.1 }, [], { x: 0.01, y: 0.01 })).toEqual({ dx: 0, dy: 0, guides: { x: [], y: [] } })
+  })
+
+  test('picking text for markup: the letters under the box, a quad per line, in reading order', () => {
+    const ch = (text: string, x: number, line: number) => ({ text, x0: x, x1: x + 0.02, y0: 0.1 + line * 0.05, y1: 0.13 + line * 0.05 })
+    const chars = [ch('H', 0.1, 0), ch('i', 0.12, 0), ch(' ', 0.14, 0), ch('y', 0.16, 0), ch('o', 0.1, 1), ch('u', 0.12, 1), ch('z', 0.5, 2)]
+    const { quads, text } = pickText(chars, { x: 0.09, y: 0.09, w: 0.1, h: 0.1 })
+    expect(text).toBe('Hiy ou')
+    expect(quads).toHaveLength(2)
+    expect(quads[0][0]).toEqual({ x: 0.1, y: 0.1 })
+    expect(quads[0][3].x).toBeCloseTo(0.18)
+  })
+})

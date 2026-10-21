@@ -9,6 +9,8 @@ export type PdfHost = {
   outline(file: File): Promise<OutlineItem[]>
   /** the form fields with every place they are shown */
   form(file: File): Promise<FormInfo>
+  /** the letters of a page with their boxes, as fractions of the page as displayed (y from the top) */
+  chars?(file: File, page: number): Promise<{ text: string; x0: number; y0: number; x1: number; y1: number }[]>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
   PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number }>
@@ -50,6 +52,7 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'crop-pdf': () => import('./crop-pdf/Panel.tsx'),
   'redact-pdf': () => import('./redact-pdf/Panel.tsx'),
   'fill-pdf-form': () => import('./fill-pdf-form/Panel.tsx'),
+  'edit-pdf': () => import('./edit-pdf/Panel.tsx'),
   metadata: () => import('./metadata/Panel.tsx'),
   'extract-images': () => import('./extract-images/Panel.tsx'),
   'compress-image': () => import('./compress-image/Panel.tsx'),
