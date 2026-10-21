@@ -3,7 +3,9 @@
 // put in another's place). Plain functions, tested without a browser.
 import type { PageContentEdits, ShownBox } from '@ream/pdf-render'
 import type { Rect } from '../rect.ts'
-import { colourOf, lineBox, type ImageItem, type Item, type LineEditItem, type TextItem } from './items.ts'
+import { lookAlikeFor } from '../fonts/match.ts'
+import type { InstalledFont } from '../fonts/book.ts'
+import { FONTS, colourOf, lineBox, type ImageItem, type Item, type LineEditItem, type TextItem } from './items.ts'
 
 type Size = { width: number; height: number }
 
@@ -14,20 +16,25 @@ export type PageContent = { lines: ContentLine[]; pictures: ContentPicture[] }
 
 export const hexOf = (c: [number, number, number]) => '#' + c.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('')
 
-/** the bundled font that stands in for a line's own: by the font's name, else by its kind */
+/** the bundled font that stands in for a line's own, as the saved file picks it: by the font's name, else by its kind */
 export function lookalikeOf(face: string, kind: 'sans' | 'serif' | 'mono'): string {
-  if (/calibri|carlito/i.test(face)) return 'Calibri'
-  if (/cambria|caladea/i.test(face)) return 'Cambria'
-  if (/courier|cousine|mono/i.test(face)) return 'Courier New'
-  if (/times|tinos|georgia|garamond|serif/i.test(face) && !/sans/i.test(face)) return 'Times New Roman'
-  if (/arial|helvetica|arimo|sans/i.test(face)) return 'Arial'
+  if (face) return FONTS.find((f) => f.family === lookAlikeFor(face))?.name ?? 'Arial'
   return kind === 'serif' ? 'Times New Roman' : kind === 'mono' ? 'Courier New' : 'Arial'
 }
+
+/** a font file was added (or found on the computer) for this family */
+export const hasFontFor = (family: string, fonts: InstalledFont[]) => !!family && fonts.some((f) => (f.for ?? f.family).toLowerCase() === family.toLowerCase())
+
+/**
+ * The font a line is drawn in when its own embedded font can't show it: the one chosen, else its own family (a font
+ * added for that family is used, or the saved file's font book picks the look-alike, as `lookalike` says).
+ */
+export const fallbackFont = (i: LineEditItem) => (i.font === 'own' ? i.face || i.lookalike : i.font)
 
 /** a line of the page as an item, unchanged so far */
 export function lineItem(id: string, page: number, l: ContentLine): LineEditItem {
   const colour = hexOf(l.colour)
-  return { id, page, kind: 'textline', source: l.id, from: l.box, box: l.box, text: l.text, original: l.text, size: l.size, originalSize: l.size, colour, originalColour: colour, font: 'own', bold: l.bold, italic: l.italic, letters: l.letters, lookalike: lookalikeOf(l.face, l.kind), baseline: l.baseline }
+  return { id, page, kind: 'textline', source: l.id, from: l.box, box: l.box, text: l.text, original: l.text, size: l.size, originalSize: l.size, colour, originalColour: colour, font: 'own', bold: l.bold, italic: l.italic, letters: l.letters, face: l.face, lookalike: lookalikeOf(l.face, l.kind), baseline: l.baseline }
 }
 
 /** the letters of the text its own font doesn't have (a space never counts: it is made with a move) */
@@ -70,8 +77,8 @@ export function contentEdits(items: Item[], sizes: Size[]): { edits: Map<number,
         own,
       })
       if (!own && !i.deleted && i.text.trim()) {
-        const font = i.font === 'own' ? i.lookalike : i.font
-        const [ascent, descent] = METRICS[font] ?? METRICS.Arial
+        const font = fallbackFont(i)
+        const [ascent, descent] = METRICS[font] ?? METRICS[i.lookalike] ?? METRICS.Arial
         const base = (i.box.y + i.baseline) * s.height
         const top = base - lineBox(i.size, 1, ascent, descent).baseline
         const text: TextItem = { id: `${i.id}-text`, page: i.page, kind: 'text', box: { x: i.box.x, y: top / s.height, w: 1 - i.box.x, h: i.size / s.height }, text: i.text, font, size: i.size, colour: i.colour, bold: i.bold, italic: i.italic, align: 'left', spacing: 1, opacity: 1 }

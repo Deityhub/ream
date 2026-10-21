@@ -1,12 +1,13 @@
 import { inputClass } from '../fields.tsx'
-import { missingLetters } from './content.ts'
+import { hasFontFor, missingLetters } from './content.ts'
+import type { InstalledFont } from '../fonts/book.ts'
 import { FONTS, type EraseItem, type LineEditItem, type PictureEditItem } from './items.ts'
 
 const row = 'flex flex-wrap items-center gap-2 text-sm'
 const small = 'rounded-md border border-line px-2 py-1 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:min-h-11'
 
 /** a line of the page's own text */
-export function LineProperties({ item: i, onItem, onEdit, fonts }: { item: LineEditItem; onItem: (p: Partial<LineEditItem>) => void; onEdit: () => void; fonts: string[] }) {
+export function LineProperties({ item: i, onItem, onEdit, fonts, added }: { item: LineEditItem; onItem: (p: Partial<LineEditItem>) => void; onEdit: () => void; fonts: string[]; added: InstalledFont[] }) {
   if (i.deleted) {
     return (
       <div className="space-y-2">
@@ -17,7 +18,10 @@ export function LineProperties({ item: i, onItem, onEdit, fonts }: { item: LineE
   }
   const missing = missingLetters(i)
   const own = i.font === 'own'
-  const stand = FONTS.find((f) => f.name === i.lookalike)?.label ?? i.lookalike
+  const found = hasFontFor(i.face, added)
+  // what the line is drawn in when its own embedded font can't: a font added for its family, else the look-alike
+  const stand = found ? i.face : (FONTS.find((f) => f.name === i.lookalike)?.label ?? i.lookalike)
+  const hint = !found && i.face ? ` To keep ${i.face}, add it under “Fonts in this file”.` : ''
   return (
     <div className="space-y-3">
       <label className="flex flex-col gap-1 text-sm">
@@ -41,10 +45,10 @@ export function LineProperties({ item: i, onItem, onEdit, fonts }: { item: LineE
           ))}
         </select>
       </label>
-      {own && !i.letters && <p className="text-xs text-warning">The PDF's font for this line can't be used again here, so the line will use {stand}.</p>}
+      {own && !i.letters && <p className="text-xs text-warning">The PDF's font for this line can't be used again here, so the line will use {stand}.{hint}</p>}
       {own && i.letters && missing.length > 0 && (
         <p className="text-xs text-warning">
-          The PDF's font for this line has only the letters the file used, and not {missing.slice(0, 6).map((c) => `“${c}”`).join(' ')}. The line will use {stand}.
+          The PDF's font for this line has only the letters the file used, and not {missing.slice(0, 6).map((c) => `“${c}”`).join(' ')}. The line will use {stand}.{hint}
         </p>
       )}
       {own && i.letters && !missing.length && <p className="text-xs text-muted">Shown in the PDF's own font. The editor shows it in {stand}.</p>}

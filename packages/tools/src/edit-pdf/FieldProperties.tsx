@@ -12,6 +12,10 @@ type Props = {
   onField: (patch: Partial<FieldSettings>) => void
   /** change this item only */
   onItem: (patch: Partial<FieldItem>) => void
+  /** the names of the radio groups there are */
+  groups: string[]
+  /** move this radio button into a group (null: one of its own) */
+  onGroup: (target: string | null) => void
 }
 
 const row = 'flex flex-wrap items-center gap-2 text-sm'
@@ -20,7 +24,7 @@ const DATES = ['dd/mm/yyyy', 'mm/dd/yyyy', 'yyyy-mm-dd', 'd mmm yyyy']
 export const FIELD_KIND: Record<FieldItem['type'], string> = { text: 'Text field', date: 'Date field', checkbox: 'Checkbox', radio: 'Radio button', dropdown: 'Dropdown', list: 'List box', signature: 'Signature box' }
 
 /** the settings of a form field */
-export function FieldProperties({ item: f, group, taken, onField, onItem }: Props) {
+export function FieldProperties({ item: f, group, taken, onField, onItem, groups, onGroup }: Props) {
   const name = f.name.trim()
   const problem = !name ? 'Every field needs a name.' : taken.has(name) ? 'Another field has this name.' : !f.source && name.includes('.') ? "A field's name can't have a dot in it." : null
   const texty = f.type === 'text' || f.type === 'date' || f.type === 'dropdown' || f.type === 'list'
@@ -97,6 +101,18 @@ export function FieldProperties({ item: f, group, taken, onField, onItem }: Prop
           )}
           {f.type === 'radio' && (
             <>
+              <label className={row}>
+                Group
+                <select className={`${inputClass} min-w-0 flex-1`} value={f.name} onChange={(e) => onGroup(e.target.value === '+' ? null : e.target.value)}>
+                  {groups.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                  <option value="+">A new group</option>
+                </select>
+              </label>
+              <p className="text-xs text-muted">Buttons of one group work together: choosing one clears the others. The group's name is the field's name.</p>
               <label className="flex flex-col gap-1 text-sm">
                 This button's value
                 <input className={inputClass} value={f.state} onChange={(e) => onItem({ state: e.target.value.replace(/[\s/#()<>[\]{}%]/g, '_') })} />

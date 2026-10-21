@@ -3,7 +3,7 @@
 import type { FieldChange, FieldSpec, FormEdits, FormInfo, WidgetSpec } from '@ream/pdf-core'
 import type { Rect } from '../rect.ts'
 import type { Suggestion } from './detect.ts'
-import { colourOf, isField, type EditPdfOptions, type FieldItem, type FieldType } from './items.ts'
+import { colourOf, isField, type EditPdfOptions, type FieldItem, type FieldType, type Item } from './items.ts'
 
 type Size = { width: number; height: number }
 
@@ -75,6 +75,28 @@ export function suggestedFields(found: Suggestion[], page: number, items: FieldI
 /** a value no button of the group stands for yet */
 const freeState = (group: FieldItem[]) => {
   for (let n = group.length + 1; ; n++) if (!group.some((g) => g.state === `Choice ${n}`)) return `Choice ${n}`
+}
+
+/**
+ * A radio button moved into another group (`target`, a group's name) or into a group of its own (null): it takes the
+ * group's settings and a value no button there has. A button of the file's leaves its old field, which keeps its other
+ * buttons; the old group loses its choice if this was the button chosen.
+ */
+export function joinGroup(items: Item[], id: string, target: string | null): Item[] {
+  const fields = items.filter(isField)
+  const item = fields.find((f) => f.id === id)
+  if (!item || item.type !== 'radio' || target === item.name) return items
+  const group = target ? fields.filter((f) => f.type === 'radio' && f.name === target) : []
+  if (target && !group.length) return items
+  const name = target ?? freeName(BASE.radio, fields)
+  const base = group[0] ?? { ...item, value: '' }
+  const state = group.some((g) => g.state === item.state) || !item.state ? freeState(group) : item.state
+  const chosen = item.value === item.state
+  return items.map((i) => {
+    if (i.id === id) return { ...item, ...settingsOf(base), name, state, source: undefined }
+    if (chosen && isField(i) && i.name === item.name) return { ...i, value: '' }
+    return i
+  })
 }
 
 /** the box a click makes for each kind of field, in points */

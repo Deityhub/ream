@@ -2,9 +2,9 @@
 // so an edited line can be shown again in that font; its pictures, moved, resized or deleted in place; and areas
 // erased. Only the page's own content stream is read: text and pictures inside forms aren't offered (Erase still
 // reaches them).
-import { PdfName, PdfRangeError, PdfStream, deflate, editDocument, type PdfDocument } from '@ream/pdf-core'
+import { PdfName, PdfRangeError, PdfStream, deflate, editDocument, isDict, type PdfDocument } from '@ream/pdf-core'
 import { BoundsCtx, pageContent, type Box } from './bounds.ts'
-import type { Font, Glyph } from './font.ts'
+import { loadFont, type Font, type Glyph } from './font.ts'
 import { Interpreter, type ShownGlyph } from './interpreter.ts'
 import { IDENTITY, apply, invert, mul, pageMatrix, type Matrix } from './matrix.ts'
 import type { Ctx2D, Platform } from './platform.ts'
@@ -100,6 +100,29 @@ export function fontLetters(font: Font): Letters {
     if (has(g)) out.set(g.text, twoByte ? new Uint8Array([g.code >> 8, g.code & 255]) : new Uint8Array([g.code]))
   }
   return out
+}
+
+/** the families of the fonts the document's pages use (in their own content and the forms they draw), as people write them */
+export async function documentFonts(doc: PdfDocument): Promise<string[]> {
+  const out = new Set<string>()
+  const seen = new Set<unknown>()
+  const visit = async (res: unknown, depth: number) => {
+    const r = doc.resolve(res as never)
+    if (!isDict(r) || seen.has(r) || depth > 3) return
+    seen.add(r)
+    const fonts = doc.resolve(r.get('Font'))
+    if (isDict(fonts)) for (const f of fonts.values()) {
+      const face = (await loadFont(doc, f).catch(() => null))?.face
+      if (face) out.add(face)
+    }
+    const xo = doc.resolve(r.get('XObject'))
+    if (isDict(xo)) for (const x of xo.values()) {
+      const s = doc.resolve(x)
+      if (s instanceof PdfStream && s.dict.has('Resources')) await visit(s.dict.get('Resources'), depth + 1)
+    }
+  }
+  for (const p of doc.pages()) await visit(p.dict.get('Resources') ?? p.inherited.get('Resources'), 0)
+  return [...out].sort()
 }
 
 // ---------- reading a page ----------

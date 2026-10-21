@@ -8,7 +8,7 @@ import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
 import { PasswordDialog } from './PasswordDialog'
-import { inspectPdf, markUnlocked, readFontFile, readImageMetadata, readOfficeFonts, readPdfMetadata, readPdfOutline, readPdfForm, readPdfChars, readPdfLayout, readPdfContent, unlockPdf } from './previewClient'
+import { inspectPdf, markUnlocked, readFontFile, readImageMetadata, readOfficeFonts, readPdfMetadata, readPdfOutline, readPdfForm, readPdfChars, readPdfLayout, readPdfContent, readPdfFonts, unlockPdf } from './previewClient'
 import { isPdf } from './usePdfInfo'
 import { Preview } from './Preview'
 import { SizeEstimate } from './SizeEstimate'
@@ -33,6 +33,7 @@ const pdfHost = {
   chars: readPdfChars,
   layout: readPdfLayout,
   content: readPdfContent,
+  fonts: readPdfFonts,
   check: async (file: File) => {
     const info = await inspectPdf(file)
     return info.kind === 'ok' ? { ok: true, pages: info.pages.length, rebuilt: info.rebuilt } : { ok: false, pages: 0, rebuilt: false, message: info.kind === 'error' ? info.message : undefined }

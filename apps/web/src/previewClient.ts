@@ -75,6 +75,7 @@ export type PdfContent = {
   lines: { id: number; text: string; box: { x: number; y: number; w: number; h: number }; baseline: number; size: number; colour: [number, number, number]; face: string; kind: 'sans' | 'serif' | 'mono'; bold: boolean; italic: boolean; letters: string }[]
   pictures: { id: number; box: { x: number; y: number; w: number; h: number } }[]
 }
+export const readPdfFonts = (file: Blob) => withDoc<string[]>(file, { op: 'fonts' })
 export const readPdfContent = (file: Blob, page: number) => withDoc<PdfContent>(file, { op: 'content', page })
 export const readPdfLayout = (file: Blob, page: number) => withDoc<PdfLayout>(file, { op: 'layout', page })
 export const readPdfChars = (file: Blob, page: number) => withDoc<{ text: string; x0: number; y0: number; x1: number; y1: number }[]>(file, { op: 'chars', page })

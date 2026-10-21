@@ -142,10 +142,14 @@ export type LineEditItem = Base & {
   italic: boolean
   /** the letters the line's own font can show */
   letters: string
-  /** the font the line falls back to when its own can't be used */
+  /** the family of the line's own font, as the PDF names it ('' when it doesn't say) */
+  face: string
+  /** the bundled font that stands in when its own can't be used and no font was added for its family */
   lookalike: string
   /** how far below the top of its box its baseline is, a fraction of the page's height */
   baseline: number
+  /** the page's colour around it, which the editor paints over its old place ('#rrggbb') */
+  cover?: string
   deleted?: boolean
 }
 
@@ -157,6 +161,7 @@ export type PictureEditItem = Base & {
   box: Rect
   /** what it looked like on the page, for the editor to show while it is moved (a PNG data URL) */
   preview: string
+  cover?: string
   replace?: { data: Uint8Array; type: 'image/png' | 'image/jpeg' }
   deleted?: boolean
 }

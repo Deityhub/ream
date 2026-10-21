@@ -17,6 +17,8 @@ export type PdfHost = {
   layout?(file: File, page: number): Promise<PageLayout>
   /** a page's own lines of text and pictures, as fractions of the page, for editing them */
   content?(file: File, page: number): Promise<PageContent>
+  /** the families of the fonts the PDF uses */
+  fonts?(file: File): Promise<string[]>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
   PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number; fields?: boolean }>

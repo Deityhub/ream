@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { PdfDocument, readForm } from '@ream/pdf-core'
 import { formPdf } from '../../../pdf-core/test/helpers.ts'
 import { nodeFonts } from '../fonts/node.ts'
-import { byPosition, copiedField, fieldItems, formEdits, newField } from './fields.ts'
+import { byPosition, copiedField, fieldItems, formEdits, joinGroup, newField } from './fields.ts'
 import { run } from './run.ts'
 import { defaultOptions, type FieldItem } from './items.ts'
 
@@ -60,6 +60,26 @@ describe('edit-pdf: form fields', () => {
     const fields = readForm(await PdfDocument.load(out.bytes)).fields
     expect(fields.map((f) => f.name)).toEqual(['full', 'notes', 'code', 'agree', 'size', 'country', 'Checkbox 1'])
     expect(fields[0]).toMatchObject({ tooltip: 'Your name', value: 'Ann' })
+  })
+
+  test('a radio button moves into another group, or one of its own, and the file is written so', async () => {
+    const was = await loaded()
+    const box = { x: 0.6, y: 0.5, w: 0.05, h: 0.04 }
+    const lone = newField(id(), 0, 'radio', box, was, null)
+    // into the file's "size" group: its settings, and a value no button there has
+    let items = joinGroup([...was, lone], lone.id, 'size')
+    const moved = items.find((i) => i.id === lone.id) as FieldItem
+    expect([moved.name, moved.state]).toEqual(['size', 'Choice 1'])
+    // the file's first "size" button into a group of its own: the old group keeps its other button
+    const first = was.find((i) => i.name === 'size')!
+    items = joinGroup(items, first.id, null)
+    const own = items.find((i) => i.id === first.id) as FieldItem
+    expect(own.name).not.toBe('size')
+    expect(own.source).toBeUndefined()
+    const [out] = await run([{ name: 'f.pdf', type: 'application/pdf', bytes: formPdf() }], { ...defaultOptions, items, fieldsLoaded: was }, { progress: () => {} }, nodeFonts)
+    const f = Object.fromEntries(readForm(await PdfDocument.load(out.bytes)).fields.map((x) => [x.name, x]))
+    expect(f.size.options.map((o) => o.value)).toEqual(['L', 'Choice 1'])
+    expect(f[own.name]).toMatchObject({ kind: 'radio', options: [{ value: 'S' }] })
   })
 
   test('reading order is by rows, then left to right', () => {

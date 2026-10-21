@@ -5,7 +5,7 @@ import { wrapLines } from './layout.ts'
 import { cssFamily, loadFont, measurer } from './viewFonts.ts'
 import type { InstalledFont } from '../fonts/book.ts'
 import { FIELD_SIZE, newField } from './fields.ts'
-import { lineChanged, type PageContent } from './content.ts'
+import { fallbackFont, lineChanged, type PageContent } from './content.ts'
 import { isField, itemsOn, type FieldItem, type FieldType, type Item, type LineEditItem, type PictureEditItem, type Point, type TextItem } from './items.ts'
 
 export type FieldTool = `field-${FieldType}`
@@ -48,6 +48,8 @@ type Props = {
   /** the page's own lines and pictures, to pick for changing (content mode) */
   content?: PageContent
   onPickContent?: (kind: 'line' | 'picture', id: number, edit: boolean) => void
+  /** form fields can be picked (forms mode); otherwise they are shown faintly and let clicks through to the page */
+  fieldsActive?: boolean
   /** the picture of the page, drawn under everything */
   children: ReactNode
 }
@@ -62,7 +64,7 @@ type Drag =
 const SNAP_PX = 6
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
-export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, order, content, onPickContent, children }: Props) {
+export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, order, content, onPickContent, fieldsActive = true, children }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [draft, setDraft] = useState<Item | null>(null)
@@ -232,7 +234,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
         {guides.y.map((g) => <line key={`gy${g}`} y1={P(g, 'y')} y2={P(g, 'y')} x1={0} x2={size.width} stroke="currentColor" strokeWidth={1} vectorEffect="non-scaling-stroke" className="text-accent" />)}
       </svg>
 
-      {shown.map((i) => {
+      {[...shown.filter((i) => !isField(i)), ...shown.filter(isField)].map((i) => {
         if (i.kind === 'text') {
           if (i.id === editing) return <TextEditor key={i.id} item={i} scale={scale} onDone={(text) => {
             onEditing(null)
@@ -258,7 +260,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
         }
         if (i.kind === 'picture') return <PictureView key={i.id} item={i} url={i.replace ? urls.get(i.replace.data) : i.preview} hit={hit} onPointerDown={(e) => onItemDown(e, i)} />
         if (i.kind === 'erase') return <div key={i.id} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} onPointerDown={(e) => onItemDown(e, i)} className="absolute border border-dashed border-[rgb(220_38_38)] bg-white" title="Erased" />
-        if (i.kind === 'field') return <FieldView key={i.id} item={i} scale={scale} pageHeight={height} hit={hit} number={order?.numbers.get(i.id)} onPointerDown={(e) => onItemDown(e, i)} />
+        if (i.kind === 'field') return <FieldView key={i.id} item={i} scale={scale} pageHeight={height} hit={fieldsActive ? hit : 'none'} faint={!fieldsActive} number={order?.numbers.get(i.id)} onPointerDown={(e) => onItemDown(e, i)} />
         if (i.kind === 'note') {
           return (
             <div key={i.id} title={i.text || 'Note'} style={{ left: `${i.at.x * 100}%`, top: `${i.at.y * 100}%`, width: 20 * scale, height: 20 * scale, background: i.colour, pointerEvents: hit }} className="absolute rounded-sm border border-black/60 shadow-sm" onPointerDown={(e) => onItemDown(e, i)} />
@@ -441,7 +443,7 @@ function TextEditor({ item, scale, onDone }: { item: TextItem; scale: number; on
 const FIELD_LABEL: Record<FieldType, string> = { text: 'Text', date: 'Date', checkbox: '', radio: '', dropdown: '▾', list: 'List', signature: 'Signature' }
 
 /** a form field in the editor: a tinted box with what it holds (the saved field looks as its settings say) */
-function FieldView({ item: i, scale, pageHeight, hit, number, onPointerDown }: { item: FieldItem; scale: number; pageHeight: number; hit: 'auto' | 'none'; number?: number; onPointerDown: (e: ReactPointerEvent) => void }) {
+function FieldView({ item: i, scale, pageHeight, hit, faint, number, onPointerDown }: { item: FieldItem; scale: number; pageHeight: number; faint?: boolean; hit: 'auto' | 'none'; number?: number; onPointerDown: (e: ReactPointerEvent) => void }) {
   const round = i.type === 'radio'
   const on = i.type === 'checkbox' ? i.value === true : i.type === 'radio' && i.value === i.state
   const shown = i.type === 'checkbox' || i.type === 'radio' ? (on ? (round ? '●' : '✓') : '') : i.type === 'dropdown' ? `${i.options.find((o) => o.value === i.value)?.label ?? i.value} ▾` : String(i.value || FIELD_LABEL[i.type])
@@ -450,7 +452,7 @@ function FieldView({ item: i, scale, pageHeight, hit, number, onPointerDown }: {
     <div
       title={`${i.name}${i.locked ? ' (can only be moved or deleted)' : ''}`}
       onPointerDown={onPointerDown}
-      style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, fontSize: px, background: i.background ?? undefined }}
+      style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, fontSize: px, background: i.background ?? undefined, opacity: faint ? 0.45 : undefined }}
       className={`absolute flex items-center border border-dashed px-0.5 leading-none text-[rgb(30_64_175)] ${i.locked ? 'border-[rgb(180_83_9)] bg-[rgb(245_158_11/0.12)]' : 'border-[rgb(37_99_235)] bg-[rgb(37_99_235/0.1)]'} ${round ? 'justify-center rounded-full' : i.type === 'checkbox' ? 'justify-center' : i.type === 'list' || i.multiline ? 'items-start pt-0.5' : ''}`}
     >
       <span className={`max-w-full truncate ${i.value === '' || i.value === false ? 'opacity-60' : ''}`}>{shown}</span>
@@ -460,7 +462,7 @@ function FieldView({ item: i, scale, pageHeight, hit, number, onPointerDown }: {
 }
 
 /** the font a line of the page is shown in by the editor: its stand-in when it keeps its own (the browser can't use the PDF's) */
-const shownFont = (i: LineEditItem) => (i.font === 'own' ? i.lookalike : i.font)
+const shownFont = (i: LineEditItem) => fallbackFont(i)
 
 /** CSS for a line of the page at its size: the line box is the em box (a quarter em below the baseline to an em above) */
 function lineStyle(i: LineEditItem, scale: number) {
@@ -469,13 +471,13 @@ function lineStyle(i: LineEditItem, scale: number) {
 }
 
 /** white over where something of the page's own was, so the editor shows it changed (the saved file really removes it) */
-const Cover = ({ r }: { r: Rect }) => <div aria-hidden="true" className="pointer-events-none absolute bg-white" style={{ left: `calc(${r.x * 100}% - 1px)`, top: `calc(${r.y * 100}% - 1px)`, width: `calc(${r.w * 100}% + 2px)`, height: `calc(${r.h * 100}% + 2px)` }} />
+const Cover = ({ r, colour }: { r: Rect; colour?: string }) => <div aria-hidden="true" className="pointer-events-none absolute" style={{ background: colour ?? '#ffffff', left: `calc(${r.x * 100}% - 1px)`, top: `calc(${r.y * 100}% - 1px)`, width: `calc(${r.w * 100}% + 2px)`, height: `calc(${r.h * 100}% + 2px)` }} />
 
 function LineView({ item: i, scale, hit, onPointerDown }: { item: LineEditItem; scale: number; hit: 'auto' | 'none'; onPointerDown: (e: ReactPointerEvent) => void }) {
   const changed = lineChanged(i)
   return (
     <>
-      {changed && <Cover r={i.from} />}
+      {changed && <Cover r={i.from} colour={i.cover} />}
       <div
         onPointerDown={onPointerDown}
         style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, minWidth: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, ...(changed ? lineStyle(i, scale) : {}) }}
@@ -496,7 +498,7 @@ function LineEditor({ item, scale, onDone }: { item: LineEditItem; scale: number
   }, [])
   return (
     <>
-      <Cover r={item.from} />
+      <Cover r={item.from} colour={item.cover} />
       <input
         ref={ref}
         value={text}
@@ -519,12 +521,18 @@ function PictureView({ item: i, url, hit, onPointerDown }: { item: PictureEditIt
   const changed = !!i.deleted || !!i.replace || i.box.x !== i.from.x || i.box.y !== i.from.y || i.box.w !== i.from.w || i.box.h !== i.from.h
   return (
     <>
-      {changed && <Cover r={i.from} />}
+      {changed && <Cover r={i.from} colour={i.cover} />}
       <div onPointerDown={onPointerDown} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} className="absolute">
         {changed && !i.deleted && url && <img src={url} alt="" draggable={false} className="size-full" />}
       </div>
     </>
   )
+}
+
+/** where each handle sits: just outside the box, so on a small item (a one-line form field) they don't hide what it shows */
+const OUTSIDE: Partial<Record<Handle | 'from' | 'to', string>> = {
+  nw: 'translate(-100%, -100%)', ne: 'translate(0, -100%)', sw: 'translate(-100%, 0)', se: 'translate(0, 0)',
+  n: 'translate(-50%, -100%)', s: 'translate(-50%, 0)', e: 'translate(0, -50%)', w: 'translate(-100%, -50%)',
 }
 
 /** the outline of the selected item, with its handles */
@@ -535,8 +543,8 @@ function Selection({ item, scale, size, onHandleDown }: { item: Item; scale: num
       type="button"
       aria-label={label}
       onPointerDown={(e) => onHandleDown(e, h)}
-      style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
-      className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-accent bg-surface pointer-coarse:size-6"
+      style={{ left: `${x * 100}%`, top: `${y * 100}%`, transform: OUTSIDE[h] ?? 'translate(-50%, -50%)' }}
+      className="absolute size-3 rounded-sm border border-accent bg-surface pointer-coarse:size-6"
     />
   )
   if (item.kind === 'line') return <>{[handle('a', item.from.x, item.from.y, 'from', 'Move the start'), handle('b', item.to.x, item.to.y, 'to', 'Move the end')]}</>

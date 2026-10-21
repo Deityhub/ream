@@ -2,7 +2,7 @@
 // screen has the saved file's letters, and line breaks are worked out with the same widths (kerning off, as in the file).
 import { browserFonts } from '../fonts/source.ts'
 import type { InstalledFont } from '../fonts/book.ts'
-import { weightOf } from '../fonts/match.ts'
+import { lookAlikeFor, weightOf } from '../fonts/match.ts'
 import { FONTS } from './items.ts'
 
 // the parts each bundled font comes in, with the letters each has (as Fontsource splits them)
@@ -14,6 +14,8 @@ const SUBSETS: [string, string][] = [
 ]
 
 const loading = new Map<string, Promise<void>>()
+/** the faces put in the page for each family and style, taken out again when a font added for it replaces the look-alike */
+const shown = new Map<string, FontFace[]>()
 
 /** the CSS family a text item is shown in, once its font is ready (falls back to the system's sans while loading) */
 export function cssFamily(font: string): string {
@@ -22,12 +24,15 @@ export function cssFamily(font: string): string {
 
 /** load one style of a font into the page: a bundled one from its files, an added one from its bytes */
 export function loadFont(font: string, bold: boolean, italic: boolean, added: InstalledFont[]): Promise<void> {
-  const key = `${font}/${bold}/${italic}`
+  // a family nothing was added for is shown in the look-alike the saved file would use
+  const own = added.some((f) => (f.for ?? f.family) === font)
+  const style = `${font}/${bold}/${italic}`
+  const key = `${style}/${own ? added.filter((f) => (f.for ?? f.family) === font).map((f) => f.postscript).join(',') : ''}`
   let p = loading.get(key)
   if (p) return p
   const family = cssFamily(font).slice(1, -1)
   const descriptors = { weight: bold ? '700' : '400', style: italic ? 'italic' : 'normal' }
-  const bundled = FONTS.find((f) => f.name === font)
+  const bundled = FONTS.find((f) => f.name === font) ?? (own ? undefined : FONTS.find((f) => f.family === lookAlikeFor(font)))
   p = (async () => {
     const faces: FontFace[] = []
     if (bundled) {
@@ -44,6 +49,8 @@ export function loadFont(font: string, bold: boolean, italic: boolean, added: In
       const best = pool.sort((a, b) => Math.abs(weightOf(a.style) - target) - Math.abs(weightOf(b.style) - target))[0]
       if (best) faces.push(new FontFace(family, best.bytes as BufferSource, descriptors))
     }
+    for (const old of shown.get(style) ?? []) document.fonts.delete(old)
+    shown.set(style, faces)
     for (const f of faces) {
       document.fonts.add(f)
       await f.load().catch(() => {})

@@ -6,6 +6,7 @@ import { FONTS, type FieldItem, type Item, type TextItem } from './items.ts'
 import { FIELD_KIND, FieldProperties } from './FieldProperties.tsx'
 import { EraseProperties, LineProperties, PictureProperties } from './ContentProperties.tsx'
 import type { FieldSettings } from './fields.ts'
+import type { InstalledFont } from '../fonts/book.ts'
 
 type Props = {
   item: Item | null
@@ -28,6 +29,10 @@ type Props = {
   onField: (patch: Partial<FieldSettings>) => void
   /** pick a picture to put in place of the selected one */
   onReplace: () => void
+  groups: string[]
+  onGroup: (target: string | null) => void
+  /** the font files added or found for the PDF's families */
+  added: InstalledFont[]
 }
 
 const row = 'flex flex-wrap items-center gap-2 text-sm'
@@ -35,7 +40,7 @@ const small = 'rounded-md border border-line px-2 py-1 text-sm hover:bg-surface-
 const KIND: Record<Item['kind'], string> = { text: 'Text', image: 'Picture', shape: 'Shape', line: 'Line', draw: 'Drawing', whiteout: 'Whiteout', markup: 'Text markup', note: 'Note', link: 'Link', field: 'Form field', textline: 'Line of text', picture: 'Picture', erase: 'Erased area' }
 
 /** the settings of the selected item, or of the tool in hand when nothing is selected (what the next item starts with) */
-export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont, group, taken, onField, onReplace }: Props) {
+export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont, group, taken, onField, onReplace, groups, onGroup, added }: Props) {
   if (!item) return <ToolDefaults tool={tool} style={style} onStyle={onStyle} fonts={fonts} onAddFont={onAddFont} />
   const set = (patch: Partial<Item>) => onItem({ ...item, ...patch } as Item)
   return (
@@ -146,8 +151,8 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
           {item.target === null && item.url && !/^(https?:|mailto:)/i.test(item.url) && <p className="text-xs text-warning">Web addresses start with https://, http:// or mailto:.</p>}
         </fieldset>
       )}
-      {item.kind === 'field' && <FieldProperties item={item} group={group} taken={taken} onField={onField} onItem={(p) => set(p)} />}
-      {item.kind === 'textline' && <LineProperties item={item} onItem={(p) => set(p)} onEdit={onEdit} fonts={fonts} />}
+      {item.kind === 'field' && <FieldProperties item={item} group={group} taken={taken} onField={onField} onItem={(p) => set(p)} groups={groups} onGroup={onGroup} />}
+      {item.kind === 'textline' && <LineProperties item={item} onItem={(p) => set(p)} onEdit={onEdit} fonts={fonts} added={added} />}
       {item.kind === 'picture' && <PictureProperties item={item} onItem={(p) => set(p)} onReplace={onReplace} />}
       {item.kind === 'erase' && <EraseProperties item={item} />}
       {!['markup', 'note', 'field', 'textline', 'picture', 'erase'].includes(item.kind) && (

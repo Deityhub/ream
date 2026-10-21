@@ -96,7 +96,8 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **Markup** needs the page's own text: scanned pages have none.
   - **Form fields:**
     - Fields the file had can be moved, resized, renamed (within their group), set up and deleted; one that is changed gets new pictures drawn by Ream, so a look of its own (a cross instead of a tick, a font the form chose) is replaced. A field that is only moved keeps its pictures.
-    - Field text is drawn in Helvetica: Latin letters, digits and common symbols only.
+    - Field text is drawn in Helvetica: Latin letters, digits and common symbols only (the fonts panel doesn't apply to fields).
+    - A radio button can be moved into another group, or a group of its own, from its settings; a button of the file's that moves leaves its old field.
     - Fields with rich text, several choices at once or a file can only be moved, resized, renamed or deleted; push buttons are left as they are and aren't shown.
     - Date fields format their text with Acrobat's date script; viewers without scripts (Chromium among them) treat them as plain text fields.
     - Signature boxes are empty signature fields: signing with a certificate isn't part of this.
@@ -105,11 +106,11 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
     - A file with an XFA form keeps it; viewers that use XFA may ignore the fields set up here.
   - **Edit content:**
     - Text is changed a line at a time (a line is letters on one baseline in one font, so a bold word is a line of its own). Longer text runs on past the line's end; nothing re-flows into the next line.
-    - A changed line keeps the PDF's own font when that font has every letter typed. Embedded fonts are usually subsets with only the letters the file used, so a new letter moves the line to a bundled look-alike (the panel says which letters and which font). Character and word spacing are reset, so a justified line comes back with ordinary spacing.
+    - A changed line keeps the PDF's own font when that font has every letter typed. Embedded fonts are usually subsets with only the letters the file used, so a new letter moves the line to its family from "Fonts in this file" (found on the computer, added as a file or downloaded free from Fontsource), else to a bundled look-alike; the panel says which letters and which font. The editor shows such a line in that font, but a line kept in its embedded font in its look-alike. Character and word spacing are reset, so a justified line comes back with ordinary spacing.
     - Only text and pictures in the page's own content can be picked: text inside grouped drawings (forms), turned or slanted text and invisible text (a scan's text layer) can't. Erase reaches all of it.
     - A moved or resized picture is drawn again on top of the page, without any clip or opacity it had. A replaced picture is taken out and the new one is drawn in its box.
     - **Erase area** takes the text, shapes and pictures under it out of the file (a picture partly under it is hidden there with a soft mask). It doesn't clean the rest of the file (metadata, other copies): Redact PDF is the tool for sensitive content.
-    - The editor shows a changed line in its look-alike font and covers the old place in white, so on a coloured page the editor's preview shows white patches; the saved file has none.
+    - The editor shows a changed line in its look-alike font and covers its old place in the page's colour around it (the commonest colour just outside the line); on a patterned or photo background that cover shows in the editor, never in the saved file. Form fields are always shown above the page's own content, as viewers show them.
   - **Not checked:** Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7.5 limits

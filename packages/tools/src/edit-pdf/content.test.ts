@@ -21,7 +21,8 @@ describe('edit-pdf: the page\'s own content', () => {
     expect(lookalikeOf('Helvetica', 'sans')).toBe('Arial')
     expect(lookalikeOf('Times', 'serif')).toBe('Times New Roman')
     expect(lookalikeOf('Calibri', 'sans')).toBe('Calibri')
-    expect(lookalikeOf('Fancy', 'mono')).toBe('Courier New')
+    expect(lookalikeOf('', 'mono')).toBe('Courier New')
+    expect(lookalikeOf('Georgia', 'serif')).toBe('Cambria')
   })
 
   test('a fix in the line\'s own font; a letter its subset lacks moves the line to a stand-in; an erased line is gone', async () => {
@@ -35,7 +36,8 @@ describe('edit-pdf: the page\'s own content', () => {
     const erase: Item = { id: 'e', page: 0, kind: 'erase', box: { x: b.x, y: b.y + b.h * 0.45, w: b.w, h: b.h * 0.1 } }
     const { edits, draw } = contentEdits([title, body, erase], [{ width: 596, height: 843 }])
     expect(edits.get(0)!.lines!.map((l) => [l.id, l.own])).toEqual([[0, true], [1, false]])
-    expect(draw.map((d) => (d.kind === 'text' ? [d.text, d.font] : null))).toEqual([['Zebra', 'Times New Roman']])
+    // drawn in its own family: a font added for it, else the look-alike the font book picks (Tinos for Times)
+    expect(draw.map((d) => (d.kind === 'text' ? [d.text, d.font] : null))).toEqual([['Zebra', 'Times']])
 
     const out = await save([title, body, erase])
     const all = await textOf(out)

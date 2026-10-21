@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '@ream/ui'
 import type { PanelProps } from '../panels.ts'
 import { usePageZoom } from '../PageZoom.tsx'
+import { FontsPanel } from '../fonts/FontsPanel.tsx'
 import { Overlay, type Style, type Tool } from './Overlay.tsx'
 import { Properties } from './Properties.tsx'
 import { moved, pickText as pickFrom } from './geometry.ts'
-import { byPosition, copiedField, fieldItems, suggestedFields, type FieldSettings } from './fields.ts'
+import { byPosition, copiedField, fieldItems, joinGroup, suggestedFields, type FieldSettings } from './fields.ts'
 import { detectFields } from './detect.ts'
 import { defaultOptions, isContent, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item, type PictureEditItem } from './items.ts'
 import { lineChanged, lineItem, type PageContent } from './content.ts'
@@ -333,13 +334,13 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     if (kind === 'line') {
       const l = pageContent.lines.find((x) => x.id === id)
       if (!l) return
-      const it = lineItem(newId(), current, l)
+      const it = { ...lineItem(newId(), current, l), cover: colourAround(pageBox.current, l.box) }
       commit([...items, it], it.id)
       if (edit) setEditing(it.id)
     } else {
       const p = pageContent.pictures.find((x) => x.id === id)
       if (!p) return
-      const it: PictureEditItem = { id: newId(), page: current, kind: 'picture', source: id, from: p.box, box: p.box, preview: cropOf(pageBox.current, p.box) }
+      const it: PictureEditItem = { id: newId(), page: current, kind: 'picture', source: id, from: p.box, box: p.box, preview: cropOf(pageBox.current, p.box), cover: colourAround(pageBox.current, p.box) }
       commit([...items, it], it.id)
     }
   }
@@ -439,6 +440,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               pickText={pickText}
               newId={newId}
               content={mode === 'content' && pageContent ? pageContent : undefined}
+              fieldsActive={mode === 'forms'}
               onPickContent={pick}
               order={ordering ? { numbers: new Map((ordering.length ? ordering : orderNow).map((id, k) => [id, k + 1])), pick: (id) => {
                 const next = ordering.includes(id) ? ordering : [...ordering, id]
@@ -486,6 +488,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           onOrder={(by) => sel && reorder(sel.id, by)}
           onEdit={() => (sel?.kind === 'text' || sel?.kind === 'textline') && setEditing(sel.id)}
           onReplace={() => replacer.current?.click()}
+          groups={[...new Set(fields.filter((f) => f.type === 'radio').map((f) => f.name))]}
+          onGroup={(target) => sel && commit(joinGroup(items, sel.id, target))}
+          added={o.fonts}
           group={sel && isField(sel) ? fields.filter((f) => f.name === sel.name) : []}
           taken={new Set(sel && isField(sel) ? fields.filter((f) => f.name !== sel.name).map((f) => f.name.trim()) : [])}
           onField={(patch) => sel && isField(sel) && updateField(sel, patch)}
@@ -507,6 +512,11 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               : undefined
           }
         />
+        {mode !== 'forms' && pdfHost.fonts && (
+          // the PDF's own fonts, found on the computer, added as files or downloaded: a changed line that its embedded
+          // subset can't show keeps its family, and new text can be written in it
+          <FontsPanel file={file} readOfficeFonts={pdfHost.fonts} readFontFile={readFontFile} value={o.fonts} onChange={(fonts) => onChange({ ...latest.current, fonts })} />
+        )}
         {mode === 'forms' && !sel && pdfHost.layout && (
           <section aria-label="Find fields" className="space-y-2">
             <h3 className="text-sm font-medium">Find fields</h3>
@@ -562,6 +572,37 @@ function cropOf(page: HTMLElement | null, box: { x: number; y: number; w: number
   out.height = Math.round(sh)
   out.getContext('2d')!.drawImage(c, sx, sy, sw, sh, 0, 0, out.width, out.height)
   return out.toDataURL('image/png')
+}
+
+/**
+ * The page's colour around a box: the commonest colour of a thin ring of the drawn page just outside it, for painting
+ * over the box's old place in the editor (white when the page can't be read).
+ */
+export function colourAround(page: HTMLElement | null, box: { x: number; y: number; w: number; h: number }): string {
+  const c = page?.querySelector('canvas')
+  const ctx = c?.getContext('2d', { willReadFrequently: true })
+  if (!c || !ctx || !c.width) return '#ffffff'
+  const counts = new Map<string, number>()
+  const [x0, y0, x1, y1] = [box.x * c.width - 2, box.y * c.height - 2, (box.x + box.w) * c.width + 2, (box.y + box.h) * c.height + 2].map(Math.round)
+  const sample = (x: number, y: number, w: number, h: number) => {
+    const [sx, sy] = [Math.max(0, x), Math.max(0, y)]
+    const [sw, sh] = [Math.min(c.width, x + w) - sx, Math.min(c.height, y + h) - sy]
+    if (sw <= 0 || sh <= 0) return
+    const d = ctx.getImageData(sx, sy, sw, sh).data
+    for (let i = 0; i < d.length; i += 4) {
+      // near colours count as one (anti-aliasing, JPEG noise)
+      const k = [d[i], d[i + 1], d[i + 2]].map((v) => Math.min(255, Math.round(v / 8) * 8).toString(16).padStart(2, '0')).join('')
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    }
+  }
+  sample(x0, y0, x1 - x0, 1)
+  sample(x0, y1, x1 - x0, 1)
+  sample(x0, y0, 1, y1 - y0)
+  sample(x1, y0, 1, y1 - y0)
+  let best = 'ffffff'
+  let most = 0
+  for (const [k, n] of counts) if (n > most) (best = k), (most = n)
+  return `#${best}`
 }
 
 /** a message in place of the panel, with the run button still there */
