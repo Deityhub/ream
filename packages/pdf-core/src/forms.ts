@@ -33,6 +33,20 @@ export type FormField = {
   editable: boolean
   /** the form says people can't fill it in with these tools (several choices at once, files, ...) */
   unsupported: boolean
+  /** the help text viewers show for it (/TU) */
+  tooltip: string
+  required: boolean
+  /** 0 left, 1 centre, 2 right */
+  align: number
+  /** points; 0 means as big as fits */
+  fontSize: number
+  textColour: [number, number, number]
+  /** from the first widget: its border and background (null for none) */
+  border: [number, number, number] | null
+  borderWidth: number
+  background: [number, number, number] | null
+  /** a text field that a viewer formats as a date (Acrobat's AFDate_FormatEx), with its format */
+  dateFormat: string | null
 }
 
 /** one place a field is shown: its page and its box as fractions of the page as displayed (rotation applied, y from the top) */
@@ -50,16 +64,17 @@ export type FormInfo = {
 }
 
 // field flags
-const READ_ONLY = 1 << 0
-const MULTILINE = 1 << 12
-const PASSWORD = 1 << 13
-const RADIO = 1 << 15
-const PUSH = 1 << 16
-const COMBO = 1 << 17
-const EDIT = 1 << 18
+export const READ_ONLY = 1 << 0
+export const REQUIRED = 1 << 1
+export const MULTILINE = 1 << 12
+export const PASSWORD = 1 << 13
+export const RADIO = 1 << 15
+export const PUSH = 1 << 16
+export const COMBO = 1 << 17
+export const EDIT = 1 << 18
 const MULTI_SELECT = 1 << 21
 const FILE_SELECT = 1 << 20
-const COMB = 1 << 24
+export const COMB = 1 << 24
 const RICH = 1 << 25
 
 const INHERITED = ['FT', 'Ff', 'V', 'DV', 'DA', 'Q', 'MaxLen', 'Opt'] as const
@@ -194,7 +209,7 @@ function adoptPageWidgets(doc: PdfDocument, form: PdfDict | null, out: Terminal[
   }
 }
 
-const num = (v: PdfObj) => (typeof v === 'number' ? v : 0)
+export const num = (v: PdfObj) => (typeof v === 'number' ? v : 0)
 
 export function kindOf(doc: PdfDocument, t: Terminal): FieldKind {
   const ft = t.attr('FT')
@@ -218,7 +233,7 @@ export function onStates(doc: PdfDocument, w: Widget): string[] {
   return isDict(n) ? [...n.keys()].filter((k) => k !== 'Off') : []
 }
 
-const rectOf = (doc: PdfDocument, w: Widget): [number, number, number, number] | null => {
+export const rectOf = (doc: PdfDocument, w: Widget): [number, number, number, number] | null => {
   const r = doc.resolve(w.dict.get('Rect'))
   const n = Array.isArray(r) ? r.map((v) => doc.resolve(v)) : []
   if (n.length !== 4 || !n.every((v) => typeof v === 'number')) return null
@@ -226,7 +241,7 @@ const rectOf = (doc: PdfDocument, w: Widget): [number, number, number, number] |
   return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)]
 }
 
-function options(doc: PdfDocument, t: Terminal, kind: FieldKind): { value: string; label: string }[] {
+export function options(doc: PdfDocument, t: Terminal, kind: FieldKind): { value: string; label: string }[] {
   if (kind === 'radio') {
     const opt = t.attr('Opt')
     const states = t.widgets.map((w) => onStates(doc, w)[0]).filter((s): s is string => !!s)
@@ -286,6 +301,10 @@ export function readForm(doc: PdfDocument): FormInfo {
     } else if (kind === 'radio') value = v instanceof PdfName && v.value !== 'Off' ? v.value : ''
     else if (kind === 'text' || kind === 'choice') value = Array.isArray(v) ? textOf(doc, v[0]) : isDict(v) ? '' : textOf(doc, v)
     const maxLen = t.attr('MaxLen')
+    const da = parseDefaultAppearance(textOf(doc, t.attr('DA')) || '/Helv 0 Tf 0 g')
+    const mk = first ? doc.resolve(first.dict.get('MK')) : null
+    const bs = first ? doc.resolve(first.dict.get('BS')) : null
+    const q = t.attr('Q')
     const page = first ? widgetPage(first) : t.ref ? (pageOf.get(t.ref.num) ?? null) : null
     const widgets = t.widgets.map((w): FieldWidget => {
       const p = widgetPage(w)
@@ -308,9 +327,83 @@ export function readForm(doc: PdfDocument): FormInfo {
       widgets,
       editable: kind === 'choice' && !!(ff & EDIT),
       unsupported: kind === 'signature' || kind === 'button' || !!(ff & (MULTI_SELECT | FILE_SELECT | RICH)) || (kind === 'checkbox' && !first),
+      tooltip: textOf(doc, t.dict.get('TU')),
+      required: !!(ff & REQUIRED),
+      align: typeof q === 'number' ? Math.min(2, Math.max(0, q)) : 0,
+      fontSize: da.size,
+      textColour: rgbOf(da.colour.split(/\s+/).slice(0, -1).map(Number)) ?? [0, 0, 0],
+      border: isDict(mk) ? colourArray(doc, mk.get('BC')) : null,
+      borderWidth: isDict(bs) && typeof doc.resolve(bs.get('W')) === 'number' ? (doc.resolve(bs.get('W')) as number) : 1,
+      background: isDict(mk) ? colourArray(doc, mk.get('BG')) : null,
+      dateFormat: kind === 'text' ? dateFormatOf(doc, t) : null,
     }
   })
   return { fields, xfa }
+}
+
+/** grey, RGB or CMYK parts as RGB */
+const rgbOf = (n: number[]): [number, number, number] | null =>
+  n.some((v) => !Number.isFinite(v)) ? null : n.length === 1 ? [n[0], n[0], n[0]] : n.length === 3 ? [n[0], n[1], n[2]] : n.length === 4 ? [0, 1, 2].map((i) => (1 - n[i]) * (1 - n[3])) as [number, number, number] : null
+
+const colourArray = (doc: PdfDocument, o: PdfObj | undefined) => {
+  const a = doc.resolve(o)
+  return Array.isArray(a) ? rgbOf(a.map((v) => doc.resolve(v)).map((v) => (typeof v === 'number' ? v : NaN))) : null
+}
+
+/** the date format a field's format script asks for, as Acrobat writes it: AFDate_FormatEx("dd/mm/yyyy") */
+export function dateFormatOf(doc: PdfDocument, t: Terminal): string | null {
+  const aa = doc.resolve(t.dict.get('AA'))
+  const f = isDict(aa) ? doc.resolve(aa.get('F')) : null
+  const js = isDict(f) ? doc.resolve(f.get('JS')) : null
+  const text = js instanceof PdfString ? decodeTextString(js.bytes) : js instanceof PdfStream && !js.dict.has('Filter') ? String.fromCharCode(...js.data) : ''
+  return /AFDate_Format(?:Ex)?\(\s*"([^"]+)"/.exec(text)?.[1] ?? null
+}
+
+/** the form dictionary as a private copy that may be changed (made when the file has none) */
+export function editableForm(e: Editing): PdfDict {
+  const r = e.catalog.get('AcroForm')
+  if (r instanceof PdfRef) return e.edit(r)
+  const form: PdfDict = new Map(isDict(r) ? r : [['Fields', []]])
+  e.catalog.set('AcroForm', form)
+  return form
+}
+
+/** take the removed widgets (by object number) out of the form, and the fields left without any widget with them */
+export function pruneFields(doc: PdfDocument, e: Editing, gone: Set<number>) {
+  if (!e.catalog.get('AcroForm')) return
+  const form = editableForm(e)
+  /** a field (or widget) still has something on a page */
+  const alive = (ref: PdfObj, depth = 0): boolean => {
+    if (ref instanceof PdfRef && gone.has(ref.num)) return false
+    const d = doc.resolve(ref)
+    if (!isDict(d) || depth > 32) return true
+    const kids = doc.resolve(d.get('Kids'))
+    if (!Array.isArray(kids)) return true
+    const left = kids.filter((k) => alive(k, depth + 1))
+    if (left.length !== kids.length && ref instanceof PdfRef) {
+      if (!left.length) return false
+      e.edit(ref).set('Kids', left)
+    }
+    return left.length > 0
+  }
+  const fields = doc.resolve(form.get('Fields'))
+  if (Array.isArray(fields)) form.set('Fields', fields.filter((f) => alive(f)))
+}
+
+/** the form lists the copies of fields that the pages show (see `adoptPageWidgets`) */
+export function listShownFields(doc: PdfDocument, e: Editing, terminals: Terminal[]) {
+  const swap = new Map<number, PdfRef>()
+  const extra: PdfRef[] = []
+  for (const t of terminals) {
+    if (t.replaces && t.top) swap.set(t.replaces.num, t.top)
+    else if (t.top && !t.replaces) extra.push(t.top)
+  }
+  if (!swap.size && !extra.length) return
+  const form = editableForm(e)
+  const listed = doc.resolve(form.get('Fields'))
+  const fields = (Array.isArray(listed) ? listed : []).map((f) => (f instanceof PdfRef && swap.has(f.num) ? swap.get(f.num)! : f))
+  for (const x of extra) if (!fields.some((f) => f instanceof PdfRef && f.num === x.num)) fields.push(x)
+  form.set('Fields', fields)
 }
 
 // ---------- filling ----------
@@ -318,7 +411,7 @@ export function readForm(doc: PdfDocument): FormInfo {
 export type FormValues = Record<string, string | boolean>
 
 /** `/Helv 12 Tf 0 g` -> the font's resource name, its size (0 = fit the box) and the colour operators */
-function parseDefaultAppearance(da: string): { font: string; size: number; colour: string } {
+export function parseDefaultAppearance(da: string): { font: string; size: number; colour: string } {
   const m = /\/([^\s/]+)\s+([\d.]+)\s+Tf/.exec(da)
   const colour = da.replace(/\/[^\s/]+\s+[\d.]+\s+Tf/, '').trim()
   return { font: m?.[1] ?? 'Helv', size: m ? Number(m[2]) : 0, colour: /^[\d.\s]*(g|rg|k)$/.test(colour) ? colour : '0 g' }
@@ -476,22 +569,8 @@ export async function fillForm(doc: PdfDocument, values: FormValues): Promise<Ui
     }
     // every field now has a picture, so viewers needn't redraw them; and the form lists the copies the pages show
     if (form) {
-      const r = doc.catalog().get('AcroForm')
-      const target = r instanceof PdfRef ? e.edit(r) : new Map(form)
-      target.delete('NeedAppearances')
-      const listed = doc.resolve(form.get('Fields'))
-      const swap = new Map<number, PdfRef>()
-      const extra: PdfRef[] = []
-      for (const t of terminals) {
-        if (t.replaces && t.top) swap.set(t.replaces.num, t.top)
-        else if (t.top && !t.replaces) extra.push(t.top)
-      }
-      if (swap.size || extra.length) {
-        const fields = (Array.isArray(listed) ? listed : []).map((f) => (f instanceof PdfRef && swap.has(f.num) ? swap.get(f.num)! : f))
-        for (const x of extra) if (!fields.some((f) => f instanceof PdfRef && f.num === x.num)) fields.push(x)
-        target.set('Fields', fields)
-      }
-      if (!(r instanceof PdfRef)) e.catalog.set('AcroForm', target)
+      editableForm(e).delete('NeedAppearances')
+      listShownFields(doc, e, terminals)
     }
   })
 }

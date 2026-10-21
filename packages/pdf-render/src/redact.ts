@@ -13,6 +13,7 @@ import {
   editDocument,
   isDict,
   isName,
+  pruneFields,
   scanContent,
   usedResources,
   type Editing,
@@ -407,26 +408,3 @@ export async function redactPdf(doc: PdfDocument, areas: Map<number, Box[]>, opt
   })
 }
 
-/** take the removed widgets out of the form, and the fields left without any widget with them */
-function pruneFields(doc: PdfDocument, e: Editing, gone: Set<number>) {
-  const formRef = e.catalog.get('AcroForm')
-  const form = formRef instanceof PdfRef ? e.edit(formRef) : isDict(formRef) ? new Map(formRef) : null
-  if (!form) return
-  /** a field (or widget) still has something on a page */
-  const alive = (ref: PdfObj, depth = 0): boolean => {
-    if (ref instanceof PdfRef && gone.has(ref.num)) return false
-    const d = doc.resolve(ref)
-    if (!isDict(d) || depth > 32) return true
-    const kids = doc.resolve(d.get('Kids'))
-    if (!Array.isArray(kids)) return true
-    const left = kids.filter((k) => alive(k, depth + 1))
-    if (left.length !== kids.length && ref instanceof PdfRef) {
-      if (!left.length) return false
-      e.edit(ref).set('Kids', left)
-    }
-    return left.length > 0
-  }
-  const fields = doc.resolve(form.get('Fields'))
-  if (Array.isArray(fields)) form.set('Fields', fields.filter((f) => alive(f)))
-  if (!(formRef instanceof PdfRef)) e.catalog.set('AcroForm', form)
-}

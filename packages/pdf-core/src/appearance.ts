@@ -158,3 +158,20 @@ export function checkAppearance(w: number, h: number, look: Look, kind: 'checkbo
   }
   return form(w, h, content, new Map())
 }
+
+/** the picture of a list box: its entries one per line from the top, the chosen one marked */
+export function listAppearance(w: number, h: number, entries: string[], chosen: number, look: Look, font: FontLook): PdfStream {
+  const bw = look.border?.width ?? 0
+  const pad = bw + 2
+  const size = look.size || 12
+  const lead = size * 1.15
+  let body = ''
+  entries.forEach((entry, i) => {
+    const top = h - bw - i * lead
+    if (top - lead < bw) return
+    if (i === chosen) body += `ET q 0.6 0.75 0.95 rg ${n(bw)} ${n(top - lead)} ${n(w - 2 * bw)} ${n(lead)} re f Q BT ${look.colour} /${font.name} ${n(size)} Tf\n`
+    body += `1 0 0 1 ${n(pad)} ${n(top - lead + DESCENT * size + (lead - size) / 2)} Tm ${hex(font.encode(entry))} Tj\n`
+  })
+  const content = `${frame(w, h, look)}/Tx BMC\nq ${n(bw)} ${n(bw)} ${n(w - 2 * bw)} ${n(h - 2 * bw)} re W n\nBT\n${look.colour} /${font.name} ${n(size)} Tf\n${body}ET\nQ\nEMC\n`
+  return form(w, h, content, new Map<string, PdfObj>([['Font', new Map<string, PdfObj>([[font.name, font.ref]])]]))
+}
