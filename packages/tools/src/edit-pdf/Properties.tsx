@@ -2,7 +2,9 @@ import type { ReactNode } from 'react'
 import { Icon } from '@ream/ui'
 import { inputClass } from '../fields.tsx'
 import type { Style, Tool } from './Overlay.tsx'
-import { FONTS, type Item, type TextItem } from './items.ts'
+import { FONTS, type FieldItem, type Item, type TextItem } from './items.ts'
+import { FIELD_KIND, FieldProperties } from './FieldProperties.tsx'
+import type { FieldSettings } from './fields.ts'
 
 type Props = {
   item: Item | null
@@ -19,14 +21,18 @@ type Props = {
   fonts: string[]
   /** add a font file; gives the family it is listed under, or null when it can't be used */
   onAddFont?: (f: File) => Promise<string | null>
+  /** form fields: the selected field's other items, names other fields have, and changes to the whole field */
+  group: FieldItem[]
+  taken: Set<string>
+  onField: (patch: Partial<FieldSettings>) => void
 }
 
 const row = 'flex flex-wrap items-center gap-2 text-sm'
 const small = 'rounded-md border border-line px-2 py-1 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:min-h-11'
-const KIND: Record<Item['kind'], string> = { text: 'Text', image: 'Picture', shape: 'Shape', line: 'Line', draw: 'Drawing', whiteout: 'Whiteout', markup: 'Text markup', note: 'Note', link: 'Link' }
+const KIND: Record<Item['kind'], string> = { text: 'Text', image: 'Picture', shape: 'Shape', line: 'Line', draw: 'Drawing', whiteout: 'Whiteout', markup: 'Text markup', note: 'Note', link: 'Link', field: 'Form field' }
 
 /** the settings of the selected item, or of the tool in hand when nothing is selected (what the next item starts with) */
-export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont }: Props) {
+export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont, group, taken, onField }: Props) {
   if (!item) return <ToolDefaults tool={tool} style={style} onStyle={onStyle} fonts={fonts} onAddFont={onAddFont} />
   const set = (patch: Partial<Item>) => onItem({ ...item, ...patch } as Item)
   return (
@@ -35,8 +41,12 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
         <h3 className="text-sm font-medium">{KIND[item.kind]}</h3>
         <span className="ml-auto flex gap-1">
           <IconButton label="Duplicate (Ctrl or Cmd+D)" icon="copy" onClick={onDuplicate} />
-          <IconButton label="Bring forward" icon="forward" onClick={() => onOrder(1)} />
-          <IconButton label="Send back" icon="forward" flip onClick={() => onOrder(-1)} />
+          {item.kind !== 'field' && (
+            <>
+              <IconButton label="Bring forward" icon="forward" onClick={() => onOrder(1)} />
+              <IconButton label="Send back" icon="forward" flip onClick={() => onOrder(-1)} />
+            </>
+          )}
           <IconButton label="Delete (Delete key)" icon="trash" onClick={onRemove} />
         </span>
       </div>
@@ -133,7 +143,8 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
           {item.target === null && item.url && !/^(https?:|mailto:)/i.test(item.url) && <p className="text-xs text-warning">Web addresses start with https://, http:// or mailto:.</p>}
         </fieldset>
       )}
-      {item.kind !== 'markup' && item.kind !== 'note' && (
+      {item.kind === 'field' && <FieldProperties item={item} group={group} taken={taken} onField={onField} onItem={(p) => set(p)} />}
+      {item.kind !== 'markup' && item.kind !== 'note' && item.kind !== 'field' && (
         <label className={row}>
           <input type="checkbox" checked={!!item.everyPage} onChange={(e) => set({ everyPage: e.target.checked })} /> Put on every page
         </label>
@@ -149,7 +160,7 @@ function ToolDefaults({ tool, style, onStyle, fonts, onAddFont }: { tool: Tool; 
       {body}
     </section>
   )
-  if (tool === 'select') return head('Nothing selected', <p className="text-sm text-muted">Click something you added to change it, or pick a tool to add more.</p>)
+  if (tool === 'select') return head('Nothing selected', <p className="text-sm text-muted">Click something on the page to change it, or pick a tool to add more.</p>)
   if (tool === 'text') return head('New text', <TextFields value={style.text} onChange={(p) => onStyle({ ...style, text: { ...style.text, ...p } })} fonts={fonts} onAddFont={onAddFont} />)
   if (tool === 'rect' || tool === 'ellipse') return head(tool === 'rect' ? 'New rectangle' : 'New ellipse', <ShapeFields value={style.shape} onChange={(p) => onStyle({ ...style, shape: { ...style.shape, ...p } })} />)
   if (tool === 'line' || tool === 'arrow')
@@ -178,6 +189,11 @@ function ToolDefaults({ tool, style, onStyle, fonts, onAddFont }: { tool: Tool; 
       </>
     ))
   if (tool === 'note') return head('Note', <><Colour label="Colour" value={style.note.colour} onChange={(colour) => onStyle({ ...style, note: { colour } })} /><p className="text-xs text-muted">Click where the note goes, then type it here.</p></>)
+  if (tool.startsWith('field-')) {
+    const type = tool.slice(6) as FieldItem['type']
+    const how = type === 'checkbox' || type === 'radio' ? 'Click where it goes, or drag to make it bigger.' : 'Drag a box where it goes, or click for one of the usual size.'
+    return head(`New ${FIELD_KIND[type].toLowerCase()}`, <p className="text-sm text-muted">{how}{type === 'radio' ? ' Each click adds a button to the group of the one selected; pick Select to start another group.' : ''} Its settings show here once it's placed.</p>)
+  }
   if (tool === 'link') return head('Link', <p className="text-sm text-muted">Drag a box over what should be clickable, then choose where it goes.</p>)
   return head('Picture')
 }

@@ -31,7 +31,7 @@ type Request =
   | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'form'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'chars'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
-  | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number }
+  | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number; fields?: boolean }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
   | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
   | { id: number; op: 'officeFonts'; bytes: Uint8Array }
@@ -68,11 +68,11 @@ async function inspect(docId: number, bytes?: Uint8Array, office?: OfficeKind): 
   }
 }
 
-async function render(docId: number, page: number, width: number, bytes?: Uint8Array, office?: OfficeKind): Promise<RenderedPage> {
+async function render(docId: number, page: number, width: number, bytes?: Uint8Array, office?: OfficeKind, fields = true): Promise<RenderedPage> {
   const doc = await getDoc(docId, bytes, office)
   const geo = pageGeometry(doc, page, width)
   const canvas = new OffscreenCanvas(geo.width, geo.height)
-  const { warnings } = await renderPage(doc, page, canvas.getContext('2d')!, width)
+  const { warnings } = await renderPage(doc, page, canvas.getContext('2d')!, width, { fields })
   if (converted.has(docId)) warnings.unshift('it is drawn from our own conversion of the Office file')
   return { bitmap: canvas.transferToImageBitmap(), width: geo.width, height: geo.height, warnings }
 }
@@ -103,7 +103,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
       post({ id: req.id, ok: true, result: { faces: fontFaces(bytes), bytes } satisfies FontFileInfo }, [bytes.buffer as ArrayBuffer])
     }
     else if (req.op === 'render') {
-      const result = await render(req.docId, req.page, req.width, req.bytes, req.office)
+      const result = await render(req.docId, req.page, req.width, req.bytes, req.office, req.fields !== false)
       post({ id: req.id, ok: true, result }, [result.bitmap])
     } else {
       const result = await unlock(req.bytes, req.password)

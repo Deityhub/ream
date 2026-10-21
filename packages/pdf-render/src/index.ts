@@ -30,8 +30,8 @@ export function pageGeometry(doc: PdfDocument, index: number, widthPx: number): 
   return { page, width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), scale }
 }
 
-/** `text: false` leaves the page's text out: the design of a page under editable text */
-export type RenderOptions = { platform?: Platform; signal?: AbortSignal; text?: boolean }
+/** `text: false` leaves the page's text out: the design of a page under editable text; `fields: false` leaves form fields out (an editor draws its own) */
+export type RenderOptions = { platform?: Platform; signal?: AbortSignal; text?: boolean; fields?: boolean }
 export type RenderResult = { warnings: string[] }
 
 /**
@@ -58,7 +58,7 @@ export async function renderPage(doc: PdfDocument, index: number, ctx: Ctx2D, wi
     parts.reduce((at, p) => (joined.set(p, at), joined[at + p.length] = 10, at + p.length + 1), 0)
     const res = doc.resolve(page.dict.get('Resources') ?? page.inherited.get('Resources'))
     await interp.run(joined, isDict(res) ? res : new Map())
-    await interp.annotations(page)
+    await interp.annotations(page, options.fields !== false)
   } finally {
     ctx.restore()
   }

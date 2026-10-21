@@ -83,7 +83,46 @@ export type NoteItem = Base & { kind: 'note'; at: Point; text: string; colour: s
 /** a box that opens a web address, or goes to a page of the file */
 export type LinkItem = Base & { kind: 'link'; box: Rect; url: string; target: number | null }
 
-export type Item = TextItem | ImageItem | ShapeItem | LineItem | DrawItem | WhiteoutItem | MarkupItem | NoteItem | LinkItem
+export type FieldType = 'text' | 'date' | 'checkbox' | 'radio' | 'dropdown' | 'list' | 'signature'
+
+/**
+ * One place a form field is shown (a widget). A field shown in several places, such as a radio group, is the items
+ * that share a name; the field's own settings are the same on all of them.
+ */
+export type FieldItem = Base & {
+  kind: 'field'
+  box: Rect
+  type: FieldType
+  name: string
+  /** radio buttons: the value this button stands for */
+  state: string
+  /** text: the text; checkbox: ticked; radio: the chosen button's value; choices: the chosen entry's value */
+  value: string | boolean
+  tooltip: string
+  required: boolean
+  readOnly: boolean
+  multiline: boolean
+  password: boolean
+  comb: boolean
+  maxLength: number | null
+  /** points, 0 for as big as fits */
+  fontSize: number
+  align: 0 | 1 | 2
+  textColour: string
+  border: string | null
+  borderWidth: number
+  background: string | null
+  options: { value: string; label: string }[]
+  /** a drop-down that also takes text of one's own */
+  editable: boolean
+  dateFormat: string
+  /** a field the file had: its name there and which of its widgets this is */
+  source?: { name: string; widget: number }
+  /** a field these tools can't set up (rich text, several choices at once, a file): it can be moved or deleted only */
+  locked?: boolean
+}
+
+export type Item = TextItem | ImageItem | ShapeItem | LineItem | DrawItem | WhiteoutItem | MarkupItem | NoteItem | LinkItem | FieldItem
 
 export type EditPdfOptions = {
   items: Item[]
@@ -91,9 +130,13 @@ export type EditPdfOptions = {
   fonts: InstalledFont[]
   /** bake highlights and notes into the pages too (links stay links) */
   flattenComments: boolean
+  /** the form fields as the file had them, to tell what changed */
+  fieldsLoaded: FieldItem[]
+  /** per page, the order Tab goes through its fields (item ids) */
+  tabOrder: Record<number, string[]>
 }
 
-export const defaultOptions: EditPdfOptions = { items: [], fonts: [], flattenComments: false }
+export const defaultOptions: EditPdfOptions = { items: [], fonts: [], flattenComments: false, fieldsLoaded: [], tabOrder: {} }
 
 /** the bundled fonts, by the name the font book knows them under; each has the letter widths of the font it is named after */
 export const FONTS: { name: string; label: string; family: string; css: string }[] = [
@@ -106,6 +149,8 @@ export const FONTS: { name: string; label: string; family: string; css: string }
 
 /** the items drawn on one page */
 export const itemsOn = (items: Item[], page: number) => items.filter((i) => i.page === page || i.everyPage)
+
+export const isField = (i: Item): i is FieldItem => i.kind === 'field'
 
 /** '#rrggbb' as 0..1 parts */
 export const colourOf = (hex: string): [number, number, number] => {

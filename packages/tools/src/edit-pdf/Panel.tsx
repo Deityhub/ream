@@ -5,7 +5,8 @@ import { usePageZoom } from '../PageZoom.tsx'
 import { Overlay, type Style, type Tool } from './Overlay.tsx'
 import { Properties } from './Properties.tsx'
 import { moved, pickText as pickFrom } from './geometry.ts'
-import { defaultOptions, itemsOn, type EditPdfOptions as O, type Item } from './items.ts'
+import { byPosition, copiedField, fieldItems, type FieldSettings } from './fields.ts'
+import { defaultOptions, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item } from './items.ts'
 
 export { defaultOptions }
 export const placesActions = true
@@ -41,6 +42,19 @@ const TOOLS: { tool: Tool; label: string; icon: string; key?: string }[] = [
   { tool: 'link', label: 'Link', icon: 'link' },
 ]
 
+const FIELD_TOOLS: { tool: Tool; label: string; icon: string; key?: string }[] = [
+  { tool: 'select', label: 'Select and move', icon: 'cursor' },
+  { tool: 'field-text', label: 'Text field', icon: 'field-text' },
+  { tool: 'field-checkbox', label: 'Checkbox', icon: 'field-check' },
+  { tool: 'field-radio', label: 'Radio button', icon: 'field-radio' },
+  { tool: 'field-dropdown', label: 'Dropdown', icon: 'field-dropdown' },
+  { tool: 'field-list', label: 'List box', icon: 'field-list' },
+  { tool: 'field-date', label: 'Date field', icon: 'field-date' },
+  { tool: 'field-signature', label: 'Signature box', icon: 'field-sign' },
+]
+// tools that stay in hand after placing something, for placing several in a row
+const KEEP: Tool[] = ['pen', 'highlighter', 'highlight', 'underline', 'strike', 'field-radio']
+
 const button = 'rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 pointer-coarse:min-h-11'
 const iconButton = 'flex size-8 items-center justify-center rounded-md hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:size-11'
 const HISTORY = 200
@@ -55,6 +69,10 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   const [selected, setSelected] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  const [mode, setMode] = useState<'add' | 'forms'>('add')
+  const [formNote, setFormNote] = useState('')
+  /** the fields picked so far while setting the Tab order (null when not setting it) */
+  const [ordering, setOrdering] = useState<string[] | null>(null)
   const past = useRef<Item[][]>([])
   const future = useRef<Item[][]>([])
   const clipboard = useRef<Item | null>(null)
@@ -70,6 +88,8 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     setCurrent(0)
     setSelected(null)
     setEditing(null)
+    setOrdering(null)
+    setFormNote('')
     past.current = []
     future.current = []
     onChange(defaultOptions)
@@ -78,6 +98,16 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     pdfHost.pages(file).then(
       (p) => live && setPages(p),
       () => live && setFailed(true),
+    )
+    // the file's own form fields, so they can be changed like anything added
+    pdfHost.form(file).then(
+      (info) => {
+        if (!live) return
+        const fields = fieldItems(info, newId)
+        if (fields.length) onChange({ ...latest.current, items: [...latest.current.items, ...fields], fieldsLoaded: fields })
+        if (info.xfa) setFormNote('This PDF also has an XFA form, which these tools can neither show nor change. Viewers that use it may ignore the fields set up here.')
+      },
+      () => {},
     )
     return () => {
       live = false
@@ -125,10 +155,19 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     setSelected(null)
   }
   const sel = items.find((i) => i.id === selected) ?? null
-  const update = (item: Item) => commit(items.map((i) => (i.id === item.id ? item : i)))
+  const update = (item: Item) => {
+    const was = items.find((i) => i.id === item.id)
+    // a radio button that was the chosen one stays chosen under its new value
+    const follow = was && isField(was) && isField(item) && was.state !== item.state && was.value === was.state
+    commit(items.map((i) => (i.id === item.id ? item : follow && isField(i) && i.name === item.name ? { ...i, value: item.state } : i)))
+  }
+  const fields = items.filter(isField)
+  // a change to a field's settings goes to every place it is shown
+  const updateField = (item: FieldItem, patch: Partial<FieldSettings>) => commit(items.map((i) => (isField(i) && i.name === item.name ? { ...i, ...patch } : i)))
   const remove = (id: string) => commit(items.filter((i) => i.id !== id), null)
   const duplicate = (item: Item, page = item.page, offset = 0.02) => {
-    const copy = { ...moved(item, offset, offset), id: newId(), page } as Item
+    const shifted = { ...moved(item, offset, offset), page } as Item
+    const copy = isField(shifted) ? copiedField(shifted, newId(), fields) : ({ ...shifted, id: newId() } as Item)
     commit([...items, copy], copy.id)
   }
   const reorder = (id: string, by: 1 | -1) => {
@@ -151,7 +190,24 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
       return
     }
     setTool(t)
+    setOrdering(null)
     if (t !== 'select') setSelected(null)
+  }
+  const switchMode = (m: 'add' | 'forms') => {
+    setMode(m)
+    setTool('select')
+    setSelected(null)
+    setEditing(null)
+    setOrdering(null)
+  }
+  const here = itemsOn(items, current)
+  const pageFields = here.filter(isField)
+  const tabNow = (o.tabOrder[current] ?? []).filter((id) => pageFields.some((f) => f.id === id))
+  const orderNow = [...tabNow, ...pageFields.map((f) => f.id).filter((id) => !tabNow.includes(id))]
+  const setOrder = (ids: string[]) => onChange({ ...latest.current, tabOrder: { ...latest.current.tabOrder, [current]: ids } })
+  const finishOrder = () => {
+    if (ordering?.length) setOrder([...ordering, ...orderNow.filter((id) => !ordering.includes(id))])
+    setOrdering(null)
   }
 
   // a picture: placed in the middle of the page at a usual size, its shape kept
@@ -192,12 +248,13 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     } else if (e.key === 'Escape') {
       setSelected(null)
       setTool('select')
+      finishOrder()
     } else if (e.key.startsWith('Arrow') && sel) {
       e.preventDefault()
       const step = (e.shiftKey ? 10 : 1) / zoom.width
       const [dx, dy] = e.key === 'ArrowLeft' ? [-step, 0] : e.key === 'ArrowRight' ? [step, 0] : e.key === 'ArrowUp' ? [0, -step * (size.width / size.height)] : [0, step * (size.width / size.height)]
       update(moved(sel, dx, dy))
-    } else if (!mod && !e.altKey) {
+    } else if (!mod && !e.altKey && mode === 'add') {
       const t = TOOLS.find((x) => x.key === e.key.toLowerCase())
       if (t) choose(t.tool)
     }
@@ -212,18 +269,33 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
       }
     : undefined
 
-  const here = itemsOn(items, current).length
+  const marks = items.length - fields.length
   const addedFonts = [...new Set(o.fonts.map((f) => f.for ?? f.family))]
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
       <div className="min-w-0 space-y-3 rounded-xl border border-line bg-surface p-4">
+        <div role="group" aria-label="Mode" className="inline-flex rounded-lg border border-line p-0.5 text-sm">
+          {(['add', 'forms'] as const).map((m) => (
+            <button key={m} type="button" aria-pressed={mode === m} onClick={() => switchMode(m)} className="rounded-md px-3 py-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:min-h-11">
+              {m === 'add' ? 'Add to pages' : 'Form fields'}
+            </button>
+          ))}
+        </div>
         <div role="toolbar" aria-label="Tools" className="flex flex-wrap items-center gap-0.5 rounded-lg border border-line p-1">
-          {TOOLS.map((t) => (
-            <button key={t.tool} type="button" title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label} aria-label={t.label} aria-pressed={tool === t.tool && t.tool !== 'image'} onClick={() => choose(t.tool)} className={iconButton}>
+          {(mode === 'add' ? TOOLS : FIELD_TOOLS).map((t) => (
+            <button key={t.tool} type="button" title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label} aria-label={t.label} aria-pressed={!ordering && tool === t.tool && t.tool !== 'image'} onClick={() => choose(t.tool)} className={iconButton}>
               <Icon name={t.icon} className="size-4" />
             </button>
           ))}
+          {mode === 'forms' && (
+            <>
+              <span className="mx-1 h-6 w-px bg-line" aria-hidden="true" />
+              <button type="button" title="Set the Tab order: click the fields in turn" aria-label="Set the Tab order" aria-pressed={!!ordering} disabled={!pageFields.length} onClick={() => (ordering ? finishOrder() : (setOrdering([]), setTool('select'), setSelected(null)))} className={iconButton}>
+                <Icon name="tab-order" className="size-4" />
+              </button>
+            </>
+          )}
           <span className="mx-1 h-6 w-px bg-line" aria-hidden="true" />
           <button type="button" title="Undo (Ctrl or Cmd+Z)" aria-label="Undo" onClick={undo} disabled={!past.current.length} className={iconButton}>
             <Icon name="undo" className="size-4" />
@@ -266,17 +338,33 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               onChange={(next, select) => {
                 commit(next, select)
                 // after placing a shape or a box the pointer goes back to selecting, so it can be moved at once
-                if (!['pen', 'highlighter', 'highlight', 'underline', 'strike'].includes(tool)) setTool('select')
+                if (!KEEP.includes(tool)) setTool('select')
               }}
               pickText={pickText}
               newId={newId}
+              order={ordering ? { numbers: new Map((ordering.length ? ordering : orderNow).map((id, k) => [id, k + 1])), pick: (id) => {
+                const next = ordering.includes(id) ? ordering : [...ordering, id]
+                if (next.length >= pageFields.length) {
+                  setOrder(next)
+                  setOrdering(null)
+                } else setOrdering(next)
+              } } : undefined}
             >
-              <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
+              <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} fields={!o.fieldsLoaded.length} />
             </Overlay>
           </div>
         </div>
         {note && <p role="status" className="text-sm text-warning">{note}</p>}
-        <p className="text-xs text-muted">Pick a tool, then click or drag on the page. Double-click text to change it. Alt turns snapping off while you move something.</p>
+        {formNote && <p className="text-sm text-warning">{formNote}</p>}
+        {ordering ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span role="status">{ordering.length ? `${ordering.length} of ${pageFields.length} picked. Click the next field.` : 'Click the fields in the order Tab should go through them.'}</span>
+            <button type="button" className={button} onClick={() => (setOrder(byPosition(pageFields).map((f) => f.id)), setOrdering(null))}>By position</button>
+            <button type="button" className={button} onClick={finishOrder}>Done</button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted">{mode === 'add' ? 'Pick a tool, then click or drag on the page. Double-click text to change it. Alt turns snapping off while you move something.' : "Pick a kind of field, then drag a box on the page. The file's own fields can be moved, set up or deleted too."}</p>
+        )}
       </div>
 
       <div className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
@@ -290,6 +378,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           onDuplicate={() => sel && duplicate(sel)}
           onOrder={(by) => sel && reorder(sel.id, by)}
           onEdit={() => sel?.kind === 'text' && setEditing(sel.id)}
+          group={sel && isField(sel) ? fields.filter((f) => f.name === sel.name) : []}
+          taken={new Set(sel && isField(sel) ? fields.filter((f) => f.name !== sel.name).map((f) => f.name.trim()) : [])}
+          onField={(patch) => sel && isField(sel) && updateField(sel, patch)}
           pageCount={pages.length}
           fonts={addedFonts}
           onAddFont={
@@ -315,7 +406,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           </span>
         </label>
         <p className="text-sm text-muted" role="status">
-          {items.length === 0 ? 'Nothing added yet.' : `${here} ${here === 1 ? 'thing' : 'things'} on this page, ${items.length} in all.`}
+          {mode === 'forms'
+            ? `${pageFields.length} ${pageFields.length === 1 ? 'field' : 'fields'} on this page, ${new Set(fields.map((f) => f.name)).size} in all.`
+            : marks === 0 ? 'Nothing added yet.' : `${here.length - pageFields.length} ${here.length - pageFields.length === 1 ? 'thing' : 'things'} on this page, ${marks} in all.`}
         </p>
         {actions}
       </div>

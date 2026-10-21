@@ -9,6 +9,7 @@ import {
   isVisibleAnnotation,
   normalAppearance,
   isDict,
+  isName,
   type Page,
   type PdfDict,
   type PdfDocument,
@@ -825,12 +826,13 @@ export class Interpreter {
   // ---------- annotations ----------
 
   /** draw each annotation's normal appearance stream into its rectangle (ISO 32000-1 algorithm 8.1) */
-  async annotations(page: Page) {
+  async annotations(page: Page, fields = true) {
     const annots = this.doc.resolve(page.dict.get('Annots'))
     if (!Array.isArray(annots)) return
     for (const ref of annots) {
       const a = this.doc.resolve(ref)
       if (!isDict(a)) continue
+      if (!fields && isName(this.doc.resolve(a.get('Subtype')), 'Widget')) continue
       if (!isVisibleAnnotation(this.doc, a)) continue
       const normal = normalAppearance(this.doc, a)
       const matrix = normal && appearanceMatrix(this.doc, a, normal)

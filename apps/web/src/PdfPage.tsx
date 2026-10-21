@@ -8,12 +8,14 @@ type Props = {
   page: number
   /** pixels the page is rendered across (the canvas is then scaled by CSS) */
   renderWidth: number
+  /** false leaves the page's form fields out (an editor shows its own) */
+  fields?: boolean
   className?: string
   onWarnings?: (warnings: string[]) => void
 }
 
 /** One page of a PDF, drawn by our own renderer in the preview worker. */
-export function PdfPage({ file, page, renderWidth, className = '', onWarnings }: Props) {
+export function PdfPage({ file, page, renderWidth, fields = true, className = '', onWarnings }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const report = useRef(onWarnings)
@@ -22,7 +24,7 @@ export function PdfPage({ file, page, renderWidth, className = '', onWarnings }:
   useEffect(() => {
     let live = true
     setState((s) => (s === 'ok' ? s : 'loading')) // a page that is already drawn stays on screen until its replacement is ready
-    renderPdfPage(file, page, renderWidth).then(
+    renderPdfPage(file, page, renderWidth, fields).then(
       ({ bitmap, warnings }) => {
         const c = canvas.current
         if (!live || !c) return
@@ -37,7 +39,7 @@ export function PdfPage({ file, page, renderWidth, className = '', onWarnings }:
     return () => {
       live = false
     }
-  }, [file, page, renderWidth])
+  }, [file, page, renderWidth, fields])
 
   return (
     <div className="relative size-full">

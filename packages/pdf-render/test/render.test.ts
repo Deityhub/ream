@@ -4,10 +4,10 @@ import { IDENTITY, apply, mul, pageMatrix } from '../src/matrix.ts'
 import { fakeCtx, fakePlatform, hex, onePage, stream } from './helpers.ts'
 
 /** render a one page document at its natural size (100 pt wide = 100 px) and return what was drawn */
-async function draw(o: Parameters<typeof onePage>[0], platform = fakePlatform().platform) {
+async function draw(o: Parameters<typeof onePage>[0], platform = fakePlatform().platform, fields = true) {
   const doc = await onePage(o)
   const f = fakeCtx()
-  const result = await renderPage(doc, 0, f.ctx, 100, { platform })
+  const result = await renderPage(doc, 0, f.ctx, 100, { platform, fields })
   return { ...f, result }
 }
 const near = (a: unknown, b: number[]) => (a as number[]).forEach((v, i) => expect(v).toBeCloseTo(b[i], 6))
@@ -359,6 +359,16 @@ describe('forms, shadings, annotations', () => {
       },
     })
     expect(all('fill')).toHaveLength(0)
+  })
+
+  test('form fields can be left out, for an editor that shows its own', async () => {
+    const page = {
+      content: '',
+      pageExtra: '/Annots [10 0 R]',
+      objects: { 10: '<< /Subtype /Widget /FT /Tx /T (a) /Rect [0 0 10 10] /AP << /N 11 0 R >> >>', 11: stream('/Subtype /Form /BBox [0 0 10 10]', '0 0 10 10 re f') },
+    }
+    expect((await draw(page)).all('fill')).toHaveLength(1)
+    expect((await draw(page, undefined, false)).all('fill')).toHaveLength(0)
   })
 
   test('appearance states: the /AS entry picks the stream', async () => {

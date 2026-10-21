@@ -13,7 +13,7 @@ export type PdfHost = {
   chars?(file: File, page: number): Promise<{ text: string; x0: number; y0: number; x1: number; y1: number }[]>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
-  PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number }>
+  PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number; fields?: boolean }>
   /** like PdfPage but it reserves the page's space first and only draws once it scrolls near the screen (for long grids) */
   LazyPage: ComponentType<{ file: Blob; page: number; size: { width: number; height: number }; renderWidth: number }>
 }

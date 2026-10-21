@@ -4,9 +4,12 @@ import { boxOf, moved, resized, snap, type Handle } from './geometry.ts'
 import { wrapLines } from './layout.ts'
 import { cssFamily, loadFont, measurer } from './viewFonts.ts'
 import type { InstalledFont } from '../fonts/book.ts'
-import { itemsOn, type Item, type Point, type TextItem } from './items.ts'
+import { FIELD_SIZE, newField } from './fields.ts'
+import { isField, itemsOn, type FieldItem, type FieldType, type Item, type Point, type TextItem } from './items.ts'
 
-export type Tool = 'select' | 'text' | 'image' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'pen' | 'highlighter' | 'whiteout' | 'highlight' | 'underline' | 'strike' | 'note' | 'link'
+export type FieldTool = `field-${FieldType}`
+export type Tool = 'select' | 'text' | 'image' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'pen' | 'highlighter' | 'whiteout' | 'highlight' | 'underline' | 'strike' | 'note' | 'link' | FieldTool
+const fieldType = (t: Tool): FieldType | null => (t.startsWith('field-') ? (t.slice(6) as FieldType) : null)
 
 /** what a new item of each kind starts with (the properties panel changes these when nothing is selected) */
 export type Style = {
@@ -39,6 +42,8 @@ type Props = {
   /** the page's text under a box, for markup (null when it can't be read) */
   pickText?: (area: Rect) => Promise<{ quads: [Point, Point, Point, Point][]; text: string } | null>
   newId: () => string
+  /** the Tab order being set: each field's number, and a click on a field picks it next */
+  order?: { numbers: Map<string, number>; pick: (id: string) => void }
   /** the picture of the page, drawn under everything */
   children: ReactNode
 }
@@ -53,7 +58,7 @@ type Drag =
 const SNAP_PX = 6
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
-export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, children }: Props) {
+export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, order, children }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [draft, setDraft] = useState<Item | null>(null)
@@ -98,6 +103,10 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
     } else if (tool !== 'image') setDrag({ mode: 'create', tool, from: p, to: p })
   }
   const onItemDown = (e: ReactPointerEvent, item: Item) => {
+    if (order && isField(item) && e.button === 0) {
+      e.stopPropagation()
+      return order.pick(item.id)
+    }
     if (tool !== 'select' || e.button !== 0 || editing === item.id) return
     e.stopPropagation()
     onSelect(item.id)
@@ -161,7 +170,13 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
     const box = tiny ? defaultBox(d.tool, d.from, size) : { x: Math.min(d.from.x, d.to.x), y: Math.min(d.from.y, d.to.y), w: Math.abs(d.to.x - d.from.x), h: Math.abs(d.to.y - d.from.y) }
     const id = newId()
     const base = { id, page }
-    if (d.tool === 'text') {
+    const type = fieldType(d.tool)
+    if (type) {
+      const [w, h] = FIELD_SIZE[type]
+      const b = tiny ? { x: Math.min(d.from.x, 1 - w / size.width), y: Math.min(d.from.y, 1 - h / size.height), w: w / size.width, h: h / size.height } : box
+      const join = items.find((i): i is FieldItem => i.id === selected && isField(i)) ?? null
+      onChange([...items, newField(id, page, type, b, items.filter(isField), join)], id)
+    } else if (d.tool === 'text') {
       onChange([...items, { ...base, kind: 'text', box, text: '', ...style.text }], id)
       onEditing(id)
     } else if (d.tool === 'rect' || d.tool === 'ellipse') onChange([...items, { ...base, kind: 'shape', shape: d.tool, box, ...style.shape }], id)
@@ -181,7 +196,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
   const creating = drag?.mode === 'create' ? { x: Math.min(drag.from.x, drag.to.x), y: Math.min(drag.from.y, drag.to.y), w: Math.abs(drag.to.x - drag.from.x), h: Math.abs(drag.to.y - drag.from.y) } : null
   const sel = shown.find((i) => i.id === selected) ?? null
   const urls = usePictureUrls(shown)
-  const hit = tool === 'select' ? 'auto' : 'none'
+  const hit = tool === 'select' || order ? 'auto' : 'none'
 
   return (
     <div
@@ -223,6 +238,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
             </div>
           )
         }
+        if (i.kind === 'field') return <FieldView key={i.id} item={i} scale={scale} pageHeight={height} hit={hit} number={order?.numbers.get(i.id)} onPointerDown={(e) => onItemDown(e, i)} />
         if (i.kind === 'note') {
           return (
             <div key={i.id} title={i.text || 'Note'} style={{ left: `${i.at.x * 100}%`, top: `${i.at.y * 100}%`, width: 20 * scale, height: 20 * scale, background: i.colour, pointerEvents: hit }} className="absolute rounded-sm border border-black/60 shadow-sm" onPointerDown={(e) => onItemDown(e, i)} />
@@ -231,7 +247,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
         return null
       })}
 
-      {sel && tool === 'select' && !editing && <Selection item={sel} scale={scale} size={size} onHandleDown={(e, h) => onHandleDown(e, sel, h)} />}
+      {sel && tool === 'select' && !editing && !order && <Selection item={sel} scale={scale} size={size} onHandleDown={(e, h) => onHandleDown(e, sel, h)} />}
     </div>
   )
 }
@@ -389,6 +405,27 @@ function TextEditor({ item, scale, onDone }: { item: TextItem; scale: number; on
       style={{ left: `${item.box.x * 100}%`, top: `${item.box.y * 100}%`, width: `${item.box.w * 100}%`, ...textStyle(item, px) }}
       className="absolute m-0 resize-none overflow-hidden border-0 bg-transparent p-0 outline-2 outline-offset-2 outline-accent [overflow-wrap:anywhere]"
     />
+  )
+}
+
+const FIELD_LABEL: Record<FieldType, string> = { text: 'Text', date: 'Date', checkbox: '', radio: '', dropdown: '▾', list: 'List', signature: 'Signature' }
+
+/** a form field in the editor: a tinted box with what it holds (the saved field looks as its settings say) */
+function FieldView({ item: i, scale, pageHeight, hit, number, onPointerDown }: { item: FieldItem; scale: number; pageHeight: number; hit: 'auto' | 'none'; number?: number; onPointerDown: (e: ReactPointerEvent) => void }) {
+  const round = i.type === 'radio'
+  const on = i.type === 'checkbox' ? i.value === true : i.type === 'radio' && i.value === i.state
+  const shown = i.type === 'checkbox' || i.type === 'radio' ? (on ? (round ? '●' : '✓') : '') : i.type === 'dropdown' ? `${i.options.find((o) => o.value === i.value)?.label ?? i.value} ▾` : String(i.value || FIELD_LABEL[i.type])
+  const px = Math.max(6, i.fontSize ? i.fontSize * scale : Math.min(12 * scale, (i.type === 'list' || i.multiline ? 12 * scale : i.box.h * pageHeight * 0.7)))
+  return (
+    <div
+      title={`${i.name}${i.locked ? ' (can only be moved or deleted)' : ''}`}
+      onPointerDown={onPointerDown}
+      style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, fontSize: px, background: i.background ?? undefined }}
+      className={`absolute flex items-center border border-dashed px-0.5 leading-none text-[rgb(30_64_175)] ${i.locked ? 'border-[rgb(180_83_9)] bg-[rgb(245_158_11/0.12)]' : 'border-[rgb(37_99_235)] bg-[rgb(37_99_235/0.1)]'} ${round ? 'justify-center rounded-full' : i.type === 'checkbox' ? 'justify-center' : i.type === 'list' || i.multiline ? 'items-start pt-0.5' : ''}`}
+    >
+      <span className={`max-w-full truncate ${i.value === '' || i.value === false ? 'opacity-60' : ''}`}>{shown}</span>
+      {number !== undefined && <span className="absolute -left-2 -top-2 flex size-5 items-center justify-center rounded-full bg-[rgb(37_99_235)] text-[11px] font-medium text-white">{number}</span>}
+    </div>
   )
 }
 

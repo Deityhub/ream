@@ -78,13 +78,13 @@ const MAX_RENDERS = 200 // enough for a grid of page thumbnails
 const renders = new Map<string, Promise<RenderedPage>>()
 
 /** page `page` (0-based) of a PDF drawn `width` pixels wide, as a bitmap to paint on a canvas */
-export function renderPdfPage(file: Blob, page: number, width: number): Promise<RenderedPage> {
-  const key = `${idOf(file)}:${page}:${width}`
+export function renderPdfPage(file: Blob, page: number, width: number, fields = true): Promise<RenderedPage> {
+  const key = `${idOf(file)}:${page}:${width}${fields ? '' : ':nofields'}`
   let p = renders.get(key)
   if (p) {
     renders.delete(key) // refresh recency
   } else {
-    p = withDoc<RenderedPage>(file, { op: 'render', page, width })
+    p = withDoc<RenderedPage>(file, { op: 'render', page, width, fields })
     p.catch(() => renders.delete(key))
   }
   renders.set(key, p)

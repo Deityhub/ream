@@ -156,7 +156,7 @@ describe('edit-pdf: comments', () => {
   })
 
   test('nothing added is a clear error', async () => {
-    await expect(run([pdfOf(page())], defaultOptions, ctx, nodeFonts)).rejects.toThrow(/Add something/)
+    await expect(run([pdfOf(page())], defaultOptions, ctx, nodeFonts)).rejects.toThrow(/Change something first/)
   })
 })
 
