@@ -105,6 +105,10 @@ export type PathStyle = {
   dash?: number[]
   /** even-odd filling (holes in a donut); default non-zero */
   evenOdd?: boolean
+  /** multiply with what is under it, as a highlighter pen does; default normal */
+  blend?: 'Multiply'
+  /** round line ends and corners (freehand strokes); default butt ends and mitred corners */
+  round?: boolean
 }
 
 type Op =
@@ -196,7 +200,7 @@ function winText(s: string, lost: Set<string>): string {
 }
 
 /** what a page's content asks the resources for */
-type PageRes = { alphas: Map<string, [number, number]>; shadings: PdfObj[]; std: Set<string>; parts: Set<string> }
+type PageRes = { alphas: Map<string, [number, number, string?]>; shadings: PdfObj[]; std: Set<string>; parts: Set<string> }
 
 /** an embedded font resource: one part of a face, for one family the document asked for */
 const partIds = new WeakMap<TtfFont, number>()
@@ -234,12 +238,12 @@ function content(page: PageDraw, lost: Set<string>, res: PageRes, prepared: Map<
   const H = page.height
   let depth = 0
   const out: string[] = []
-  const gs = (fill?: number, stroke?: number) => {
+  const gs = (fill?: number, stroke?: number, blend?: string) => {
     const f = fill === undefined || fill >= 1 ? 1 : Math.round(fill * 100) / 100
     const s = stroke === undefined || stroke >= 1 ? 1 : Math.round(stroke * 100) / 100
-    if (f === 1 && s === 1) return ''
-    const key = `${f}/${s}`
-    if (!res.alphas.has(key)) res.alphas.set(key, [f, s])
+    if (f === 1 && s === 1 && !blend) return ''
+    const key = `${f}/${s}/${blend ?? ''}`
+    if (!res.alphas.has(key)) res.alphas.set(key, [f, s, blend])
     return `/A${[...res.alphas.keys()].indexOf(key)} gs `
   }
   const pathOps = (segs: Seg[]) => segs.map((sg) => (sg[0] === 'Z' ? 'h' : sg[0] === 'C' ? `${n(sg[1])} ${n(H - sg[2])} ${n(sg[3])} ${n(H - sg[4])} ${n(sg[5])} ${n(H - sg[6])} c` : `${n(sg[1])} ${n(H - sg[2])} ${sg[0] === 'M' ? 'm' : 'l'}`)).join(' ')
@@ -268,7 +272,7 @@ function content(page: PageDraw, lost: Set<string>, res: PageRes, prepared: Map<
         continue
       }
       const paint = st.fill && st.stroke ? `B${rule}` : st.fill ? `f${rule}` : 'S'
-      out.push(`q ${gs(st.fill ? st.fillAlpha : undefined, st.stroke ? st.strokeAlpha : undefined)}${st.fill ? `${color(st.fill)} rg ` : ''}${st.stroke ? `${color(st.stroke)} RG ${n(st.width ?? 1)} w${st.dash ? ` [${st.dash.map(n).join(' ')}] 0 d` : ''} ` : ''}${d} ${paint} Q`)
+      out.push(`q ${gs(st.fill ? st.fillAlpha : undefined, st.stroke ? st.strokeAlpha : undefined, st.blend)}${st.fill ? `${color(st.fill)} rg ` : ''}${st.stroke ? `${color(st.stroke)} RG ${n(st.width ?? 1)} w${st.round ? ' 1 J 1 j' : ''}${st.dash ? ` [${st.dash.map(n).join(' ')}] 0 d` : ''} ` : ''}${d} ${paint} Q`)
     } else if (o.k === 'image') out.push(`q ${gs(o.alpha)}${n(o.w)} 0 0 ${n(o.h)} ${n(o.x)} ${n(H - o.y - o.h)} cm /Im${o.id} Do Q`)
     else {
       // character spacing is scaled by Tz like the glyphs, so it is divided back out; both are set every time because they
@@ -349,7 +353,7 @@ export async function buildPdf(d: PdfDrawing): Promise<{ bytes: Uint8Array; lost
     const fontDict = new Map<string, PdfObj>([...pr.std].map((u) => [fontResource(u), stdFor(u)]))
     for (const key of pr.parts) fontDict.set(resName.get(key)!, embeddedRefs.get(key)!)
     if (fontDict.size) res.set('Font', fontDict)
-    if (pr.alphas.size) res.set('ExtGState', new Map<string, PdfObj>([...pr.alphas.values()].map(([f, s], i) => [`A${i}`, new Map<string, PdfObj>([['Type', name('ExtGState')], ['ca', f], ['CA', s]])])))
+    if (pr.alphas.size) res.set('ExtGState', new Map<string, PdfObj>([...pr.alphas.values()].map(([f, s, bm], i) => [`A${i}`, new Map<string, PdfObj>([['Type', name('ExtGState')], ['ca', f], ['CA', s], ...(bm ? ([['BM', name(bm)]] as [string, PdfObj][]) : [])])])))
     if (pr.shadings.length) res.set('Shading', new Map<string, PdfObj>(pr.shadings.map((sh, i) => [`Sh${i}`, sh])))
     if (images.size) res.set('XObject', new Map<string, PdfObj>([...images].map((i) => [`Im${i}`, imageRefs[i]])))
     const stream = b.add(new PdfStream(new Map<string, PdfObj>([['Filter', name('FlateDecode')]]), await deflate(ascii(text))))

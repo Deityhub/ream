@@ -41,13 +41,15 @@ const carried = (doc: PdfDocument, extra: Record<string, string> = {}) => ({ ...
 /** the builder's version of a value (a reference is followed, a direct value stays) */
 const inBuilder = (b: PdfBuilder, o: PdfObj | undefined): PdfObj => (o instanceof PdfRef ? (b.objects[o.num - 1] ?? null) : (o ?? null))
 
-/** matrix taking displayed coordinates to the page's own user space */
-function toUserSpace(box: number[], rotate: number): string {
+/** the matrix taking displayed coordinates (origin bottom left, y up, rotation applied) to the page's own user space */
+export function displayedToUser(box: number[], rotate: number): [number, number, number, number, number, number] {
   const [x1, y1, x2, y2] = box
   const [w, h] = [x2 - x1, y2 - y1]
-  const m = rotate === 90 ? [0, 1, -1, 0, x1 + w, y1] : rotate === 180 ? [-1, 0, 0, -1, x1 + w, y1 + h] : rotate === 270 ? [0, -1, 1, 0, x1, y1 + h] : [1, 0, 0, 1, x1, y1]
-  return m.join(' ') + ' cm'
+  return rotate === 90 ? [0, 1, -1, 0, x1 + w, y1] : rotate === 180 ? [-1, 0, 0, -1, x1 + w, y1 + h] : rotate === 270 ? [0, -1, 1, 0, x1, y1 + h] : [1, 0, 0, 1, x1, y1]
 }
+
+/** the same, as a content stream operator */
+const toUserSpace = (box: number[], rotate: number): string => displayedToUser(box, rotate).join(' ') + ' cm'
 
 /** draw `make(page)` on every page (return null to leave a page alone) */
 export function stamp(doc: PdfDocument, make: (page: PageInfo) => Overlay | null): Uint8Array {
