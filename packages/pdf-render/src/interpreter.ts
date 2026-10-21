@@ -59,6 +59,8 @@ class GState {
   rise = 0
   renderMode = 0
   font: Font | null = null
+  /** the name the font has in the resources (Tf's operand) */
+  fontName: string | null = null
   fontSize = 0
 
   clone(): GState {
@@ -103,6 +105,19 @@ export type ShownGlyph = {
   /** the move along the line in text space units, character and word spacing included */
   tx: number
   quad: [number, number][]
+  /** what it reads as ('' when the font doesn't say) */
+  text: string
+  /** the text state it was shown with, so it can be shown again: the font and its name in the resources, the text matrix before it, the CTM */
+  font: Font
+  fontName: string | null
+  fontSize: number
+  hScale: number
+  rise: number
+  tm: Matrix
+  ctm: Matrix
+  /** fill colour, 0..1 each */
+  fill: [number, number, number]
+  renderMode: number
 }
 
 /** one shown glyph with where it is, for text extraction: start and end of its baseline in the space `base` maps to */
@@ -342,6 +357,7 @@ export class Interpreter {
       case 'Tf': {
         const f = a[0] instanceof PdfName ? this.lookup(res, 'Font', a[0].value) : null
         s.font = f === null ? fallbackFont : await loadFont(this.doc, f)
+        s.fontName = a[0] instanceof PdfName && f !== null ? a[0].value : null
         s.fontSize = n(1)
         break
       }
@@ -648,7 +664,10 @@ export class Interpreter {
         // the em box over the glyph's advance (a little wide for marks with none), descent to ascent
         const m = mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(this.tm, mul(s.ctm, this.base)))
         const w = Math.max(advance / 1000, 0.25)
-        this.onShow({ item: this.showItem, offset, length: g.bytes ?? 1, tx, quad: [apply(m, 0, -0.25), apply(m, w, -0.25), apply(m, w, 1), apply(m, 0, 1)] })
+        this.onShow({
+          item: this.showItem, offset, length: g.bytes ?? 1, tx, quad: [apply(m, 0, -0.25), apply(m, w, -0.25), apply(m, w, 1), apply(m, 0, 1)],
+          text: g.text, font, fontName: s.fontName, fontSize: s.fontSize, hScale: s.hScale, rise: s.rise, tm: this.tm, ctm: s.ctm, fill: [s.fill.rgb[0] / 255, s.fill.rgb[1] / 255, s.fill.rgb[2] / 255], renderMode: mode,
+        })
       }
       offset += g.bytes ?? 1
       if (this.onGlyph && g.text) {

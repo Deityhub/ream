@@ -54,17 +54,32 @@ const hex = (b: Uint8Array) => '<' + Array.from(b, (c) => c.toString(16).padStar
 const LONG: Record<string, string> = { W: 'Width', H: 'Height', BPC: 'BitsPerComponent', CS: 'ColorSpace', D: 'Decode', DP: 'DecodeParms', F: 'Filter', IM: 'ImageMask', I: 'Interpolate' }
 const LONG_CS: Record<string, string> = { G: 'DeviceGray', RGB: 'DeviceRGB', CMYK: 'DeviceCMYK', I: 'Indexed' }
 
-class Redactor {
+/**
+ * What a Redactor takes out: text always; shapes, pictures and forms when asked. `centre` picks only letters whose
+ * middle is inside an area (taking out one line of text without touching the lines whose boxes overlap it).
+ */
+export type RedactMode = {
+  paths: boolean
+  images: boolean
+  centre: boolean
+  /** pictures become see-through where they are taken out (through a soft mask), not black: erasing rather than redacting */
+  transparent?: boolean
+}
+const EVERYTHING: RedactMode = { paths: true, images: true, centre: false }
+
+export class Redactor {
   doc: PdfDocument
   e: Editing
   areas: Box[]
   platform: Platform
+  mode: RedactMode
   count = 0
-  constructor(doc: PdfDocument, e: Editing, areas: Box[], platform: Platform) {
+  constructor(doc: PdfDocument, e: Editing, areas: Box[], platform: Platform, mode: RedactMode = EVERYTHING) {
     this.doc = doc
     this.e = e
     this.areas = areas
     this.platform = platform
+    this.mode = mode
   }
 
   /** every top-level operator of a stream, with what it paints, the glyphs it shows and the picture it draws */
@@ -89,7 +104,12 @@ class Redactor {
     return ops
   }
 
-  private hits(quad: Pt[]): boolean {
+  private hits(quad: Pt[], letter = false): boolean {
+    if (letter && this.mode.centre) {
+      const x = quad.reduce((n, p) => n + p[0], 0) / quad.length
+      const y = quad.reduce((n, p) => n + p[1], 0) / quad.length
+      return this.areas.some((a) => x >= a[0] && x <= a[2] && y >= a[1] && y <= a[3])
+    }
     return this.areas.some((a) => overlaps(quad, boxQuad(a)))
   }
 
@@ -115,16 +135,17 @@ class Redactor {
         continue
       }
       if (FILLS.has(o.op) || STROKES.has(o.op) || o.op === 'n') {
-        const cut = o.op === 'n' || !path.length ? null : this.path(path, o, clip, latin)
+        const cut = o.op === 'n' || !path.length || !this.mode.paths ? null : this.path(path, o, clip, latin)
         if (cut !== null) edits.push({ start: path[0].start, end: o.end, text: cut })
         path = []
         clip = null
         continue
       }
-      if (TEXT.has(o.op) && o.glyphs.some((g) => this.hits(g.quad))) {
+      if (TEXT.has(o.op) && o.glyphs.some((g) => this.hits(g.quad, true))) {
         edits.push({ start: o.start, end: o.end, text: this.text(o) })
         continue
       }
+      if (!this.mode.images) continue
       if (o.op === 'BI' && o.image) {
         const done = await this.picture(o.image.stream, o.image.ctm, res, true)
         if (done === false) continue
@@ -218,7 +239,7 @@ class Redactor {
       if (!(item instanceof PdfString)) return
       let from = 0
       for (const g of o.glyphs.filter((x) => x.item === i).sort((a, b) => a.offset - b.offset)) {
-        if (!this.hits(g.quad)) continue
+        if (!this.hits(g.quad, true)) continue
         if (g.offset > from) items.push(item.bytes.subarray(from, g.offset))
         // the TJ number that moves the text position as far as the removed letter did
         if (scale) items.push((-g.tx * 1000) / scale)
@@ -272,6 +293,30 @@ class Redactor {
         }
       }
     }
+    const mask = doc.resolve(dict.get('ImageMask')) === true
+    let alpha: PdfRef | null = null
+    if (this.mode.transparent && !mask) {
+      // a picture wholly under an area goes; one partly under keeps its pixels and gets a soft mask that hides those
+      if (this.areas.some((a) => corners.every(([x, y]) => x >= a[0] && x <= a[2] && y >= a[1] && y <= a[3]))) return null
+      const own = doc.resolve(dict.get('SMask'))
+      let soft: PdfStream | null | false
+      if (own instanceof PdfStream) {
+        this.mode = { ...this.mode, transparent: false }
+        soft = await this.picture(own, ctm, res, false).finally(() => (this.mode = { ...this.mode, transparent: true }))
+      } else {
+        const a = new Uint8Array(width * height).fill(255)
+        covered((x, y) => (a[y * width + x] = 0))
+        soft = new PdfStream(new Map<string, PdfObj>([['Type', new PdfName('XObject')], ['Subtype', new PdfName('Image')], ['Width', width], ['Height', height], ['ColorSpace', new PdfName('DeviceGray')], ['BitsPerComponent', 8], ['Filter', new PdfName('FlateDecode')]]), await deflate(a))
+      }
+      if (soft === false) return false
+      if (!soft) return null
+      alpha = this.e.add(soft)
+      if (!inline) {
+        const out = new Map(dict)
+        out.set('SMask', alpha)
+        return new PdfStream(out, stream.data)
+      }
+    }
     let decoded
     try {
       decoded = await decodeUntilImage(new PdfStream(dict, stream.data))
@@ -283,6 +328,12 @@ class Redactor {
     out.set('Type', new PdfName('XObject'))
     out.set('Subtype', new PdfName('Image'))
     out.set('Filter', new PdfName('FlateDecode'))
+    if (alpha) {
+      // an inline picture partly erased: its samples as they are, now an image object, with the soft mask
+      out.set('SMask', alpha)
+      if (decoded.rest) return null
+      return new PdfStream(out, await deflate(decoded.data))
+    }
     if (decoded.rest) {
       // a JPEG: decoded, wiped and kept losslessly as RGB (its soft mask, if any, stays as it was)
       if (decoded.rest.filter !== 'DCTDecode' && decoded.rest.filter !== 'DCT') return null
@@ -299,7 +350,6 @@ class Redactor {
       return new PdfStream(out, await deflate(rgb))
     }
     // raw samples: the pixels' bits are set in place, so colours, masks and the rest of the picture stay exactly as they were
-    const mask = doc.resolve(dict.get('ImageMask')) === true
     const bpc = mask ? 1 : Number(doc.resolve(dict.get('BitsPerComponent'))) || 8
     const n = mask ? 1 : (await loadColorSpace(doc, dict.get('ColorSpace'), res)).n
     const row = Math.ceil((width * n * bpc) / 8)
