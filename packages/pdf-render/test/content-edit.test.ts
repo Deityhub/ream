@@ -81,6 +81,18 @@ describe('editing a page\'s own content', () => {
     }
   })
 
+  test('a moved picture comes out of the clip it was drawn in, and keeps its name when another area is erased', async () => {
+    const clipped = CONTENT.replace('q 40 0 0 20 120 10 cm /Im1 Do Q', 'q 120 10 40 20 re W n 40 0 0 20 120 10 cm /Im1 Do Q')
+    const doc = await pdf(0, clipped)
+    const box = { x0: 20, y0: 70, x1: 60, y1: 90 }
+    const out = await PdfDocument.load(await editContent(doc, new Map([[0, { pictures: [{ id: 0, box }], erase: [{ x0: 15, y0: 50, x1: 100, y1: 62 }] }]]), platform))
+    const { lines, pictures } = await pageContentItems(out, 0)
+    expect(lines.map((l) => l.text)).toEqual(['AA A', 'A'])
+    expect(pictures.map((p) => [p.box.x0, p.box.y0].map(Math.round))).toEqual([[20, 70]])
+    const xo = (out.resolve((out.resolve(out.pages()[0].dict.get('Resources')) as Map<string, unknown>).get('XObject') as never) as Map<string, unknown>)
+    expect([...xo.keys()]).toContain('Im1')
+  })
+
   test('an erased area loses its text and pictures; the rest stays', async () => {
     const doc = await pdf()
     // displayed: Hello sits on the baseline at y 60, the picture from 70 to 90

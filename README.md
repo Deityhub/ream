@@ -40,7 +40,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M7 ✅ | PDF advanced | Organize pages, Repair, Flatten (now Lock the answers in Fill PDF form), PDF → text/Markdown, Bookmarks, TrueType embedding (watermark in any script) |
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
-| M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms (editing the PDF's own content comes next) |
+| M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms. Edit content: change, move and delete the page's own lines of text (in the PDF's font when it has the letters), move, resize, replace and delete its pictures, erase areas |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -83,7 +83,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 
 ## Known M7.6 limits
 
-- **Edit PDF** adds things on top of pages and sets up form fields; it doesn't change the PDF's own text and pictures yet (the next part).
+- **Edit PDF** adds things on top of pages, changes the page's own text and pictures, and sets up form fields.
   - **Into the page:** text, pictures, shapes, lines and arrows, freehand drawings and whiteout become part of the page, so every viewer and printer shows them. The text stays real text that can be selected and searched.
   - **As comments:** highlights, underlines, strike-throughs, notes and links are annotations, with their own pictures so viewers that only draw pictures show them too. "Flatten comments into the pages" bakes highlights and notes in.
   - **Text:**
@@ -103,6 +103,13 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
     - The Tab order is the order of the page's fields in the file, which most viewers follow.
     - **Find fields** goes by underscores, dotted lines, lines, empty boxes and squares in the page's text and drawing, and names each field after the words beside it. It's a guess, and a scanned page has nothing to go by (no OCR).
     - A file with an XFA form keeps it; viewers that use XFA may ignore the fields set up here.
+  - **Edit content:**
+    - Text is changed a line at a time (a line is letters on one baseline in one font, so a bold word is a line of its own). Longer text runs on past the line's end; nothing re-flows into the next line.
+    - A changed line keeps the PDF's own font when that font has every letter typed. Embedded fonts are usually subsets with only the letters the file used, so a new letter moves the line to a bundled look-alike (the panel says which letters and which font). Character and word spacing are reset, so a justified line comes back with ordinary spacing.
+    - Only text and pictures in the page's own content can be picked: text inside grouped drawings (forms), turned or slanted text and invisible text (a scan's text layer) can't. Erase reaches all of it.
+    - A moved or resized picture is drawn again on top of the page, without any clip or opacity it had. A replaced picture is taken out and the new one is drawn in its box.
+    - **Erase area** takes the text, shapes and pictures under it out of the file (a picture partly under it is hidden there with a soft mask). It doesn't clean the rest of the file (metadata, other copies): Redact PDF is the tool for sensitive content.
+    - The editor shows a changed line in its look-alike font and covers the old place in white, so on a coloured page the editor's preview shows white patches; the saved file has none.
   - **Not checked:** Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7.5 limits

@@ -5,10 +5,11 @@ import { wrapLines } from './layout.ts'
 import { cssFamily, loadFont, measurer } from './viewFonts.ts'
 import type { InstalledFont } from '../fonts/book.ts'
 import { FIELD_SIZE, newField } from './fields.ts'
-import { isField, itemsOn, type FieldItem, type FieldType, type Item, type Point, type TextItem } from './items.ts'
+import { lineChanged, type PageContent } from './content.ts'
+import { isField, itemsOn, type FieldItem, type FieldType, type Item, type LineEditItem, type PictureEditItem, type Point, type TextItem } from './items.ts'
 
 export type FieldTool = `field-${FieldType}`
-export type Tool = 'select' | 'text' | 'image' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'pen' | 'highlighter' | 'whiteout' | 'highlight' | 'underline' | 'strike' | 'note' | 'link' | FieldTool
+export type Tool = 'select' | 'erase' | 'text' | 'image' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'pen' | 'highlighter' | 'whiteout' | 'highlight' | 'underline' | 'strike' | 'note' | 'link' | FieldTool
 const fieldType = (t: Tool): FieldType | null => (t.startsWith('field-') ? (t.slice(6) as FieldType) : null)
 
 /** what a new item of each kind starts with (the properties panel changes these when nothing is selected) */
@@ -44,6 +45,9 @@ type Props = {
   newId: () => string
   /** the Tab order being set: each field's number, and a click on a field picks it next */
   order?: { numbers: Map<string, number>; pick: (id: string) => void }
+  /** the page's own lines and pictures, to pick for changing (content mode) */
+  content?: PageContent
+  onPickContent?: (kind: 'line' | 'picture', id: number, edit: boolean) => void
   /** the picture of the page, drawn under everything */
   children: ReactNode
 }
@@ -58,7 +62,7 @@ type Drag =
 const SNAP_PX = 6
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
-export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, order, children }: Props) {
+export function Overlay({ page, size, width, items, tool, style, fonts, selected, editing, onSelect, onEditing, onChange, pickText, newId, order, content, onPickContent, children }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [draft, setDraft] = useState<Item | null>(null)
@@ -69,7 +73,10 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
   const shown = itemsOn(items, page).map((i) => (draft && i.id === draft.id ? draft : i))
 
   // the fonts of the text on this page, so it shows (and breaks lines) as in the saved file
-  const wanted = shown.filter((i): i is TextItem => i.kind === 'text').map((t) => `${t.font}/${t.bold}/${t.italic}`)
+  const wanted = [
+    ...shown.filter((i): i is TextItem => i.kind === 'text').map((t) => `${t.font}/${t.bold}/${t.italic}`),
+    ...shown.filter((i): i is LineEditItem => i.kind === 'textline').map((t) => `${shownFont(t)}/${t.bold}/${t.italic}`),
+  ]
   useEffect(() => {
     let live = true
     Promise.all([...new Set(wanted)].map((k) => {
@@ -142,7 +149,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
       return setDraft(moved(drag.original, dx, dy))
     }
     if (drag.mode === 'resize' && 'box' in drag.original) {
-      const keep = drag.original.kind === 'image' && !e.shiftKey
+      const keep = (drag.original.kind === 'image' || drag.original.kind === 'picture') && !e.shiftKey
       return setDraft({ ...drag.original, box: resized(drag.original.box, drag.handle, p, keep) } as Item)
     }
     if (drag.mode === 'end' && drag.original.kind === 'line') return setDraft({ ...drag.original, [drag.which]: p })
@@ -181,6 +188,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
       onEditing(id)
     } else if (d.tool === 'rect' || d.tool === 'ellipse') onChange([...items, { ...base, kind: 'shape', shape: d.tool, box, ...style.shape }], id)
     else if (d.tool === 'whiteout') onChange([...items, { ...base, kind: 'whiteout', box, colour: style.whiteout.colour }], id)
+    else if (d.tool === 'erase' && !tiny) onChange([...items, { ...base, kind: 'erase', box }], id)
     else if (d.tool === 'link') onChange([...items, { ...base, kind: 'link', box, url: '', target: null }], id)
     else if (d.tool === 'line' || d.tool === 'arrow') {
       const to = tiny ? { x: clamp01(d.from.x + 0.2), y: d.from.y } : d.to
@@ -205,6 +213,9 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
+      // the first click of a double-click on a line of the page makes its item, so the second lands elsewhere: the
+      // double-click is caught here and opens the line now selected
+      onDoubleClick={() => tool === 'select' && sel?.kind === 'textline' && !sel.deleted && onEditing(sel.id)}
       className={`relative size-full touch-none select-none ${tool === 'select' ? '' : 'cursor-crosshair'}`}
     >
       {children}
@@ -238,6 +249,15 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
             </div>
           )
         }
+        if (i.kind === 'textline') {
+          if (i.id === editing) return <LineEditor key={i.id} item={i} scale={scale} onDone={(text) => {
+            onEditing(null)
+            if (text !== i.text) onChange(replace({ ...i, text }), i.id)
+          }} />
+          return <LineView key={i.id} item={i} scale={scale} hit={hit} onPointerDown={(e) => onItemDown(e, i)} />
+        }
+        if (i.kind === 'picture') return <PictureView key={i.id} item={i} url={i.replace ? urls.get(i.replace.data) : i.preview} hit={hit} onPointerDown={(e) => onItemDown(e, i)} />
+        if (i.kind === 'erase') return <div key={i.id} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} onPointerDown={(e) => onItemDown(e, i)} className="absolute border border-dashed border-[rgb(220_38_38)] bg-white" title="Erased" />
         if (i.kind === 'field') return <FieldView key={i.id} item={i} scale={scale} pageHeight={height} hit={hit} number={order?.numbers.get(i.id)} onPointerDown={(e) => onItemDown(e, i)} />
         if (i.kind === 'note') {
           return (
@@ -247,6 +267,16 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
         return null
       })}
 
+      {content && tool === 'select' && !order && (
+        <>
+          {content.lines.filter((l) => !shown.some((i) => i.kind === 'textline' && i.source === l.id)).map((l) => (
+            <div key={`l${l.id}`} title="Click to select, double-click to change" onPointerDown={(e) => (e.stopPropagation(), e.button === 0 && onPickContent?.('line', l.id, false))} style={{ left: `${l.box.x * 100}%`, top: `${l.box.y * 100}%`, width: `${l.box.w * 100}%`, height: `${l.box.h * 100}%` }} className="absolute cursor-text rounded-sm outline-1 outline-transparent hover:bg-[rgb(37_99_235/0.08)] hover:outline-[rgb(37_99_235)]" />
+          ))}
+          {content.pictures.filter((p) => !shown.some((i) => i.kind === 'picture' && i.source === p.id)).map((p) => (
+            <div key={`p${p.id}`} title="Click to select the picture" onPointerDown={(e) => (e.stopPropagation(), e.button === 0 && onPickContent?.('picture', p.id, false))} style={{ left: `${p.box.x * 100}%`, top: `${p.box.y * 100}%`, width: `${p.box.w * 100}%`, height: `${p.box.h * 100}%` }} className="absolute outline-1 outline-transparent hover:outline-dashed hover:outline-[rgb(37_99_235)]" />
+          ))}
+        </>
+      )}
       {sel && tool === 'select' && !editing && !order && <Selection item={sel} scale={scale} size={size} onHandleDown={(e, h) => onHandleDown(e, sel, h)} />}
     </div>
   )
@@ -273,7 +303,7 @@ function thin(points: Point[], min: number): Point[] {
 /** object URLs for the pictures shown, made once per picture and let go when it leaves */
 function usePictureUrls(items: Item[]): Map<Uint8Array, string> {
   const cache = useRef(new Map<Uint8Array, string>())
-  const pictures = items.filter((i) => i.kind === 'image')
+  const pictures = items.flatMap((i) => (i.kind === 'image' ? [{ id: i.id, data: i.data, type: i.type }] : i.kind === 'picture' && i.replace ? [{ id: i.id, ...i.replace }] : []))
   const urls = useMemo(() => {
     const next = new Map<Uint8Array, string>()
     for (const p of pictures) next.set(p.data, cache.current.get(p.data) ?? URL.createObjectURL(new Blob([p.data as BlobPart], { type: p.type })))
@@ -429,6 +459,74 @@ function FieldView({ item: i, scale, pageHeight, hit, number, onPointerDown }: {
   )
 }
 
+/** the font a line of the page is shown in by the editor: its stand-in when it keeps its own (the browser can't use the PDF's) */
+const shownFont = (i: LineEditItem) => (i.font === 'own' ? i.lookalike : i.font)
+
+/** CSS for a line of the page at its size: the line box is the em box (a quarter em below the baseline to an em above) */
+function lineStyle(i: LineEditItem, scale: number) {
+  const px = i.size * scale
+  return { fontFamily: `${cssFamily(shownFont(i))}, sans-serif`, fontSize: px, lineHeight: `${px * 1.25}px`, fontWeight: i.bold ? 700 : 400, fontStyle: i.italic ? 'italic' : 'normal', color: i.colour, fontKerning: 'none' as const }
+}
+
+/** white over where something of the page's own was, so the editor shows it changed (the saved file really removes it) */
+const Cover = ({ r }: { r: Rect }) => <div aria-hidden="true" className="pointer-events-none absolute bg-white" style={{ left: `calc(${r.x * 100}% - 1px)`, top: `calc(${r.y * 100}% - 1px)`, width: `calc(${r.w * 100}% + 2px)`, height: `calc(${r.h * 100}% + 2px)` }} />
+
+function LineView({ item: i, scale, hit, onPointerDown }: { item: LineEditItem; scale: number; hit: 'auto' | 'none'; onPointerDown: (e: ReactPointerEvent) => void }) {
+  const changed = lineChanged(i)
+  return (
+    <>
+      {changed && <Cover r={i.from} />}
+      <div
+        onPointerDown={onPointerDown}
+        style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, minWidth: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, ...(changed ? lineStyle(i, scale) : {}) }}
+        className={`absolute whitespace-pre ${changed ? '' : 'text-transparent'} ${i.deleted ? 'opacity-0' : ''}`}
+      >
+        {changed && !i.deleted ? i.text : ''}
+      </div>
+    </>
+  )
+}
+
+function LineEditor({ item, scale, onDone }: { item: LineEditItem; scale: number; onDone: (text: string) => void }) {
+  const [text, setText] = useState(item.text)
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    ref.current?.focus()
+    ref.current?.select()
+  }, [])
+  return (
+    <>
+      <Cover r={item.from} />
+      <input
+        ref={ref}
+        value={text}
+        aria-label="Line of text"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => onDone(text)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Escape') ref.current?.blur()
+          e.stopPropagation()
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{ left: `${item.box.x * 100}%`, top: `${item.box.y * 100}%`, width: `max(${item.box.w * 100}%, ${(text.length + 2) * 0.6}em)`, ...lineStyle(item, scale) }}
+        className="absolute m-0 border-0 bg-transparent p-0 outline-2 outline-offset-2 outline-accent"
+      />
+    </>
+  )
+}
+
+function PictureView({ item: i, url, hit, onPointerDown }: { item: PictureEditItem; url?: string; hit: 'auto' | 'none'; onPointerDown: (e: ReactPointerEvent) => void }) {
+  const changed = !!i.deleted || !!i.replace || i.box.x !== i.from.x || i.box.y !== i.from.y || i.box.w !== i.from.w || i.box.h !== i.from.h
+  return (
+    <>
+      {changed && <Cover r={i.from} />}
+      <div onPointerDown={onPointerDown} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} className="absolute">
+        {changed && !i.deleted && url && <img src={url} alt="" draggable={false} className="size-full" />}
+      </div>
+    </>
+  )
+}
+
 /** the outline of the selected item, with its handles */
 function Selection({ item, scale, size, onHandleDown }: { item: Item; scale: number; size: { width: number; height: number }; onHandleDown: (e: ReactPointerEvent, h: Handle | 'from' | 'to') => void }) {
   const handle = (key: string, x: number, y: number, h: Handle | 'from' | 'to', label: string) => (
@@ -449,7 +547,7 @@ function Selection({ item, scale, size, onHandleDown }: { item: Item; scale: num
   }
   if (item.kind === 'note') b = { ...b, w: 20 / size.width, h: 20 / size.height }
   const outline = <div key="o" className="pointer-events-none absolute outline-2 outline-dashed outline-accent" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }} />
-  if (!('box' in item)) return outline
+  if (!('box' in item) || item.kind === 'textline') return outline
   const { x, y, w, h } = b
   const sides: [Handle, number, number, string][] = [
     ['nw', x, y, 'Resize from the top left'], ['ne', x + w, y, 'Resize from the top right'], ['sw', x, y + h, 'Resize from the bottom left'], ['se', x + w, y + h, 'Resize from the bottom right'],

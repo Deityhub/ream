@@ -4,6 +4,7 @@ import { inputClass } from '../fields.tsx'
 import type { Style, Tool } from './Overlay.tsx'
 import { FONTS, type FieldItem, type Item, type TextItem } from './items.ts'
 import { FIELD_KIND, FieldProperties } from './FieldProperties.tsx'
+import { EraseProperties, LineProperties, PictureProperties } from './ContentProperties.tsx'
 import type { FieldSettings } from './fields.ts'
 
 type Props = {
@@ -25,14 +26,16 @@ type Props = {
   group: FieldItem[]
   taken: Set<string>
   onField: (patch: Partial<FieldSettings>) => void
+  /** pick a picture to put in place of the selected one */
+  onReplace: () => void
 }
 
 const row = 'flex flex-wrap items-center gap-2 text-sm'
 const small = 'rounded-md border border-line px-2 py-1 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:min-h-11'
-const KIND: Record<Item['kind'], string> = { text: 'Text', image: 'Picture', shape: 'Shape', line: 'Line', draw: 'Drawing', whiteout: 'Whiteout', markup: 'Text markup', note: 'Note', link: 'Link', field: 'Form field' }
+const KIND: Record<Item['kind'], string> = { text: 'Text', image: 'Picture', shape: 'Shape', line: 'Line', draw: 'Drawing', whiteout: 'Whiteout', markup: 'Text markup', note: 'Note', link: 'Link', field: 'Form field', textline: 'Line of text', picture: 'Picture', erase: 'Erased area' }
 
 /** the settings of the selected item, or of the tool in hand when nothing is selected (what the next item starts with) */
-export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont, group, taken, onField }: Props) {
+export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDuplicate, onOrder, onEdit, pageCount, fonts, onAddFont, group, taken, onField, onReplace }: Props) {
   if (!item) return <ToolDefaults tool={tool} style={style} onStyle={onStyle} fonts={fonts} onAddFont={onAddFont} />
   const set = (patch: Partial<Item>) => onItem({ ...item, ...patch } as Item)
   return (
@@ -40,8 +43,8 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-medium">{KIND[item.kind]}</h3>
         <span className="ml-auto flex gap-1">
-          <IconButton label="Duplicate (Ctrl or Cmd+D)" icon="copy" onClick={onDuplicate} />
-          {item.kind !== 'field' && (
+          {item.kind !== 'textline' && item.kind !== 'picture' && item.kind !== 'erase' && <IconButton label="Duplicate (Ctrl or Cmd+D)" icon="copy" onClick={onDuplicate} />}
+          {item.kind !== 'field' && item.kind !== 'textline' && item.kind !== 'picture' && item.kind !== 'erase' && (
             <>
               <IconButton label="Bring forward" icon="forward" onClick={() => onOrder(1)} />
               <IconButton label="Send back" icon="forward" flip onClick={() => onOrder(-1)} />
@@ -144,7 +147,10 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
         </fieldset>
       )}
       {item.kind === 'field' && <FieldProperties item={item} group={group} taken={taken} onField={onField} onItem={(p) => set(p)} />}
-      {item.kind !== 'markup' && item.kind !== 'note' && item.kind !== 'field' && (
+      {item.kind === 'textline' && <LineProperties item={item} onItem={(p) => set(p)} onEdit={onEdit} fonts={fonts} />}
+      {item.kind === 'picture' && <PictureProperties item={item} onItem={(p) => set(p)} onReplace={onReplace} />}
+      {item.kind === 'erase' && <EraseProperties item={item} />}
+      {!['markup', 'note', 'field', 'textline', 'picture', 'erase'].includes(item.kind) && (
         <label className={row}>
           <input type="checkbox" checked={!!item.everyPage} onChange={(e) => set({ everyPage: e.target.checked })} /> Put on every page
         </label>
@@ -194,6 +200,7 @@ function ToolDefaults({ tool, style, onStyle, fonts, onAddFont }: { tool: Tool; 
     const how = type === 'checkbox' || type === 'radio' ? 'Click where it goes, or drag to make it bigger.' : 'Drag a box where it goes, or click for one of the usual size.'
     return head(`New ${FIELD_KIND[type].toLowerCase()}`, <p className="text-sm text-muted">{how}{type === 'radio' ? ' Each click adds a button to the group of the one selected; pick Select to start another group.' : ''} Its settings show here once it's placed.</p>)
   }
+  if (tool === 'erase') return head('Erase area', <p className="text-sm text-muted">Drag a box: the text, shapes and pictures under it are taken out of the file when it's saved. For anything sensitive, use Redact PDF, which also cleans the rest of the file.</p>)
   if (tool === 'link') return head('Link', <p className="text-sm text-muted">Drag a box over what should be clickable, then choose where it goes.</p>)
   return head('Picture')
 }

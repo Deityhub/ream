@@ -19,6 +19,7 @@ const paths: Record<string, ReactNode> = {
   'field-list': <><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
   'field-date': <><rect x="4" y="5" width="16" height="15" rx="1" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
   'field-sign': <path d="M3 18c3-1 4-8 6-8s0 6 2 6 2-3 4-3 1 2 3 2M3 21h18" />,
+  eraser: <><path d="M15 4l5 5-9 9H6l-3-3z" /><path d="M9 10l5 5M11 18h9" /></>,
   'tab-order': <path d="M4 7h3M4 12h3M4 17h3M10 7h10M10 12h10M10 17h10" />,
   link: <><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1" /><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1" /></>,
   undo: <path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" />,

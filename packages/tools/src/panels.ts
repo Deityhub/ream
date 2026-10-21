@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react'
 import type { MetadataSummary } from '@ream/image-core'
 import type { FormInfo, OutlineItem } from '@ream/pdf-core'
 import type { PageLayout } from './edit-pdf/detect.ts'
+import type { PageContent } from './edit-pdf/content.ts'
 
 /** what a PDF options panel can ask the app for: page sizes and a drawn page (the app owns the worker that renders them) */
 export type PdfHost = {
@@ -14,6 +15,8 @@ export type PdfHost = {
   chars?(file: File, page: number): Promise<{ text: string; x0: number; y0: number; x1: number; y1: number }[]>
   /** a page's letters and ruled lines in points, for finding where form fields go */
   layout?(file: File, page: number): Promise<PageLayout>
+  /** a page's own lines of text and pictures, as fractions of the page, for editing them */
+  content?(file: File, page: number): Promise<PageContent>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
   PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number; fields?: boolean }>

@@ -193,6 +193,19 @@ export async function pageContentItems(doc: PdfDocument, index: number): Promise
   }
 }
 
+type Share = { x: number; y: number; w: number; h: number }
+
+/** the same, placed as fractions of the page as displayed (the line's baseline as its distance below the top of its box) */
+export async function pageContentShares(doc: PdfDocument, index: number): Promise<{ lines: (Omit<PageLine, 'box' | 'baseline'> & { box: Share; baseline: number })[]; pictures: { id: number; box: Share }[] }> {
+  const { width: W, height: H } = doc.pageSize(doc.pages()[index])
+  const { lines, pictures } = await pageContentItems(doc, index)
+  const share = (b: ShownBox): Share => ({ x: b.x0 / W, y: b.y0 / H, w: (b.x1 - b.x0) / W, h: (b.y1 - b.y0) / H })
+  return {
+    lines: lines.map((l) => ({ ...l, box: share(l.box), baseline: (l.baseline[1] - l.box.y0) / H })),
+    pictures: pictures.map((p) => ({ id: p.id, box: share(p.box) })),
+  }
+}
+
 // ---------- writing ----------
 
 /** a line shown again in its own font, where it was (or moved), as content for the end of the page */
@@ -220,21 +233,22 @@ function ownLine(line: Line, c: LineChange, back: Matrix): string {
   return `q ${move}${g.ctm.map(f4).join(' ')} cm BT /${g.fontName} ${f4(g.fontSize * k)} Tf ${f4(g.hScale * 100)} Tz ${f4(g.rise * k)} Ts ${g.renderMode} Tr 0 Tc 0 Tw ${colour} rg ${colour} RG ${g.tm.map(f4).join(' ')} Tm [${items.join(' ')}] TJ ET Q\n`
 }
 
-/** a picture's operator moved into a new box (displayed), or taken out (null) */
-function pictureOp(p: Picture, box: ShownBox | null, back: Matrix, content: Uint8Array): string {
-  if (!box) return ''
+/**
+ * A picture's operator drawn again in a new box (displayed), for the end of the page: where it was, it often sits in
+ * a clip the size of its old place (Chromium prints each picture so), which would hide it once moved. It comes out on
+ * top of the page, and without the opacity it had.
+ */
+function pictureOp(p: Picture, box: ShownBox, back: Matrix, content: Uint8Array): string {
   const from = [apply(back, p.box.x0, p.box.y0), apply(back, p.box.x1, p.box.y1)]
   const to = [apply(back, box.x0, box.y0), apply(back, box.x1, box.y1)]
   const lo = (a: [number, number][], i: 0 | 1) => Math.min(a[0][i], a[1][i])
   const span = (a: [number, number][], i: 0 | 1) => Math.abs(a[0][i] - a[1][i]) || 1
   const sx = span(to, 0) / span(from, 0)
   const sy = span(to, 1) / span(from, 1)
-  // the box's map in user space, said in the operator's own space: C, then the map, then back out of C
+  // the map from the old box to the new one in user space, after the picture's own matrix (its unit square onto the page)
   const A: Matrix = [sx, 0, 0, sy, lo(to, 0) - lo(from, 0) * sx, lo(to, 1) - lo(from, 1) * sy]
-  // the picture's unit square is the CTM at the operator, so C is the picture matrix
-  const X = mul(mul(p.ctm, A), invert(p.ctm))
   const op = Array.from(content.subarray(p.start, p.end), (ch) => String.fromCharCode(ch)).join('')
-  return `q ${X.map(f4).join(' ')} cm ${op} Q`
+  return `q ${mul(p.ctm, A).map(f4).join(' ')} cm ${op} Q\n`
 }
 
 /** change pages' own text and pictures and erase areas; everything else in the file is kept */
@@ -251,10 +265,13 @@ export async function editContent(doc: PdfDocument, edits: Map<number, PageConte
       let { content, res } = await pageContent(doc, index)
       const original = res
 
-      // pictures first: their places are byte ranges of the content as it is
+      // pictures first: their places are byte ranges of the content as it is; a moved one is drawn again at the end
+      let redrawn = ''
       const moves = (change.pictures ?? []).flatMap((c) => {
         const p = info.pictures.find((x) => x.id === c.id)
-        return p ? [{ start: p.start, end: p.end, text: pictureOp(p, c.box, back, content) }] : []
+        if (!p) return []
+        if (c.box) redrawn += pictureOp(p, c.box, back, content)
+        return [{ start: p.start, end: p.end, text: '' }]
       })
       if (moves.length) {
         const enc = new TextEncoder()
@@ -268,6 +285,10 @@ export async function editContent(doc: PdfDocument, edits: Map<number, PageConte
         content = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
         parts.reduce((i, p) => (content.set(p, i), i + p.length), 0)
       }
+      // the page's own content in a q/Q pair, so the state it leaves can't move what is drawn after it; the moved
+      // pictures go in before the passes below, so an erased area reaches them and their names are kept
+      const enc = new TextEncoder()
+      content = new Uint8Array([...enc.encode('q\n'), ...content, ...enc.encode(`\nQ\n${redrawn}`)])
 
       // lines: their letters out (by their middles, so the lines next to them are safe), then shown again in their own font
       const changed = (change.lines ?? []).flatMap((c) => {
@@ -290,8 +311,7 @@ export async function editContent(doc: PdfDocument, edits: Map<number, PageConte
       }
       const shown = changed.filter(({ c }) => c.own && c.text.trim()).map(({ l, c }) => ownLine(l, c, back)).join('')
 
-      const enc = new TextEncoder()
-      const body = new Uint8Array([...enc.encode('q\n'), ...content, ...enc.encode(`\nQ\n${shown}`)])
+      const body = new Uint8Array([...content, ...enc.encode(`\n${shown}`)])
       const dict = e.edit(pageRef)
       dict.set('Contents', e.add(new PdfStream(new Map([['Filter', new PdfName('FlateDecode')]]), await deflate(body))))
       if (res !== original || !page.dict.has('Resources')) dict.set('Resources', res)

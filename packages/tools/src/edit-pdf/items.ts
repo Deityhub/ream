@@ -122,7 +122,49 @@ export type FieldItem = Base & {
   locked?: boolean
 }
 
-export type Item = TextItem | ImageItem | ShapeItem | LineItem | DrawItem | WhiteoutItem | MarkupItem | NoteItem | LinkItem | FieldItem
+/** a line of the page's own text, as the editor has changed it (`from` is where it was, `box` where it is now) */
+export type LineEditItem = Base & {
+  kind: 'textline'
+  /** the line's id on its page (`pageContentItems`) */
+  source: number
+  from: Rect
+  box: Rect
+  text: string
+  original: string
+  /** points as displayed */
+  size: number
+  originalSize: number
+  colour: string
+  originalColour: string
+  /** 'own' shows it in the PDF's font when that has every letter; otherwise a name from FONTS or an added font */
+  font: string
+  bold: boolean
+  italic: boolean
+  /** the letters the line's own font can show */
+  letters: string
+  /** the font the line falls back to when its own can't be used */
+  lookalike: string
+  /** how far below the top of its box its baseline is, a fraction of the page's height */
+  baseline: number
+  deleted?: boolean
+}
+
+/** a picture of the page's own, moved, resized, replaced or taken out */
+export type PictureEditItem = Base & {
+  kind: 'picture'
+  source: number
+  from: Rect
+  box: Rect
+  /** what it looked like on the page, for the editor to show while it is moved (a PNG data URL) */
+  preview: string
+  replace?: { data: Uint8Array; type: 'image/png' | 'image/jpeg' }
+  deleted?: boolean
+}
+
+/** an area whose text, shapes and pictures are taken out of the file */
+export type EraseItem = Base & { kind: 'erase'; box: Rect }
+
+export type Item = TextItem | ImageItem | ShapeItem | LineItem | DrawItem | WhiteoutItem | MarkupItem | NoteItem | LinkItem | FieldItem | LineEditItem | PictureEditItem | EraseItem
 
 export type EditPdfOptions = {
   items: Item[]
@@ -151,6 +193,9 @@ export const FONTS: { name: string; label: string; family: string; css: string }
 export const itemsOn = (items: Item[], page: number) => items.filter((i) => i.page === page || i.everyPage)
 
 export const isField = (i: Item): i is FieldItem => i.kind === 'field'
+
+/** changes to what the page already has (not drawn on it like the rest) */
+export const isContent = (i: Item): i is LineEditItem | PictureEditItem | EraseItem => i.kind === 'textline' || i.kind === 'picture' || i.kind === 'erase'
 
 /** '#rrggbb' as 0..1 parts */
 export const colourOf = (hex: string): [number, number, number] => {

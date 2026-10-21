@@ -7,7 +7,8 @@ import { Properties } from './Properties.tsx'
 import { moved, pickText as pickFrom } from './geometry.ts'
 import { byPosition, copiedField, fieldItems, suggestedFields, type FieldSettings } from './fields.ts'
 import { detectFields } from './detect.ts'
-import { defaultOptions, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item } from './items.ts'
+import { defaultOptions, isContent, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item, type PictureEditItem } from './items.ts'
+import { lineChanged, lineItem, type PageContent } from './content.ts'
 
 export { defaultOptions }
 export const placesActions = true
@@ -53,6 +54,13 @@ const FIELD_TOOLS: { tool: Tool; label: string; icon: string; key?: string }[] =
   { tool: 'field-date', label: 'Date field', icon: 'field-date' },
   { tool: 'field-signature', label: 'Signature box', icon: 'field-sign' },
 ]
+const CONTENT_TOOLS: { tool: Tool; label: string; icon: string; key?: string }[] = [
+  { tool: 'select', label: 'Select and move', icon: 'cursor' },
+  { tool: 'erase', label: 'Erase area', icon: 'eraser' },
+]
+type Mode = 'add' | 'content' | 'forms'
+const MODES: [Mode, string][] = [['add', 'Add to pages'], ['content', 'Edit content'], ['forms', 'Form fields']]
+
 // tools that stay in hand after placing something, for placing several in a row
 const KEEP: Tool[] = ['pen', 'highlighter', 'highlight', 'underline', 'strike', 'field-radio']
 
@@ -70,7 +78,11 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   const [selected, setSelected] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [note, setNote] = useState('')
-  const [mode, setMode] = useState<'add' | 'forms'>('add')
+  const [mode, setMode] = useState<Mode>('add')
+  /** the pages' own lines and pictures, read when the content mode first shows each page */
+  const [content, setContent] = useState<Map<number, PageContent | 'failed'>>(new Map())
+  const pageBox = useRef<HTMLDivElement>(null)
+  const replacer = useRef<HTMLInputElement>(null)
   const [formNote, setFormNote] = useState('')
   /** the fields picked so far while setting the Tab order (null when not setting it) */
   const [ordering, setOrdering] = useState<string[] | null>(null)
@@ -94,6 +106,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     setOrdering(null)
     setFormNote('')
     setFound('')
+    setContent(new Map())
     past.current = []
     future.current = []
     onChange(defaultOptions)
@@ -118,6 +131,18 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file])
+
+  useEffect(() => {
+    if (mode !== 'content' || !file || !pdfHost?.content || content.has(current)) return
+    let live = true
+    pdfHost.content(file, current).then(
+      (c) => live && setContent((m) => new Map(m).set(current, c)),
+      () => live && setContent((m) => new Map(m).set(current, 'failed')),
+    )
+    return () => {
+      live = false
+    }
+  }, [mode, current, file, content, pdfHost])
 
   const zoom = usePageZoom(pages ? pages[Math.min(current, pages.length - 1)] : undefined, file)
   // shortcuts work wherever the focus is while the editor is open (clicking the page leaves it on the document), except in fields
@@ -169,8 +194,14 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   const fields = items.filter(isField)
   // a change to a field's settings goes to every place it is shown
   const updateField = (item: FieldItem, patch: Partial<FieldSettings>) => commit(items.map((i) => (isField(i) && i.name === item.name ? { ...i, ...patch } : i)))
-  const remove = (id: string) => commit(items.filter((i) => i.id !== id), null)
+  const remove = (id: string) => {
+    const it = items.find((i) => i.id === id)
+    // the page's own line or picture is marked as taken out: forgetting the item would bring it back
+    if (it && (it.kind === 'textline' || it.kind === 'picture')) commit(items.map((i) => (i.id === id ? ({ ...i, deleted: true } as Item) : i)))
+    else commit(items.filter((i) => i.id !== id), null)
+  }
   const duplicate = (item: Item, page = item.page, offset = 0.02) => {
+    if (isContent(item)) return
     const shifted = { ...moved(item, offset, offset), page } as Item
     const copy = isField(shifted) ? copiedField(shifted, newId(), fields) : ({ ...shifted, id: newId() } as Item)
     commit([...items, copy], copy.id)
@@ -198,7 +229,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     setOrdering(null)
     if (t !== 'select') setSelected(null)
   }
-  const switchMode = (m: 'add' | 'forms') => {
+  const switchMode = (m: Mode) => {
     setMode(m)
     setTool('select')
     setSelected(null)
@@ -286,6 +317,33 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     }
   }
 
+  const pageContent = (() => {
+    const c = content.get(current)
+    return c && c !== 'failed' ? c : null
+  })()
+  // the page's own line or picture becomes an item when it is first picked
+  const pick = (kind: 'line' | 'picture', id: number, edit: boolean) => {
+    if (!pageContent) return
+    const have = items.find((i) => i.page === current && ((kind === 'line' && i.kind === 'textline') || (kind === 'picture' && i.kind === 'picture')) && (i as { source: number }).source === id)
+    if (have) {
+      setSelected(have.id)
+      if (edit) setEditing(have.id)
+      return
+    }
+    if (kind === 'line') {
+      const l = pageContent.lines.find((x) => x.id === id)
+      if (!l) return
+      const it = lineItem(newId(), current, l)
+      commit([...items, it], it.id)
+      if (edit) setEditing(it.id)
+    } else {
+      const p = pageContent.pictures.find((x) => x.id === id)
+      if (!p) return
+      const it: PictureEditItem = { id: newId(), page: current, kind: 'picture', source: id, from: p.box, box: p.box, preview: cropOf(pageBox.current, p.box) }
+      commit([...items, it], it.id)
+    }
+  }
+
   const pickText = pdfHost.chars
     ? async (area: { x: number; y: number; w: number; h: number }) => {
         const chars = await pdfHost.chars!(file, current)
@@ -295,21 +353,22 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
       }
     : undefined
 
-  const marks = items.length - fields.length
+  const marks = items.filter((i) => !isField(i) && !isContent(i)).length
+  const changes = here.filter((i) => (i.kind === 'textline' ? lineChanged(i) : i.kind === 'picture' ? i.deleted || i.replace || i.box !== i.from : i.kind === 'erase')).length
   const addedFonts = [...new Set(o.fonts.map((f) => f.for ?? f.family))]
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
       <div className="min-w-0 space-y-3 rounded-xl border border-line bg-surface p-4">
         <div role="group" aria-label="Mode" className="inline-flex rounded-lg border border-line p-0.5 text-sm">
-          {(['add', 'forms'] as const).map((m) => (
+          {MODES.filter(([m]) => m !== 'content' || pdfHost.content).map(([m, label]) => (
             <button key={m} type="button" aria-pressed={mode === m} onClick={() => switchMode(m)} className="rounded-md px-3 py-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-accent aria-pressed:text-on-accent pointer-coarse:min-h-11">
-              {m === 'add' ? 'Add to pages' : 'Form fields'}
+              {label}
             </button>
           ))}
         </div>
         <div role="toolbar" aria-label="Tools" className="flex flex-wrap items-center gap-0.5 rounded-lg border border-line p-1">
-          {(mode === 'add' ? TOOLS : FIELD_TOOLS).map((t) => (
+          {(mode === 'add' ? TOOLS : mode === 'content' ? CONTENT_TOOLS : FIELD_TOOLS).map((t) => (
             <button key={t.tool} type="button" title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label} aria-label={t.label} aria-pressed={!ordering && tool === t.tool && t.tool !== 'image'} onClick={() => choose(t.tool)} className={iconButton}>
               <Icon name={t.icon} className="size-4" />
             </button>
@@ -329,6 +388,17 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           <button type="button" title="Redo (Shift+Ctrl or Cmd+Z)" aria-label="Redo" onClick={redo} disabled={!future.current.length} className={iconButton}>
             <Icon name="redo" className="size-4" />
           </button>
+          <input ref={replacer} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" tabIndex={-1} onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (!f || sel?.kind !== 'picture') return
+            try {
+              const { data, type } = await pictureOf(f)
+              update({ ...sel, replace: { data, type } })
+            } catch {
+              setNote(`${f.name} can't be read as a picture. PNG, JPEG, WebP and GIF pictures work.`)
+            }
+          }} />
           <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" tabIndex={-1} onChange={async (e) => {
             const f = e.target.files?.[0]
             e.target.value = ''
@@ -348,7 +418,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           <span className="ml-auto">{zoom.bar}</span>
         </div>
         <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
-          <div className="relative mx-auto bg-white shadow-sm ring-1 ring-line" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+          <div ref={pageBox} className="relative mx-auto bg-white shadow-sm ring-1 ring-line" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
             <Overlay
               page={current}
               size={size}
@@ -368,6 +438,8 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               }}
               pickText={pickText}
               newId={newId}
+              content={mode === 'content' && pageContent ? pageContent : undefined}
+              onPickContent={pick}
               order={ordering ? { numbers: new Map((ordering.length ? ordering : orderNow).map((id, k) => [id, k + 1])), pick: (id) => {
                 const next = ordering.includes(id) ? ordering : [...ordering, id]
                 if (next.length >= pageFields.length) {
@@ -390,7 +462,15 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
             <button type="button" className={button} onClick={finishOrder}>Done</button>
           </div>
         ) : (
-          <p className="text-xs text-muted">{mode === 'add' ? 'Pick a tool, then click or drag on the page. Double-click text to change it. Alt turns snapping off while you move something.' : "Pick a kind of field, then drag a box on the page. The file's own fields can be moved, set up or deleted too."}</p>
+          <p className="text-xs text-muted">
+            {mode === 'add'
+              ? 'Pick a tool, then click or drag on the page. Double-click text to change it. Alt turns snapping off while you move something.'
+              : mode === 'content'
+                ? content.get(current) === 'failed'
+                  ? "This page's content can't be read for editing."
+                  : 'Click a line of text or a picture of the page to select it; double-click a line to change it. Text inside drawings the PDF groups (forms) and turned text can only be erased.'
+                : "Pick a kind of field, then drag a box on the page. The file's own fields can be moved, set up or deleted too."}
+          </p>
         )}
       </div>
 
@@ -404,7 +484,8 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           onRemove={() => sel && remove(sel.id)}
           onDuplicate={() => sel && duplicate(sel)}
           onOrder={(by) => sel && reorder(sel.id, by)}
-          onEdit={() => sel?.kind === 'text' && setEditing(sel.id)}
+          onEdit={() => (sel?.kind === 'text' || sel?.kind === 'textline') && setEditing(sel.id)}
+          onReplace={() => replacer.current?.click()}
           group={sel && isField(sel) ? fields.filter((f) => f.name === sel.name) : []}
           taken={new Set(sel && isField(sel) ? fields.filter((f) => f.name !== sel.name).map((f) => f.name.trim()) : [])}
           onField={(patch) => sel && isField(sel) && updateField(sel, patch)}
@@ -443,9 +524,11 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           </span>
         </label>
         <p className="text-sm text-muted" role="status">
-          {mode === 'forms'
+          {mode === 'content'
+            ? `${changes} ${changes === 1 ? 'change' : 'changes'} to this page's own content.`
+            : mode === 'forms'
             ? `${pageFields.length} ${pageFields.length === 1 ? 'field' : 'fields'} on this page, ${new Set(fields.map((f) => f.name)).size} in all.`
-            : marks === 0 ? 'Nothing added yet.' : `${here.length - pageFields.length} ${here.length - pageFields.length === 1 ? 'thing' : 'things'} on this page, ${marks} in all.`}
+            : marks === 0 ? 'Nothing added yet.' : `${here.filter((i) => !isField(i) && !isContent(i)).length} ${here.filter((i) => !isField(i) && !isContent(i)).length === 1 ? 'thing' : 'things'} on this page, ${marks} in all.`}
         </p>
         {actions}
       </div>
@@ -467,6 +550,18 @@ async function pictureOf(f: File): Promise<{ data: Uint8Array; type: 'image/png'
   bitmap.close()
   const blob = await canvas.convertToBlob({ type: 'image/png' })
   return { data: new Uint8Array(await blob.arrayBuffer()), type: 'image/png', width, height }
+}
+
+/** what part of the drawn page looks like, as a PNG data URL, to show a picture of the page's while it is moved */
+function cropOf(page: HTMLElement | null, box: { x: number; y: number; w: number; h: number }): string {
+  const c = page?.querySelector('canvas')
+  if (!c || !c.width) return ''
+  const [sx, sy, sw, sh] = [box.x * c.width, box.y * c.height, Math.max(1, box.w * c.width), Math.max(1, box.h * c.height)]
+  const out = document.createElement('canvas')
+  out.width = Math.round(sw)
+  out.height = Math.round(sh)
+  out.getContext('2d')!.drawImage(c, sx, sy, sw, sh, 0, 0, out.width, out.height)
+  return out.toDataURL('image/png')
 }
 
 /** a message in place of the panel, with the run button still there */

@@ -1,7 +1,7 @@
 import { UserError } from '@ream/core'
 import { PdfDocument, PdfPasswordError, decryptPdf, fontFaces, readForm, readInfo, readOutline, woffToSfnt, type FontFaceInfo, type FormInfo, type OutlineItem } from '@ream/pdf-core'
 import { readImageMetadata, type MetadataSummary } from '@ream/image-core'
-import { pageChars, pageGeometry, renderPage } from '@ream/pdf-render'
+import { pageChars, pageContentShares, pageGeometry, renderPage } from '@ream/pdf-render'
 import { usedFonts } from '@ream/office-core'
 import { officeToPdf, type OfficeKind } from '@ream/tools/office-preview'
 import { installStandardFonts } from '@ream/tools/standard-fonts'
@@ -31,6 +31,7 @@ type Request =
   | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'form'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'chars'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
+  | { id: number; op: 'content'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'layout'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number; fields?: boolean }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
@@ -96,6 +97,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'outline') post({ id: req.id, ok: true, result: readOutline(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'form') post({ id: req.id, ok: true, result: readForm(await getDoc(req.docId, req.bytes, req.office)) })
+    else if (req.op === 'content') post({ id: req.id, ok: true, result: await pageContentShares(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'layout') post({ id: req.id, ok: true, result: await layoutOf(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'chars') post({ id: req.id, ok: true, result: await letterBoxes(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })

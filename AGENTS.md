@@ -109,6 +109,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
   - **Annotations:** covered ones go, and fields left without widgets leave `/AcroForm`.
   - **Writing:** through `editDocument` (`keepInfo = false` drops /Info).
   - **Coordinates:** `displayedArea` turns a panel `Rect` into user space.
+- Content editing (`content-edit.ts`): `pageContentItems` / `pageContentShares` read the page's own lines (glyphs from `onShow`, which now carries the text, font, font resource name, text matrix, CTM and colour, grouped by baseline, font and gaps) and pictures (page-level `Do` and inline images with their byte ranges). `fontLetters(font)` is the set of letters a font can show again (codes decoded, an outline that isn't empty or the .notdef's). `editContent` takes lines out with the Redactor in `centre` mode (text only, letters whose middle is in the line box), shows them again in their own font at the end of the page, takes moved pictures out and draws them again at the end (outside their clips), and erases areas with `transparent` (soft masks, not black). The Redactor's `RedactMode` picks what it removes.
 - Not drawn yet: tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (grey box plus a warning), vertical writing. These are documented in the README.
 - **Always look at rendered output, not just call logs.** Fake-canvas unit tests missed a y-flip bug and a stale canvas-font bug that only real pixels showed.
 
@@ -151,6 +152,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
   - **Tests:** `geometry.ts` (move, resize, snap, pick text) is pure and tested.
   - **Form fields mode:** a `FieldItem` is one widget; a field shown in several places (a radio group) is the items that share a name, and `updateField` keeps its settings the same on all of them. The file's fields load through the `form` host call (`fieldItems`) and are kept in `fieldsLoaded`; `formEdits` (`fields.ts`) compares the two and gives `editForm` what changed, before `decorate` runs. The page is drawn without its own fields (`PdfPage fields={false}`, the renderer's `fields: false`) so the editor's boxes are the only ones shown.
   - **Find fields:** `detect.ts` (pure, tested) works on the `layout` host call (letters and ruled lines in points from `pageChars`).
+  - **Edit content mode:** the `content` host call gives the page's lines and pictures; picking one makes a `LineEditItem` or `PictureEditItem` (deleting marks it `deleted`, so it can be put back), and the Erase tool makes `EraseItem`s. `contentEdits` (`content.ts`) turns them into `editContent`'s input plus what is drawn over the page instead (a line its own font can't show, as a `TextItem` on its old baseline; a replacement picture). The run goes `editForm`, `editContent`, `decorate`.
 - Home (`Home.tsx`) is drop-first: dropped files are handed to a tool through `handoff.ts`, the same mechanism as "Use in another tool".
 
 ## Design system
