@@ -5,7 +5,8 @@ import { usePageZoom } from '../PageZoom.tsx'
 import { Overlay, type Style, type Tool } from './Overlay.tsx'
 import { Properties } from './Properties.tsx'
 import { moved, pickText as pickFrom } from './geometry.ts'
-import { byPosition, copiedField, fieldItems, type FieldSettings } from './fields.ts'
+import { byPosition, copiedField, fieldItems, suggestedFields, type FieldSettings } from './fields.ts'
+import { detectFields } from './detect.ts'
 import { defaultOptions, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item } from './items.ts'
 
 export { defaultOptions }
@@ -73,6 +74,8 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   const [formNote, setFormNote] = useState('')
   /** the fields picked so far while setting the Tab order (null when not setting it) */
   const [ordering, setOrdering] = useState<string[] | null>(null)
+  const [finding, setFinding] = useState(false)
+  const [found, setFound] = useState('')
   const past = useRef<Item[][]>([])
   const future = useRef<Item[][]>([])
   const clipboard = useRef<Item | null>(null)
@@ -90,6 +93,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     setEditing(null)
     setOrdering(null)
     setFormNote('')
+    setFound('')
     past.current = []
     future.current = []
     onChange(defaultOptions)
@@ -139,6 +143,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     onChange({ ...latest.current, items: next })
     if (select !== undefined) setSelected(select)
     setNote('')
+    setFound('')
   }
   const undo = () => {
     const prev = past.current.pop()
@@ -260,6 +265,27 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     }
   }
 
+  // fields where the pages' underscores, lines and boxes are; one undo step for all of them
+  const find = async (which: number[]) => {
+    if (!pdfHost.layout) return
+    setFinding(true)
+    try {
+      const added: FieldItem[] = []
+      for (const p of which) {
+        const layout = await pdfHost.layout(file, p)
+        const have = [...fields, ...added]
+        added.push(...suggestedFields(detectFields(layout, have.filter((f) => f.page === p).map((f) => f.box)), p, have, newId))
+      }
+      if (added.length) commit([...latest.current.items, ...added], null)
+      if (added.length) setFound(`${added.length} ${added.length === 1 ? 'field' : 'fields'} added. Check them, and delete any that aren't wanted.`)
+      else setNote("No places for fields were found. They are found from underscores, dotted lines, lines and boxes in the page's text; a scanned page has none.")
+    } catch {
+      setNote("This page's text can't be read, so no fields were found.")
+    } finally {
+      setFinding(false)
+    }
+  }
+
   const pickText = pdfHost.chars
     ? async (area: { x: number; y: number; w: number; h: number }) => {
         const chars = await pdfHost.chars!(file, current)
@@ -355,6 +381,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
           </div>
         </div>
         {note && <p role="status" className="text-sm text-warning">{note}</p>}
+        {found && <p role="status" className="text-sm text-muted">{found}</p>}
         {formNote && <p className="text-sm text-warning">{formNote}</p>}
         {ordering ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -399,6 +426,16 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               : undefined
           }
         />
+        {mode === 'forms' && !sel && pdfHost.layout && (
+          <section aria-label="Find fields" className="space-y-2">
+            <h3 className="text-sm font-medium">Find fields</h3>
+            <p className="text-xs text-muted">Adds fields where the page has underscores, dotted lines, lines to write on, empty boxes and squares to tick, named after the words beside them. Check what it adds.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={button} disabled={finding} onClick={() => find([current])}>On this page</button>
+              {pages.length > 1 && <button type="button" className={button} disabled={finding} onClick={() => find(pages.map((_, i) => i))}>On every page</button>}
+            </div>
+          </section>
+        )}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={o.flattenComments} onChange={(e) => onChange({ ...o, flattenComments: e.target.checked })} className="mt-0.5" />
           <span>

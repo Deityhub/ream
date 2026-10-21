@@ -2,6 +2,7 @@
 // changed, as `editForm` takes it. Plain functions, so they can be tested without a browser.
 import type { FieldChange, FieldSpec, FormEdits, FormInfo, WidgetSpec } from '@ream/pdf-core'
 import type { Rect } from '../rect.ts'
+import type { Suggestion } from './detect.ts'
 import { colourOf, isField, type EditPdfOptions, type FieldItem, type FieldType } from './items.ts'
 
 type Size = { width: number; height: number }
@@ -55,6 +56,20 @@ const BASE: Record<FieldType, string> = { text: 'Text', date: 'Date', checkbox: 
 export function freeName(base: string, items: { name?: string; kind: string }[]): string {
   const taken = new Set(items.flatMap((i) => (i.kind === 'field' && i.name ? [i.name] : [])))
   for (let n = 1; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`
+}
+
+/** fields for what Find fields suggested, named after their labels (Email, Email 2, …) */
+export function suggestedFields(found: Suggestion[], page: number, items: FieldItem[], newId: () => string): FieldItem[] {
+  const out: FieldItem[] = []
+  for (const s of found) {
+    const all = [...items, ...out]
+    // a line labelled as one is a signature or a date
+    const type = s.type !== 'text' ? s.type : /signature|sign here/i.test(s.label) ? 'signature' : /\bdate\b|^dob$/i.test(s.label) ? 'date' : 'text'
+    const f = newField(newId(), page, type, s.box, all, null)
+    if (s.label) f.name = all.some((i) => i.name === s.label) ? freeName(s.label, all).replace(/ 1$/, ' 2') : s.label
+    out.push(f)
+  }
+  return out
 }
 
 /** a value no button of the group stands for yet */

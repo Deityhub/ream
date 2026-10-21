@@ -3,7 +3,7 @@ import type { Tool } from '@ream/core'
 export const editPdf: Tool = {
   id: 'edit-pdf',
   title: 'Edit PDF',
-  description: 'Add text, pictures, shapes, drawings and comments',
+  description: 'Add text, pictures, shapes, drawings, comments and form fields',
   category: 'pdf',
   icon: 'pen',
   accept: ['.pdf'],

@@ -40,7 +40,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M7 ✅ | PDF advanced | Organize pages, Repair, Flatten (now Lock the answers in Fill PDF form), PDF → text/Markdown, Bookmarks, TrueType embedding (watermark in any script) |
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
-| M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links (form fields and editing the PDF's own content come next) |
+| M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms (editing the PDF's own content comes next) |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -83,7 +83,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 
 ## Known M7.6 limits
 
-- **Edit PDF** adds things on top of pages; it doesn't change what the PDF already has (that, and form fields, are the next parts).
+- **Edit PDF** adds things on top of pages and sets up form fields; it doesn't change the PDF's own text and pictures yet (the next part).
   - **Into the page:** text, pictures, shapes, lines and arrows, freehand drawings and whiteout become part of the page, so every viewer and printer shows them. The text stays real text that can be selected and searched.
   - **As comments:** highlights, underlines, strike-throughs, notes and links are annotations, with their own pictures so viewers that only draw pictures show them too. "Flatten comments into the pages" bakes highlights and notes in.
   - **Text:**
@@ -94,6 +94,15 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **Items:** rotate in quarter turns only (pictures). Text on a turned page follows the page as it is shown.
   - **Pictures:** a JPEG goes in as it is, so a phone photo that relies on its EXIF orientation shows unturned.
   - **Markup** needs the page's own text: scanned pages have none.
+  - **Form fields:**
+    - Fields the file had can be moved, resized, renamed (within their group), set up and deleted; one that is changed gets new pictures drawn by Ream, so a look of its own (a cross instead of a tick, a font the form chose) is replaced. A field that is only moved keeps its pictures.
+    - Field text is drawn in Helvetica: Latin letters, digits and common symbols only.
+    - Fields with rich text, several choices at once or a file can only be moved, resized, renamed or deleted; push buttons are left as they are and aren't shown.
+    - Date fields format their text with Acrobat's date script; viewers without scripts (Chromium among them) treat them as plain text fields.
+    - Signature boxes are empty signature fields: signing with a certificate isn't part of this.
+    - The Tab order is the order of the page's fields in the file, which most viewers follow.
+    - **Find fields** goes by underscores, dotted lines, lines, empty boxes and squares in the page's text and drawing, and names each field after the words beside it. It's a guess, and a scanned page has nothing to go by (no OCR).
+    - A file with an XFA form keeps it; viewers that use XFA may ignore the fields set up here.
   - **Not checked:** Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7.5 limits

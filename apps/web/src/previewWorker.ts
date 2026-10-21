@@ -31,6 +31,7 @@ type Request =
   | { id: number; op: 'outline'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'form'; docId: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'chars'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
+  | { id: number; op: 'layout'; docId: number; page: number; bytes?: Uint8Array; office?: OfficeKind }
   | { id: number; op: 'render'; docId: number; bytes?: Uint8Array; office?: OfficeKind; page: number; width: number; fields?: boolean }
   | { id: number; op: 'unlock'; bytes: Uint8Array; password: string }
   | { id: number; op: 'imageMetadata'; bytes: Uint8Array }
@@ -95,6 +96,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     else if (req.op === 'metadata') post({ id: req.id, ok: true, result: readInfo(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'outline') post({ id: req.id, ok: true, result: readOutline(await getDoc(req.docId, req.bytes, req.office)) })
     else if (req.op === 'form') post({ id: req.id, ok: true, result: readForm(await getDoc(req.docId, req.bytes, req.office)) })
+    else if (req.op === 'layout') post({ id: req.id, ok: true, result: await layoutOf(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'chars') post({ id: req.id, ok: true, result: await letterBoxes(await getDoc(req.docId, req.bytes, req.office), req.page) })
     else if (req.op === 'imageMetadata') post({ id: req.id, ok: true, result: readImageMetadata(req.bytes) })
     else if (req.op === 'officeFonts') post({ id: req.id, ok: true, result: await usedFonts(req.bytes) })
@@ -114,6 +116,13 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     if (code !== 'missing') console.error(err)
     post({ id: req.id, ok: false, code, message: 'Something went wrong while reading this file.' })
   }
+}
+
+/** a page's letters (boxes from above the baseline to below it) and ruled lines, in points as displayed, for finding form fields */
+async function layoutOf(doc: PdfDocument, page: number) {
+  const { chars, width, height, shapes } = await pageChars(doc, page)
+  const letters = chars.filter((c) => !c.invisible && Math.abs(c.angle) < 1).map((c) => ({ text: c.text, x0: c.x0, x1: c.x1, y0: c.y0 - c.size * 0.8, y1: c.y0 + c.size * 0.2, size: c.size }))
+  return { width, height, chars: letters, rules: shapes.rules.map(({ x0, y0, x1, y1 }) => ({ x0, y0, x1, y1 })) }
 }
 
 /** the letters of a page with their boxes, as fractions of the page as displayed (y from the top), for marking text */

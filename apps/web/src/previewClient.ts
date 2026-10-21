@@ -70,6 +70,8 @@ export const readPdfMetadata = (file: Blob) => withDoc<Record<string, string>>(f
 /** the bookmarks of a PDF, read in the worker */
 export const readPdfOutline = (file: Blob) => withDoc<OutlineItem[]>(file, { op: 'outline' })
 export const readPdfForm = (file: Blob) => withDoc<FormInfo>(file, { op: 'form' })
+export type PdfLayout = { width: number; height: number; chars: { text: string; x0: number; y0: number; x1: number; y1: number; size: number }[]; rules: { x0: number; y0: number; x1: number; y1: number }[] }
+export const readPdfLayout = (file: Blob, page: number) => withDoc<PdfLayout>(file, { op: 'layout', page })
 export const readPdfChars = (file: Blob, page: number) => withDoc<{ text: string; x0: number; y0: number; x1: number; y1: number }[]>(file, { op: 'chars', page })
 
 // Rendered pages are kept briefly so a thumbnail and a bigger preview of the same page, or a re-mounted component,
