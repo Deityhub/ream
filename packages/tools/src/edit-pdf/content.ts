@@ -5,7 +5,9 @@ import type { PageContentEdits, ShownBox } from '@ream/pdf-render'
 import type { Rect } from '../rect.ts'
 import { lookAlikeFor } from '../fonts/match.ts'
 import type { InstalledFont } from '../fonts/book.ts'
-import { FONTS, colourOf, lineBox, type ImageItem, type Item, type LineEditItem, type TextItem } from './items.ts'
+import type { PageChar } from './geometry.ts'
+import { wrapLines } from './layout.ts'
+import { FONTS, colourOf, lineBox, type ImageItem, type Item, type LineEditItem, type PictureEditItem, type TextItem } from './items.ts'
 
 type Size = { width: number; height: number }
 
@@ -41,6 +43,9 @@ export function lineItem(id: string, page: number, l: ContentLine): LineEditItem
 export const missingLetters = (i: LineEditItem) => [...new Set([...i.text].filter((c) => c !== ' ' && !i.letters.includes(c)))]
 /** shown in the PDF's own font */
 export const usesOwn = (i: LineEditItem) => i.font === 'own' && !missingLetters(i).length
+
+/** a picture of the page that was moved, resized, replaced or taken out */
+export const pictureChanged = (i: PictureEditItem) => !!i.deleted || !!i.replace || i.box.x !== i.from.x || i.box.y !== i.from.y || i.box.w !== i.from.w || i.box.h !== i.from.h
 
 export const lineChanged = (i: LineEditItem) =>
   !!i.deleted || i.text !== i.original || i.box.x !== i.from.x || i.box.y !== i.from.y || i.size !== i.originalSize || i.colour !== i.originalColour || i.font !== 'own'
@@ -92,4 +97,69 @@ export function contentEdits(items: Item[], sizes: Size[]): { edits: Map<number,
     } else if (i.kind === 'erase') (of(i.page).erase ??= []).push(shown(i.box, s))
   }
   return { edits, draw }
+}
+
+/**
+ * The letters of a page as it looks now, for picking text to mark: the file's letters, less those of lines that were
+ * changed, moved or taken out (they are not at their old place any more), plus the letters of the changed lines where
+ * they are now. A line that was only moved brings its own letters along; one that was retyped or resized has its
+ * letters laid out with `measure(font, bold, italic, size)`, the width of text in the font the editor draws it with
+ * (the saved line may use another font, so a mark on it is approximate); boxes are as the file's letters have them,
+ * from above the baseline to below it.
+ */
+export function liveChars(
+  chars: PageChar[],
+  items: Item[],
+  page: number,
+  size: { width: number; height: number },
+  measure: (font: string, bold: boolean, italic: boolean, size: number) => (text: string) => number,
+): PageChar[] {
+  const changed = items.filter((i): i is LineEditItem => i.kind === 'textline' && i.page === page && lineChanged(i))
+  const added = items.filter((i): i is TextItem => i.kind === 'text' && (i.page === page || !!i.everyPage) && !!i.text.trim())
+  if (!changed.length && !added.length) return chars
+  const inside = (c: PageChar, b: Rect) => {
+    const [x, y] = [(c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2]
+    return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h
+  }
+  const out = chars.filter((c) => !changed.some((l) => inside(c, l.from)))
+  for (const l of changed) {
+    if (l.deleted) continue
+    // only moved: its own letters, shifted, are exactly where the saved line puts them (its own font's widths)
+    const mine = l.text === l.original && l.size === l.originalSize ? chars.filter((c) => inside(c, l.from)) : []
+    if (mine.length) {
+      const [dx, dy] = [l.box.x - l.from.x, l.box.y - l.from.y]
+      for (const c of mine) out.push({ ...c, x0: c.x0 + dx, x1: c.x1 + dx, y0: c.y0 + dy, y1: c.y1 + dy })
+      continue
+    }
+    const width = measure(fallbackFont(l), l.bold, l.italic, l.size)
+    // the baseline, as far below the top of the line's box as it was, scaled with the size
+    const base = l.box.y + (l.baseline * l.size) / l.originalSize
+    const [y0, y1] = [base - (0.8 * l.size) / size.height, base + (0.2 * l.size) / size.height]
+    const letters = [...l.text]
+    let before = ''
+    for (const ch of letters) {
+      out.push({ text: ch, x0: l.box.x + width(before) / size.width, x1: l.box.x + width(before + ch) / size.width, y0, y1 })
+      before += ch
+    }
+  }
+  // text added to the page is not in the file: its letters are laid out as the editor draws them (the same line breaks, line
+  // height and alignment) and mark like any other
+  for (const t of added) {
+    const width = measure(t.font, t.bold, t.italic, t.size)
+    const [ascent, descent] = METRICS[t.font] ?? METRICS.Arial
+    const { height, baseline } = lineBox(t.size, t.spacing, ascent, descent)
+    const room = t.box.w * size.width
+    wrapLines(t.text, room, width).forEach((line, k) => {
+      const w = width(line)
+      const left = t.box.x + (t.align === 'center' ? (room - w) / 2 : t.align === 'right' ? room - w : 0) / size.width
+      const base = t.box.y + (k * height + baseline) / size.height
+      const [y0, y1] = [base - (0.8 * t.size) / size.height, base + (0.2 * t.size) / size.height]
+      let before = ''
+      for (const ch of line) {
+        out.push({ text: ch, x0: left + width(before) / size.width, x1: left + width(before + ch) / size.width, y0, y1 })
+        before += ch
+      }
+    })
+  }
+  return out
 }

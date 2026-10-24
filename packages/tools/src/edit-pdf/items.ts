@@ -148,8 +148,6 @@ export type LineEditItem = Base & {
   lookalike: string
   /** how far below the top of its box its baseline is, a fraction of the page's height */
   baseline: number
-  /** the page's colour around it, which the editor paints over its old place ('#rrggbb') */
-  cover?: string
   deleted?: boolean
 }
 
@@ -161,7 +159,6 @@ export type PictureEditItem = Base & {
   box: Rect
   /** what it looked like on the page, for the editor to show while it is moved (a PNG data URL) */
   preview: string
-  cover?: string
   replace?: { data: Uint8Array; type: 'image/png' | 'image/jpeg' }
   deleted?: boolean
 }

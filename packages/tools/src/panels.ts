@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { MetadataSummary } from '@ream/image-core'
 import type { FormInfo, OutlineItem } from '@ream/pdf-core'
+import type { HideBox as Box } from '@ream/pdf-render'
 import type { PageLayout } from './edit-pdf/detect.ts'
 import type { PageContent } from './edit-pdf/content.ts'
 
@@ -21,7 +22,7 @@ export type PdfHost = {
   fonts?(file: File): Promise<string[]>
   /** whether the file opens normally: it can be read, how many pages it has, and whether its index had to be rebuilt to read it */
   check(file: File): Promise<{ ok: boolean; pages: number; rebuilt: boolean; message?: string }>
-  PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number; fields?: boolean }>
+  PdfPage: ComponentType<{ file: Blob; page: number; renderWidth: number; fields?: boolean; hide?: { text?: Box[]; pictures?: Box[]; erase?: Box[] } }>
   /** like PdfPage but it reserves the page's space first and only draws once it scrolls near the screen (for long grids) */
   LazyPage: ComponentType<{ file: Blob; page: number; size: { width: number; height: number }; renderWidth: number }>
 }

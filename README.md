@@ -94,6 +94,8 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **Items:** rotate in quarter turns only (pictures). Text on a turned page follows the page as it is shown.
   - **Pictures:** a JPEG goes in as it is, so a phone photo that relies on its EXIF orientation shows unturned.
   - **Markup** needs the page's own text: scanned pages have none.
+    - Marking text goes by the page as the editor shows it: a line you moved is found where you put it (its own letters, so the mark fits the saved line exactly), and not at its old place. A line you retyped or resized is laid out in the editor's stand-in font, so a mark on it can be a little off in the saved file, which uses the PDF's own font. Text added with the Text tool can be marked too (its letters are laid out as the editor draws them). A mark stays where it was made if the text is moved or retyped afterwards, so mark it once it is where it should be.
+    - A letter is picked when the drag covers at least half of it (a thin sweep along a line picks the letters it runs over), and each line or column gets a highlight of its own, trimmed so two lines set close together don't overlap.
   - **Form fields:**
     - Fields the file had can be moved, resized, renamed (within their group), set up and deleted; one that is changed gets new pictures drawn by Ream, so a look of its own (a cross instead of a tick, a font the form chose) is replaced. A field that is only moved keeps its pictures.
     - Field text is drawn in Helvetica: Latin letters, digits and common symbols only (the fonts panel doesn't apply to fields).
@@ -110,7 +112,8 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
     - Only text and pictures in the page's own content can be picked: text inside grouped drawings (forms), turned or slanted text and invisible text (a scan's text layer) can't. Erase reaches all of it.
     - A moved or resized picture is drawn again on top of the page, without any clip or opacity it had. A replaced picture is taken out and the new one is drawn in its box.
     - **Erase area** takes the text, shapes and pictures under it out of the file (a picture partly under it is hidden there with a soft mask). It doesn't clean the rest of the file (metadata, other copies): Redact PDF is the tool for sensitive content.
-    - The editor shows a changed line in its look-alike font and covers its old place in the page's colour around it (the commonest colour just outside the line); on a patterned or photo background that cover shows in the editor, never in the saved file. Form fields are always shown above the page's own content, as viewers show them.
+    - The editor draws the page without what you changed (a moved or retyped line, a moved picture, an erased area), so the old place is the page as it is, whatever its background; the changed line is shown in its look-alike font. Everything is stacked as in the saved file: the page's own content, then what was added in the order of the list (bring forward and send back pass the next item an item overlaps), then comments, then form fields. The page's own text and pictures stay under what was added, so a whiteout hides text moved under it.
+    - Bring forward and send back apply to what was added, not to the page's own lines and pictures. They pass the next item the selected one overlaps, or go to the end of their layer; comments (highlights, notes, links) stay in front of added items whatever the order, and a highlight darkens what is under it, so the text stays readable.
   - **Not checked:** Acrobat. It was checked with pypdf and Chromium's viewer.
 
 ## Known M7.5 limits

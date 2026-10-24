@@ -139,6 +139,9 @@ export type GlyphInfo = {
   renderMode: number
 }
 
+export type HideBox = { x: number; y: number; w: number; h: number }
+const inBox = (boxes: HideBox[], x: number, y: number) => boxes.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
+
 function pathOf(path: GlyphShape['path']): Path2D {
   const p = new Path2D()
   tracePath(p, path)
@@ -162,6 +165,12 @@ export class Interpreter {
   analysis = false
   /** draw the page without its text (it is still read: onGlyph sees it): the design of a page under editable text */
   skipText = false
+  /**
+   * What an editor has changed on this page, left out of the picture (the page's own stream only): letters whose middle
+   * is in a `text` box, pictures whose middle is in a `pictures` box. Boxes are fractions of the page as displayed
+   * (`width` and `height`: its size in device pixels), the same test the saved file uses to take them out.
+   */
+  hide: { text: HideBox[]; pictures: HideBox[]; width: number; height: number } | null = null
   /** told about every picture XObject that is painted (at any depth), with the matrix that maps its unit square into the space the page's own content uses */
   onImage?: (image: PdfStream, ctm: Matrix, inline?: boolean) => void
   /** told about every glyph of the strings of the stream being recorded (not of the forms or glyph procedures it uses) */
@@ -568,8 +577,8 @@ export class Interpreter {
     const glyphs = font.decode(bytes)
     for (const note of font.notes) this.warn(note)
     const mode = s.renderMode
-    const fillIt = mode === 0 || mode === 2 || mode === 4 || mode === 6
-    const strokeIt = mode === 1 || mode === 2 || mode === 5 || mode === 6
+    const fillMode = mode === 0 || mode === 2 || mode === 4 || mode === 6
+    const strokeMode = mode === 1 || mode === 2 || mode === 5 || mode === 6
     const clipIt = mode >= 4
     if (clipIt) this.textClip ??= []
     const draws = !this.skipText && !this.analysis
@@ -580,6 +589,10 @@ export class Interpreter {
     for (const g of glyphs) {
       let advance = g.width ?? 0
       const shape = shapeOf?.(g) ?? null
+      // a letter the editor has changed or moved is not drawn here (it still advances the text position)
+      const gone = this.hiddenLetter(g.width ?? shape?.width ?? 500)
+      const fillIt = fillMode && !gone
+      const strokeIt = strokeMode && !gone
       if (font.type3) {
         if (mode !== 3 && !this.skipText) await this.type3Glyph(font, g, res)
       } else if (shape && draws) {
@@ -758,8 +771,27 @@ export class Interpreter {
     }
   }
 
+  /** the letter being shown has its middle in a hidden box */
+  private hiddenLetter(width: number): boolean {
+    const h = this.hide
+    if (!h?.text.length || this.formDepth !== 0) return false
+    const s = this.state
+    const m = mul([s.fontSize * s.hScale, 0, 0, s.fontSize, 0, s.rise], mul(this.tm, mul(s.ctm, this.base)))
+    const [x, y] = apply(m, Math.max(width / 1000, 0.25) / 2, 0.375)
+    return inBox(h.text, x / h.width, y / h.height)
+  }
+
+  /** the picture about to be drawn has its middle in a hidden box */
+  private hiddenPicture(): boolean {
+    const h = this.hide
+    if (!h?.pictures.length || this.formDepth !== 0) return false
+    const [x, y] = apply(mul(this.state.ctm, this.base), 0.5, 0.5)
+    return inBox(h.pictures, x / h.width, y / h.height)
+  }
+
   private async drawImage(img: PdfStream, res: PdfDict) {
     this.onImage?.(img, this.state.ctm)
+    if (this.hiddenPicture()) return
     if (this.analysis) return this.paintRaster('unsupported')
     const isMask = this.doc.resolve(img.dict.get('ImageMask') ?? img.dict.get('IM')) === true
     // stencil masks take the current fill colour, so they can't be shared between uses
@@ -838,6 +870,7 @@ export class Interpreter {
     p.pos = found + 2
     const image = new PdfStream(dict, d.subarray(start, dataEnd))
     this.onImage?.(image, this.state.ctm, true)
+    if (this.hiddenPicture()) return
     if (this.analysis) return this.paintRaster('unsupported')
     this.paintRaster(await rasterizeImage({ doc: this.doc, platform: this.platform, resources: res, fill: this.state.fill.rgb, warn: (m) => this.warn(m) }, image))
   }

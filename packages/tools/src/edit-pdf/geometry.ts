@@ -1,7 +1,7 @@
 // Moving, resizing and snapping items, and picking page text for markup: plain functions on page fractions, so the
 // editor's behaviour can be tested without a browser.
 import type { Rect } from '../rect.ts'
-import type { Item, Point } from './items.ts'
+import { itemsOn, type Item, type Point } from './items.ts'
 
 /** the box an item takes on the page (lines, drawings and notes get the box around their points) */
 export function boxOf(item: Item): Rect {
@@ -73,11 +73,27 @@ export function snap(box: Rect, others: Rect[], tol: { x: number; y: number }): 
 export type PageChar = { text: string; x0: number; y0: number; x1: number; y1: number }
 
 /**
- * The page's text under a dragged box, for markup: the letters whose boxes meet it, one quad per line (letters on
- * about the same baseline), in reading order, with the text they spell.
+ * The page's text under a dragged box, for markup, as the letters a person would say are under it: a letter is picked
+ * when the drag covers at least half of it across and down (or all of the drag lies on it, for a thin sweep along a line:
+ * "half" is of the smaller of the letter and the drag). Down, a letter is its capital-height band, not the line-tall box
+ * it is stored with, so lines set close together are not picked by a drag that only grazes the next one.
+ *
+ * The result is one quad per run of letters on a line (a wide gap, such as between columns, starts a new run), in reading
+ * order, with the text they spell. `aspect` is the page's width over its height, so gaps can be told in letter sizes.
+ * Quads that would overlap the line above or below are trimmed to meet halfway.
  */
-export function pickText(chars: PageChar[], area: Rect): { quads: [Point, Point, Point, Point][]; text: string } {
-  const hit = chars.filter((c) => c.text.trim() && c.x1 > area.x && c.x0 < area.x + area.w && c.y1 > area.y && c.y0 < area.y + area.h)
+export function pickText(chars: PageChar[], area: Rect, aspect = 1): { quads: [Point, Point, Point, Point][]; text: string } {
+  const over = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0))
+  const hit = chars.filter((c) => {
+    if (!c.text.trim()) return false
+    const h = c.y1 - c.y0
+    // a letter's box runs from 0.8 of its size above the baseline to 0.2 below; its capitals stand in the band from 0.1 to 0.8
+    const [top, base] = [c.y0 + 0.1 * h, c.y0 + 0.8 * h]
+    const across = over(c.x0, c.x1, area.x, area.x + area.w) >= 0.5 * Math.min(c.x1 - c.x0, area.w)
+    const down = over(top, base, area.y, area.y + area.h) >= 0.5 * Math.min(base - top, area.h)
+    return across && down
+  })
+  // lines: letters on about the same baseline
   const lines: PageChar[][] = []
   for (const c of hit) {
     const h = c.y1 - c.y0
@@ -86,11 +102,80 @@ export function pickText(chars: PageChar[], area: Rect): { quads: [Point, Point,
     else lines.push([c])
   }
   lines.sort((a, b) => a[0].y0 - b[0].y0)
-  const quads = lines.map((l): [Point, Point, Point, Point] => {
-    const [x0, x1] = [Math.min(...l.map((c) => c.x0)), Math.max(...l.map((c) => c.x1))]
-    const [y0, y1] = [Math.min(...l.map((c) => c.y0)), Math.max(...l.map((c) => c.y1))]
-    return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x0, y: y1 }, { x: x1, y: y1 }]
-  })
-  const text = lines.map((l) => l.sort((a, b) => a.x0 - b.x0).map((c) => c.text).join('')).join(' ')
-  return { quads, text }
+  // runs: a gap wider than one and a half letters starts another
+  type Run = { chars: PageChar[]; x0: number; x1: number; y0: number; y1: number }
+  const runs: Run[] = []
+  for (const l of lines) {
+    l.sort((a, b) => a.x0 - b.x0)
+    let cur: PageChar[] = []
+    const flush = () => {
+      if (!cur.length) return
+      runs.push({ chars: cur, x0: cur[0].x0, x1: Math.max(...cur.map((c) => c.x1)), y0: Math.min(...cur.map((c) => c.y0)), y1: Math.max(...cur.map((c) => c.y1)) })
+      cur = []
+    }
+    for (const c of l) {
+      const last = cur[cur.length - 1]
+      if (last && c.x0 - last.x1 > (1.5 * (c.y1 - c.y0)) / aspect) flush()
+      cur.push(c)
+    }
+    flush()
+  }
+  // trim what would overlap the line above or below, so two highlights meet instead of covering each other
+  const bySide = [...runs].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+  for (let i = 0; i < bySide.length; i++) {
+    for (let j = i + 1; j < bySide.length; j++) {
+      const [a, b] = [bySide[i], bySide[j]]
+      if (b.y0 >= a.y1) break
+      if (over(a.x0, a.x1, b.x0, b.x1) > 0 && b.y0 > a.y0) [a.y1, b.y0] = [(a.y1 + b.y0) / 2, (a.y1 + b.y0) / 2]
+    }
+  }
+  const quads = runs.map((r): [Point, Point, Point, Point] => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x0, y: r.y1 }, { x: r.x1, y: r.y1 }])
+  // the words as they were set: a space where the letters stand apart
+  const spell = (r: Run) => r.chars.reduce((t, c, k) => t + (k && c.x0 - r.chars[k - 1].x1 > (0.2 * (c.y1 - c.y0)) / aspect ? ' ' : '') + c.text, '')
+  return { quads, text: runs.map(spell).join(' ') }
+}
+
+/**
+ * The layers items are stacked in, bottom to top, as the saved file has them: the page's own content (and what was
+ * changed in it), what was added to the page, comments (highlights, notes, links), form fields. Order in the list is
+ * order in the stack within a layer; an item never goes into another layer.
+ */
+export type Layer = 'content' | 'marks' | 'comments' | 'fields'
+export const layerOf = (i: Item): Layer => (i.kind === 'textline' || i.kind === 'picture' || i.kind === 'erase' ? 'content' : i.kind === 'markup' || i.kind === 'note' || i.kind === 'link' ? 'comments' : i.kind === 'field' ? 'fields' : 'marks')
+
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
+/** the items of this one's layer on its page, in stacking order (bottom first) */
+const layerMates = (items: Item[], me: Item) => {
+  const shown = new Set(itemsOn(items, me.page))
+  return items.filter((o) => layerOf(o) === layerOf(me) && shown.has(o))
+}
+
+/**
+ * Where an item goes in one step forward (1) or back (-1), as the item it ends up just past: the next item it overlaps
+ * in its layer, or when it overlaps none that way, the end of the layer (a step that passes nothing you can see would
+ * look like a broken button). Null when it is already at that end.
+ */
+function target(items: Item[], id: string, by: 1 | -1): Item | null {
+  const me = items.find((x) => x.id === id)
+  if (!me || me.kind === 'erase') return null
+  const mates = layerMates(items, me)
+  const at = mates.indexOf(me)
+  const beyond = by === 1 ? mates.slice(at + 1) : mates.slice(0, at).reverse()
+  if (!beyond.length) return null
+  return beyond.find((o) => overlaps(boxOf(me), boxOf(o))) ?? beyond[beyond.length - 1]
+}
+
+/** can the item go a step forward (1) or back (-1) in its layer? */
+export const canStep = (items: Item[], id: string, by: 1 | -1) => target(items, id, by) !== null
+
+/** the items with this one moved a step forward or back in its layer (see `target`); unchanged when it can't */
+export function stepOrder(items: Item[], id: string, by: 1 | -1): Item[] {
+  const past = target(items, id, by)
+  if (!past) return items
+  const me = items.find((x) => x.id === id)!
+  const rest = items.filter((x) => x !== me)
+  // right after the item it passes going forward, right before it going back
+  rest.splice(rest.indexOf(past) + (by === 1 ? 1 : 0), 0, me)
+  return rest
 }

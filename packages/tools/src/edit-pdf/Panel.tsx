@@ -5,11 +5,13 @@ import { usePageZoom } from '../PageZoom.tsx'
 import { FontsPanel } from '../fonts/FontsPanel.tsx'
 import { Overlay, type Style, type Tool } from './Overlay.tsx'
 import { Properties } from './Properties.tsx'
-import { moved, pickText as pickFrom } from './geometry.ts'
+import { canStep, layerOf, moved, pickText as pickFrom, stepOrder } from './geometry.ts'
 import { byPosition, copiedField, fieldItems, joinGroup, suggestedFields, type FieldSettings } from './fields.ts'
 import { detectFields } from './detect.ts'
 import { defaultOptions, isContent, isField, itemsOn, type EditPdfOptions as O, type FieldItem, type Item, type PictureEditItem } from './items.ts'
-import { lineChanged, lineItem, type PageContent } from './content.ts'
+import { lineChanged, lineItem, liveChars, pictureChanged, type PageContent } from './content.ts'
+import { measurer } from './viewFonts.ts'
+import type { Rect } from '../rect.ts'
 
 export { defaultOptions }
 export const placesActions = true
@@ -88,6 +90,8 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   /** the fields picked so far while setting the Tab order (null when not setting it) */
   const [ordering, setOrdering] = useState<string[] | null>(null)
   const [finding, setFinding] = useState(false)
+  /** a line or picture of the page being dragged: its old place goes at the first move, not at the drop */
+  const [dragging, setDragging] = useState<string | null>(null)
   const [found, setFound] = useState('')
   const past = useRef<Item[][]>([])
   const future = useRef<Item[][]>([])
@@ -134,7 +138,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
   }, [file])
 
   useEffect(() => {
-    if (mode !== 'content' || !file || !pdfHost?.content || content.has(current)) return
+    if (mode === 'forms' || !file || !pdfHost?.content || content.has(current)) return
     let live = true
     pdfHost.content(file, current).then(
       (c) => live && setContent((m) => new Map(m).set(current, c)),
@@ -208,12 +212,14 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     commit([...items, copy], copy.id)
   }
   const reorder = (id: string, by: 1 | -1) => {
-    const i = items.findIndex((x) => x.id === id)
-    const j = i + by
-    if (i < 0 || j < 0 || j >= items.length) return
-    const next = [...items]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    commit(next)
+    if (canStep(items, id, by)) return commit(stepOrder(items, id, by))
+    // nothing to pass: say so, rather than a button that looks broken
+    const comment = layerOf(items.find((i) => i.id === id)!) === 'comments'
+    setNote(
+      by === 1
+        ? comment ? 'Already in front of the other comments. Comments always stay in front of what was added.' : 'Already in front of everything added to this page.'
+        : comment ? 'Already behind the other comments. Comments always stay in front of what was added; a highlight darkens what is under it instead of covering it.' : "Already behind everything added to this page. The page's own text and pictures are behind it.",
+    )
   }
   const go = (by: number) => {
     setCurrent((c) => Math.min(pages.length - 1, Math.max(0, c + by)))
@@ -334,21 +340,22 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
     if (kind === 'line') {
       const l = pageContent.lines.find((x) => x.id === id)
       if (!l) return
-      const it = { ...lineItem(newId(), current, l), cover: colourAround(pageBox.current, l.box) }
+      const it = lineItem(newId(), current, l)
       commit([...items, it], it.id)
       if (edit) setEditing(it.id)
     } else {
       const p = pageContent.pictures.find((x) => x.id === id)
       if (!p) return
-      const it: PictureEditItem = { id: newId(), page: current, kind: 'picture', source: id, from: p.box, box: p.box, preview: cropOf(pageBox.current, p.box), cover: colourAround(pageBox.current, p.box) }
+      const it: PictureEditItem = { id: newId(), page: current, kind: 'picture', source: id, from: p.box, box: p.box, preview: cropOf(pageBox.current, p.box) }
       commit([...items, it], it.id)
     }
   }
 
   const pickText = pdfHost.chars
     ? async (area: { x: number; y: number; w: number; h: number }) => {
-        const chars = await pdfHost.chars!(file, current)
-        const got = pickFrom(chars, area)
+        // the letters as the page is now: a moved or retyped line is where it was put, not where the file has it
+        const chars = liveChars(await pdfHost.chars!(file, current), latest.current.items, current, size, measurer)
+        const got = pickFrom(chars, area, size.width / size.height)
         if (!got.quads.length) setNote('There is no text under that box to mark. Scanned pages have no text.')
         return got
       }
@@ -356,6 +363,20 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
 
   const marks = items.filter((i) => !isField(i) && !isContent(i)).length
   const changes = here.filter((i) => (i.kind === 'textline' ? lineChanged(i) : i.kind === 'picture' ? i.deleted || i.replace || i.box !== i.from : i.kind === 'erase')).length
+  // the page is drawn without what was changed in it (a line moved or retyped, a picture moved, an erased area), so
+  // what is seen is what the saved file will have; the changed things themselves are drawn by the editor
+  const hide = (() => {
+    const text: Rect[] = []
+    const pictures: Rect[] = []
+    const erase: Rect[] = []
+    for (const i of items) {
+      if (i.page !== current) continue
+      if (i.kind === 'textline' && (lineChanged(i) || i.id === editing || i.id === dragging)) text.push(i.from)
+      else if (i.kind === 'picture' && (pictureChanged(i) || i.id === dragging)) pictures.push(i.from)
+      else if (i.kind === 'erase') erase.push(i.box)
+    }
+    return text.length || pictures.length || erase.length ? { text, pictures, erase } : undefined
+  })()
   const addedFonts = [...new Set(o.fonts.map((f) => f.for ?? f.family))]
 
   return (
@@ -439,8 +460,9 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
               }}
               pickText={pickText}
               newId={newId}
-              content={mode === 'content' && pageContent ? pageContent : undefined}
+              content={mode !== 'forms' && pageContent ? pageContent : undefined}
               fieldsActive={mode === 'forms'}
+              onDragging={setDragging}
               onPickContent={pick}
               order={ordering ? { numbers: new Map((ordering.length ? ordering : orderNow).map((id, k) => [id, k + 1])), pick: (id) => {
                 const next = ordering.includes(id) ? ordering : [...ordering, id]
@@ -450,7 +472,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions, readFontF
                 } else setOrdering(next)
               } } : undefined}
             >
-              <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} fields={!o.fieldsLoaded.length} />
+              <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} fields={!o.fieldsLoaded.length} hide={hide} />
             </Overlay>
           </div>
         </div>
@@ -572,37 +594,6 @@ function cropOf(page: HTMLElement | null, box: { x: number; y: number; w: number
   out.height = Math.round(sh)
   out.getContext('2d')!.drawImage(c, sx, sy, sw, sh, 0, 0, out.width, out.height)
   return out.toDataURL('image/png')
-}
-
-/**
- * The page's colour around a box: the commonest colour of a thin ring of the drawn page just outside it, for painting
- * over the box's old place in the editor (white when the page can't be read).
- */
-export function colourAround(page: HTMLElement | null, box: { x: number; y: number; w: number; h: number }): string {
-  const c = page?.querySelector('canvas')
-  const ctx = c?.getContext('2d', { willReadFrequently: true })
-  if (!c || !ctx || !c.width) return '#ffffff'
-  const counts = new Map<string, number>()
-  const [x0, y0, x1, y1] = [box.x * c.width - 2, box.y * c.height - 2, (box.x + box.w) * c.width + 2, (box.y + box.h) * c.height + 2].map(Math.round)
-  const sample = (x: number, y: number, w: number, h: number) => {
-    const [sx, sy] = [Math.max(0, x), Math.max(0, y)]
-    const [sw, sh] = [Math.min(c.width, x + w) - sx, Math.min(c.height, y + h) - sy]
-    if (sw <= 0 || sh <= 0) return
-    const d = ctx.getImageData(sx, sy, sw, sh).data
-    for (let i = 0; i < d.length; i += 4) {
-      // near colours count as one (anti-aliasing, JPEG noise)
-      const k = [d[i], d[i + 1], d[i + 2]].map((v) => Math.min(255, Math.round(v / 8) * 8).toString(16).padStart(2, '0')).join('')
-      counts.set(k, (counts.get(k) ?? 0) + 1)
-    }
-  }
-  sample(x0, y0, x1 - x0, 1)
-  sample(x0, y1, x1 - x0, 1)
-  sample(x0, y0, 1, y1 - y0)
-  sample(x1, y0, 1, y1 - y0)
-  let best = 'ffffff'
-  let most = 0
-  for (const [k, n] of counts) if (n > most) (best = k), (most = n)
-  return `#${best}`
 }
 
 /** a message in place of the panel, with the run button still there */

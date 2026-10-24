@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@ream/ui'
-import { renderPdfPage } from './previewClient'
+import { renderPdfPage, type PageHide } from './previewClient'
 
 type Props = {
   file: Blob
@@ -10,12 +10,15 @@ type Props = {
   renderWidth: number
   /** false leaves the page's form fields out (an editor shows its own) */
   fields?: boolean
+  /** what an editor changed, left out of the picture (fractions of the page) */
+  hide?: PageHide
   className?: string
   onWarnings?: (warnings: string[]) => void
 }
 
 /** One page of a PDF, drawn by our own renderer in the preview worker. */
-export function PdfPage({ file, page, renderWidth, fields = true, className = '', onWarnings }: Props) {
+export function PdfPage({ file, page, renderWidth, fields = true, hide, className = '', onWarnings }: Props) {
+  const hideKey = hide ? JSON.stringify(hide) : ''
   const canvas = useRef<HTMLCanvasElement>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const report = useRef(onWarnings)
@@ -24,7 +27,7 @@ export function PdfPage({ file, page, renderWidth, fields = true, className = ''
   useEffect(() => {
     let live = true
     setState((s) => (s === 'ok' ? s : 'loading')) // a page that is already drawn stays on screen until its replacement is ready
-    renderPdfPage(file, page, renderWidth, fields).then(
+    renderPdfPage(file, page, renderWidth, fields, hide).then(
       ({ bitmap, warnings }) => {
         const c = canvas.current
         if (!live || !c) return
@@ -39,7 +42,8 @@ export function PdfPage({ file, page, renderWidth, fields = true, className = ''
     return () => {
       live = false
     }
-  }, [file, page, renderWidth, fields])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, page, renderWidth, fields, hideKey])
 
   return (
     <div className="relative size-full">

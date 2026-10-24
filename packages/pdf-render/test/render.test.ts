@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest'
-import { renderPage } from '../src/index.ts'
+import { type RenderOptions, renderPage } from '../src/index.ts'
 import { IDENTITY, apply, mul, pageMatrix } from '../src/matrix.ts'
 import { fakeCtx, fakePlatform, hex, onePage, stream } from './helpers.ts'
 
 /** render a one page document at its natural size (100 pt wide = 100 px) and return what was drawn */
-async function draw(o: Parameters<typeof onePage>[0], platform = fakePlatform().platform, fields = true) {
+async function draw(o: Parameters<typeof onePage>[0], platform = fakePlatform().platform, fields = true, hide?: RenderOptions['hide']) {
   const doc = await onePage(o)
   const f = fakeCtx()
-  const result = await renderPage(doc, 0, f.ctx, 100, { platform, fields })
+  const result = await renderPage(doc, 0, f.ctx, 100, { platform, fields, hide })
   return { ...f, result }
 }
 const near = (a: unknown, b: number[]) => (a as number[]).forEach((v, i) => expect(v).toBeCloseTo(b[i], 6))
@@ -359,6 +359,25 @@ describe('forms, shadings, annotations', () => {
       },
     })
     expect(all('fill')).toHaveLength(0)
+  })
+
+  test('what an editor changed is left out: a line whose middle is in a hidden box is not drawn, the rest is', async () => {
+    const font = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
+    const page = { content: 'BT /F1 10 Tf 10 80 Td (AAAA) Tj ET BT /F1 10 Tf 10 40 Td (BBBB) Tj ET', resources: '/Font << /F1 10 0 R >>', objects: { 10: font } }
+    const letters = async (hide?: Parameters<typeof draw>[3]) => (await draw(page, undefined, true, hide)).all('fillText').map((c) => c[0]).join('')
+    expect(await letters()).toBe('AAAABBBB')
+    // the page is 100 tall at this width: the lower line sits at 0.5-0.65 from the top (baseline 40 up = 60 down)
+    expect(await letters({ text: [{ x: 0, y: 0.5, w: 1, h: 0.2 }] })).toBe('AAAA')
+    // a box that only touches the line's edge, with the middles of the letters outside it, takes nothing
+    expect(await letters({ text: [{ x: 0, y: 0.7, w: 1, h: 0.2 }] })).toBe('AAAABBBB')
+  })
+
+  test('a picture whose middle is in a hidden box is not drawn; an erased area clips the page by even-odd', async () => {
+    const page = { content: 'q 40 0 0 20 20 10 cm /Im Do Q', resources: '/XObject << /Im 10 0 R >>', objects: { 10: stream('/Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8', '\x00') } }
+    expect((await draw(page)).all('drawImage').length).toBe(1)
+    expect((await draw(page, undefined, true, { pictures: [{ x: 0.2, y: 0.6, w: 0.4, h: 0.3 }] })).all('drawImage').length).toBe(0)
+    const erased = await draw(page, undefined, true, { erase: [{ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }] })
+    expect(erased.all('clip').some((c) => c[0] === 'evenodd')).toBe(true)
   })
 
   test('form fields can be left out, for an editor that shows its own', async () => {

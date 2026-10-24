@@ -6,6 +6,7 @@ import { pageChars } from '@ream/pdf-render'
 import { assemble, formPdf } from '../../../pdf-core/test/helpers.ts'
 import { nodeFonts } from '../fonts/node.ts'
 import { wrapLines } from './layout.ts'
+import { canStep, layerOf, stepOrder } from './geometry.ts'
 import { run } from './run.ts'
 import { defaultOptions, type Item } from './items.ts'
 
@@ -186,9 +187,69 @@ describe('editing on the page', async () => {
     const ch = (text: string, x: number, line: number) => ({ text, x0: x, x1: x + 0.02, y0: 0.1 + line * 0.05, y1: 0.13 + line * 0.05 })
     const chars = [ch('H', 0.1, 0), ch('i', 0.12, 0), ch(' ', 0.14, 0), ch('y', 0.16, 0), ch('o', 0.1, 1), ch('u', 0.12, 1), ch('z', 0.5, 2)]
     const { quads, text } = pickText(chars, { x: 0.09, y: 0.09, w: 0.1, h: 0.1 })
-    expect(text).toBe('Hiy ou')
+    expect(text).toBe('Hi y ou') // the space between the words is kept
     expect(quads).toHaveLength(2)
     expect(quads[0][0]).toEqual({ x: 0.1, y: 0.1 })
     expect(quads[0][3].x).toBeCloseTo(0.18)
+  })
+
+  test('picking is precise: half a letter or more, thin sweeps along a line, close lines, wide gaps', () => {
+    // letters 0.02 wide and 0.04 tall (a 0.8 / 0.2 split about the baseline); lines 0.045 apart, so their boxes overlap a little
+    const ch = (text: string, x: number, line: number) => ({ text, x0: x, x1: x + 0.02, y0: 0.1 + line * 0.045, y1: 0.14 + line * 0.045 })
+    const row = (word: string, x: number, line: number) => [...word].map((t, i) => ch(t, x + i * 0.02, line))
+    const chars = [...row('abcd', 0.1, 0), ...row('efgh', 0.1, 1), ...row('xy', 0.6, 0)]
+    const texts = (area: { x: number; y: number; w: number; h: number }) => pickText(chars, area).text
+    // a drag over the first two letters of line 0, across its capitals
+    expect(texts({ x: 0.1, y: 0.1, w: 0.04, h: 0.04 })).toBe('ab')
+    // it ends in the middle of the third letter: a bit short of half, so not that letter; past half, it is
+    expect(texts({ x: 0.1, y: 0.1, w: 0.047, h: 0.04 })).toBe('ab')
+    expect(texts({ x: 0.1, y: 0.1, w: 0.052, h: 0.04 })).toBe('abc')
+    // a thin sweep along the middle of a line picks that line's letters and not the next line's
+    expect(texts({ x: 0.09, y: 0.12, w: 0.1, h: 0.004 })).toBe('abcd')
+    // a drag that grazes the top of the next line (a fifth of its capitals) leaves it alone
+    expect(texts({ x: 0.09, y: 0.1, w: 0.1, h: 0.055 })).toBe('abcd')
+    // a box over both lines gets both, a quad each
+    const both = pickText(chars, { x: 0.09, y: 0.09, w: 0.1, h: 0.1 })
+    expect(both.text).toBe('abcd efgh')
+    // lines set closer than their boxes are tall: the two highlights meet halfway instead of covering each other
+    const tight = [...row('abcd', 0.1, 0), ...row('efgh', 0.1, 0)].map((c, i) => (i < 4 ? c : { ...c, y0: c.y0 + 0.035, y1: c.y1 + 0.035 }))
+    const meet = pickText(tight, { x: 0.09, y: 0.09, w: 0.1, h: 0.1 })
+    expect(meet.quads).toHaveLength(2)
+    expect(meet.quads[0][2].y).toBeCloseTo(0.1375)
+    expect(meet.quads[1][0].y).toBeCloseTo(0.1375)
+    // a wide gap on a line is two highlights, and the gap is not covered
+    const wide = pickText(chars, { x: 0.05, y: 0.1, w: 0.7, h: 0.04 })
+    expect(wide.quads).toHaveLength(2)
+    expect(wide.quads.map((q) => [q[0].x, q[1].x])).toEqual([[0.1, 0.18], [0.6, 0.64]])
+  })
+})
+
+describe('edit-pdf: stacking order', () => {
+  const shape = (id: string, x: number, page = 0): Item => ({ id, page, kind: 'shape', shape: 'rect', box: { x, y: 0.1, w: 0.2, h: 0.2 }, fill: '#000000', stroke: null, width: 1, opacity: 1 })
+  const note = (id: string): Item => ({ id, page: 0, kind: 'note', at: { x: 0.12, y: 0.12 }, text: '', colour: '#ffffff' })
+  const ids = (list: Item[]) => list.map((i) => i.id).join('')
+
+  test('a step passes the next item it overlaps in its own layer; with none to pass it goes to the end of the layer', () => {
+    // a and c overlap (x 0.1 and 0.2, 0.2 wide); b is away at the right
+    const items = [shape('a', 0.1), shape('b', 0.7), shape('c', 0.2)]
+    expect(ids(stepOrder(items, 'a', 1))).toBe('bca')
+    expect(ids(stepOrder(items, 'c', -1))).toBe('cab')
+    // b overlaps nothing: a step forward puts it on top of the layer rather than doing nothing
+    expect(ids(stepOrder(items, 'b', 1))).toBe('acb')
+    expect(ids(stepOrder(items, 'b', -1))).toBe('bac')
+    // only at the ends is a step not offered
+    expect(canStep(items, 'a', -1)).toBe(false)
+    expect(canStep(items, 'c', 1)).toBe(false)
+    expect(canStep(items, 'a', 1)).toBe(true)
+    expect(canStep(items, 'b', 1)).toBe(true)
+  })
+
+  test('items never leave their layer: a comment stays over every added item, whatever the list says', () => {
+    const items = [shape('a', 0.1), note('n'), shape('c', 0.12)]
+    // c is in front of a, and the note is a comment: it can't pass them in either direction
+    expect(canStep(items, 'n', -1)).toBe(false)
+    expect(ids(stepOrder(items, 'a', 1))).toBe('nca')
+    expect(layerOf(items[1])).toBe('comments')
+    expect(layerOf(items[0])).toBe('marks')
   })
 })

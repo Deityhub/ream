@@ -1,5 +1,5 @@
 import { type Page, type PdfDocument, decodeStream, isDict, PdfStream } from '@ream/pdf-core'
-import { Interpreter } from './interpreter.ts'
+import { Interpreter, type HideBox } from './interpreter.ts'
 import { IDENTITY } from './matrix.ts'
 import { pageBase } from './geometry.ts'
 import { browserPlatform, type Ctx2D, type Platform } from './platform.ts'
@@ -8,6 +8,7 @@ export type { Ctx2D, Platform } from './platform.ts'
 export { browserPlatform } from './platform.ts'
 export { browserRaster, isBlank, rasterSize, type PageRaster, type Pixels } from './raster.ts'
 export { Interpreter } from './interpreter.ts'
+export type { HideBox }
 export { rasterizeImage, type Raster } from './image.ts'
 export { extractText, type ExtractOptions } from './extract.ts'
 export { pageChars, type TextChar, type PageChars, type PagePicture } from './textchars.ts'
@@ -32,7 +33,14 @@ export function pageGeometry(doc: PdfDocument, index: number, widthPx: number): 
 }
 
 /** `text: false` leaves the page's text out: the design of a page under editable text; `fields: false` leaves form fields out (an editor draws its own) */
-export type RenderOptions = { platform?: Platform; signal?: AbortSignal; text?: boolean; fields?: boolean }
+export type RenderOptions = {
+  platform?: Platform
+  signal?: AbortSignal
+  text?: boolean
+  fields?: boolean
+  /** what an editor changed, left out (see `Interpreter.hide`), and areas erased: nothing is drawn inside them. Fractions of the page as displayed. */
+  hide?: { text?: HideBox[]; pictures?: HideBox[]; erase?: HideBox[] }
+}
 export type RenderResult = { warnings: string[] }
 
 /**
@@ -44,12 +52,22 @@ export async function renderPage(doc: PdfDocument, index: number, ctx: Ctx2D, wi
   const base = pageBase(doc, page, scale)
   const interp = new Interpreter(doc, ctx, options.platform ?? browserPlatform, base, options.signal)
   interp.skipText = options.text === false
+  const hide = options.hide
+  if (hide?.text?.length || hide?.pictures?.length) interp.hide = { text: hide.text ?? [], pictures: hide.pictures ?? [], width, height }
 
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, width, height)
   interp.reset(IDENTITY)
+  // an erased area draws nothing, whatever is under it: the page less these boxes (an even-odd clip)
+  if (hide?.erase?.length) {
+    ctx.beginPath()
+    ctx.rect(0, 0, width, height)
+    for (const b of hide.erase) ctx.rect(b.x * width, b.y * height, b.w * width, b.h * height)
+    ctx.clip('evenodd')
+    ctx.beginPath()
+  }
 
   try {
     const contents = [doc.resolve(page.dict.get('Contents'))].flat().map((c) => doc.resolve(c))
