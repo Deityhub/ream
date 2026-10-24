@@ -28,7 +28,6 @@ const trust = [
   { icon: 'upload', title: 'No uploads', body: 'Files are read into memory on your computer and processed there. Ream has no server that receives files.' },
   { icon: 'wifi-off', title: 'Works offline', body: 'The desktop app needs no connection at all. In the browser, nothing about your files goes over the network.' },
   { icon: 'user-off', title: 'No account', body: 'No sign-up, no email, no profile. Open a tool and drop a file in.' },
-  { icon: 'eye', title: 'Check it yourself', body: "Watch your browser's Network tab while a tool runs. Your file never shows up there." },
 ]
 
 const steps = [
@@ -49,7 +48,7 @@ export function Landing() {
     <Marketing>
       <section className="relative overflow-hidden">
         <Glow />
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-7 px-4 pb-16 pt-20 text-center sm:px-8 sm:pt-24">
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-7 px-4 pt-20 text-center sm:px-8 sm:pt-24">
           <h1 className="max-w-4xl text-balance text-[clamp(2.5rem,6.4vw,4.75rem)] font-bold leading-[1.04] tracking-tight">
             PDF and image tools that run <span className="text-accent-ink">on your computer.</span>
           </h1>
@@ -63,14 +62,16 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl grid-cols-[repeat(auto-fit,minmax(min(15rem,100%),1fr))] gap-6 px-4 pt-14 sm:px-8">
-        {trust.map((t) => (
-          <div key={t.title} className="space-y-2.5 flex flex-col items-center text-center">
-            <Icon name={t.icon} className="size-6 text-accent-ink" />
-            <h2 className="text-[17px] font-bold">{t.title}</h2>
-            <p className="text-[14.5px] leading-relaxed text-muted">{t.body}</p>
-          </div>
-        ))}
+      <section className="mx-auto max-w-6xl px-4 pt-24 sm:px-8">
+        <ol className="mt-9 grid grid-cols-[repeat(auto-fit,minmax(min(18rem,100%),1fr))] gap-5">
+          {trust.map((t, i) => (
+            <li key={t.title} className="space-y-3 rounded-2xl border border-line bg-surface p-6">
+              <Icon name={t.icon} className="size-6 text-accent-ink" />
+              <h3 className="text-lg font-bold">{t.title}</h3>
+              <p className="text-[15px] leading-relaxed text-muted">{t.body}</p>
+            </li>
+          ))}
+        </ol>
       </section>
 
 

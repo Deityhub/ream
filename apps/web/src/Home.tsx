@@ -57,7 +57,7 @@ export function Home({ cat }: { cat: Filter }) {
           <h1 className="sr-only">{head}</h1>
         </div>
 
-        <div>
+        <div className="max-w-200 space-y-3 text-muted mx-auto">
           <Dropzone
             accept={accepted}
             onFiles={setDropped}
