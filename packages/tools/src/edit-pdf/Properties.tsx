@@ -51,8 +51,8 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
           {item.kind !== 'textline' && item.kind !== 'picture' && item.kind !== 'erase' && <IconButton label="Duplicate (Ctrl or Cmd+D)" icon="copy" onClick={onDuplicate} />}
           {item.kind !== 'field' && item.kind !== 'textline' && item.kind !== 'picture' && item.kind !== 'erase' && (
             <>
-              <IconButton label="Bring forward" icon="forward" onClick={() => onOrder(1)} />
-              <IconButton label="Send back" icon="forward" flip onClick={() => onOrder(-1)} />
+              <IconButton label="Bring forward" icon="bring-forward" onClick={() => onOrder(1)} />
+              <IconButton label="Send back" icon="send-back" onClick={() => onOrder(-1)} />
             </>
           )}
           <IconButton label="Delete (Delete key)" icon="trash" onClick={onRemove} />
@@ -330,10 +330,10 @@ function Opacity({ value, onChange }: { value: number; onChange: (v: number) => 
   )
 }
 
-function IconButton({ label, icon, onClick, flip = false }: { label: string; icon: string; onClick: () => void; flip?: boolean }) {
+function IconButton({ label, icon, onClick }: { label: string; icon: string; onClick: () => void }) {
   return (
     <button type="button" title={label} aria-label={label} onClick={onClick} className="flex size-8 items-center justify-center rounded-md hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:size-11">
-      <Icon name={icon} className={`size-4 ${flip ? 'rotate-180' : ''}`} />
+      <Icon name={icon} className="size-4" />
     </button>
   )
 }

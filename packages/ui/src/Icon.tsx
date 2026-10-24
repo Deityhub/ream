@@ -27,7 +27,9 @@ const paths: Record<string, ReactNode> = {
   copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M4 16V6a2 2 0 0 1 2-2h10" /></>,
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   turn: <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" />,
-  forward: <><rect x="9" y="9" width="11" height="11" rx="1" /><path d="M4 15V5a1 1 0 0 1 1-1h10" /></>,
+  // two overlapping squares, the one that moves in the stack shaded: the front one comes forward, the back one goes behind
+  'bring-forward': <><rect x="4" y="4" width="11" height="11" rx="1" /><rect x="9" y="9" width="11" height="11" rx="1" fill="currentColor" fillOpacity="0.4" /></>,
+  'send-back': <><rect x="4" y="4" width="11" height="11" rx="1" fill="currentColor" fillOpacity="0.4" /><rect x="9" y="9" width="11" height="11" rx="1" /></>,
   upload: <path d="M12 15V3M7 8l5-5 5 5M5 21h14" />,
   'arrow-left': <path d="M19 12H5M12 19l-7-7 7-7" />,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
