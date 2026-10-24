@@ -97,7 +97,7 @@ export function Landing() {
           </div>
           <dl className="min-w-0 flex-[1_1_22rem] space-y-3 rounded-[14px] border border-line bg-canvas p-5 font-mono text-[13px]">
             {facts.map(([k, v]) => (
-              <div key={k} className="flex flex-wrap justify-between gap-x-4 border-line [&:not(:first-child)]:border-t [&:not(:first-child)]:pt-3">
+              <div key={k} className="flex flex-wrap justify-between gap-x-4 border-line not-first:border-t not-first:pt-3">
                 <dt className="text-muted">{k}</dt>
                 <dd>{v}</dd>
               </div>

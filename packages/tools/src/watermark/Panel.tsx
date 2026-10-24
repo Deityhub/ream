@@ -26,7 +26,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
             <option value="file">{options.fontFile ? options.fontName : 'A font file (.ttf, .otf)…'}</option>
           </select>
         </label>
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 font-medium hover:bg-surface-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 font-medium hover:bg-surface-2 has-focus-visible:outline-2 has-focus-visible:outline-accent">
           <Icon name="upload" className="size-4" />
           {options.fontFile ? 'Choose another font' : 'Choose a font file'}
           <input

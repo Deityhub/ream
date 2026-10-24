@@ -183,7 +183,7 @@ export function FontsPanel({ file, readOfficeFonts, readFontFile, value, onChang
             <li key={w} className="flex items-start gap-2 px-2.5 py-1.5">
               <Icon name={s.ok ? 'check' : 'alert'} className={`mt-0.5 size-4 shrink-0 ${s.ok ? 'text-accent' : 'text-warning'}`} />
               <span className="min-w-0 flex-1">
-                <span className="block break-words">{w}</span>
+                <span className="block wrap-break-word">{w}</span>
                 <span className="block text-xs text-muted">{s.text}</span>
               </span>
               {s.ok && (
@@ -224,7 +224,7 @@ export function FontsPanel({ file, readOfficeFonts, readFontFile, value, onChang
           </button>
         )}
         {readFontFile && (
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 font-medium hover:bg-surface-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent pointer-coarse:min-h-11">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 font-medium hover:bg-surface-2 has-focus-visible:outline-2 has-focus-visible:outline-accent pointer-coarse:min-h-11">
             <Icon name="upload" className="size-4" />
             Add font files
             <input

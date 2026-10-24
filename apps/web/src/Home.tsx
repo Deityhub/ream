@@ -38,7 +38,7 @@ export function Home({ cat }: { cat: Filter }) {
     <div className="min-h-screen">
       <TopBar>
         <div className="relative min-w-0 max-sm:order-1 max-sm:w-full sm:w-80 lg:w-96">
-          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted" />
+          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 size-4.5 -translate-y-1/2 text-muted" />
           <input
             type="search"
             value={q}
@@ -97,8 +97,8 @@ export function Home({ cat }: { cat: Filter }) {
 export function ToolCard({ tool: t, suggested, dim, onOpen }: { tool: Tool; suggested?: boolean; dim?: boolean; onOpen?: () => void }) {
   const body = (
     <>
-      <span className="flex size-[38px] shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-accent-ink">
-        <Icon name={t.icon} className="size-[19px]" />
+      <span className="flex size-9.5 shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-accent-ink">
+        <Icon name={t.icon} className="size-4.75" />
       </span>
       <span className="min-w-0">
         <span className="block text-[15.5px] font-bold">
@@ -110,7 +110,7 @@ export function ToolCard({ tool: t, suggested, dim, onOpen }: { tool: Tool; sugg
     </>
   )
   const edge = suggested ? 'border-accent ring-1 ring-accent' : dim ? 'border-line' : 'border-line hover:border-accent-2 hover:bg-surface-2'
-  const box = `flex h-full w-full items-start gap-3.5 rounded-[14px] border bg-surface p-[18px] text-left transition-colors duration-150 ${edge}`
+  const box = `flex h-full w-full items-start gap-3.5 rounded-[14px] border bg-surface p-4.5 text-left transition-colors duration-150 ${edge}`
   if (dim) return <div aria-disabled="true" className={`${box} opacity-50`}>{body}</div>
   if (onOpen) return <button onClick={onOpen} className={`${box} ${focus}`}>{body}</button>
   return <a href={`#/tool/${t.id}`} className={`${box} ${focus}`}>{body}</a>

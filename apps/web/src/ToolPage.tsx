@@ -296,7 +296,7 @@ function IconButton({ label, icon, disabled, onClick }: { label: string; icon: s
       aria-label={label}
       className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-ink hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-30 disabled:hover:bg-transparent"
     >
-      <Icon name={icon} className="size-[18px]" />
+      <Icon name={icon} className="size-4.5" />
     </button>
   )
 }

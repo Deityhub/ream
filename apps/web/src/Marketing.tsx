@@ -39,7 +39,7 @@ export function Glow() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute -top-32 left-1/2 h-[30rem] w-[min(56rem,100%)] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--accent-2)_32%,transparent),transparent_70%)]"
+      className="pointer-events-none absolute -top-32 left-1/2 h-120 w-[min(56rem,100%)] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--accent-2)_32%,transparent),transparent_70%)]"
     />
   )
 }

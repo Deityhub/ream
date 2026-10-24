@@ -458,7 +458,7 @@ function TextEditor({ item, scale, onDone }: { item: TextItem; scale: number; on
       }}
       onPointerDown={(e) => e.stopPropagation()}
       style={{ left: `${item.box.x * 100}%`, top: `${item.box.y * 100}%`, width: `${item.box.w * 100}%`, zIndex: Z_EDITING, ...textStyle(item, px) }}
-      className="absolute m-0 resize-none overflow-hidden border-0 bg-transparent p-0 outline-2 outline-offset-2 outline-accent [overflow-wrap:anywhere]"
+      className="absolute m-0 resize-none overflow-hidden border-0 bg-transparent p-0 outline-2 outline-offset-2 outline-accent wrap-anywhere"
     />
   )
 }

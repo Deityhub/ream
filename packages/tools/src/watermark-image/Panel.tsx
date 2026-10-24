@@ -77,7 +77,7 @@ export function Panel({ options: o, onChange }: PanelProps<O>) {
         <div className="space-y-1">
           {/* the native file control is hidden; this looks and acts like a button, and shows what was chosen */}
           <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-2 has-focus-visible:outline-2 has-focus-visible:outline-accent">
               <Icon name="upload" className="size-4" />
               {logo ? 'Choose another picture' : 'Choose a logo'}
               <input type="file" accept="image/*" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} className="sr-only" />

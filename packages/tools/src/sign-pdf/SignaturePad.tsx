@@ -224,7 +224,7 @@ export function SignaturePad({ onChange }: { onChange: (png: Uint8Array | null) 
         <div className="space-y-2">
           {/* the native file control is hidden; this looks and acts like a button, and shows what was chosen */}
           <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-2 has-focus-visible:outline-2 has-focus-visible:outline-accent">
               <Icon name="upload" className="size-4" />
               {upload ? 'Choose another picture' : 'Choose a picture of your signature'}
               <input type="file" accept="image/*" onChange={(e) => setUpload(e.target.files?.[0] ?? null)} className="sr-only" />

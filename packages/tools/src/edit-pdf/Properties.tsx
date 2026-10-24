@@ -117,7 +117,7 @@ export function Properties({ item, tool, style, onStyle, onItem, onRemove, onDup
             </select>
           </label>
           <Colour label="Colour" value={item.colour} onChange={(colour) => set({ colour })} />
-          {item.text && <p className="break-words text-xs text-muted">“{item.text}”</p>}
+          {item.text && <p className="wrap-break-word text-xs text-muted">“{item.text}”</p>}
           <p className="text-xs text-muted">{item.type === 'highlight' ? 'A highlight darkens what is under it, so the text stays readable. ' : ''}Comments stay in front of what was added to the page; they can be put in front of or behind other comments.</p>
         </>
       )}

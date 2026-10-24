@@ -92,7 +92,7 @@ function FileSummary({ file, info }: Loaded) {
                 {g.fields.map((f, k) => (
                   <div key={`${f.label}-${k}`} className="contents">
                     <dt className="text-muted">{f.label}</dt>
-                    <dd className="min-w-0 break-words">{f.value}</dd>
+                    <dd className="min-w-0 wrap-break-word">{f.value}</dd>
                   </div>
                 ))}
               </dl>

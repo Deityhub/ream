@@ -11,7 +11,7 @@ export const placesActions = true
 type Size = { width: number; height: number }
 const button = 'rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 pointer-coarse:min-h-11'
 // controls over the page: the page's own field shows through a little, the typed value reads clearly
-const onPage = 'absolute m-0 box-border [color-scheme:light] rounded-[2px] border border-accent bg-white/85 px-[0.3em] text-black focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60'
+const onPage = 'absolute m-0 box-border scheme-light rounded-xs border border-accent bg-white/85 px-[0.3em] text-black focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60'
 const KIND: Record<FormField['kind'], string> = { text: 'Text', checkbox: 'Tick box', radio: 'Choice of buttons', choice: 'List', button: 'Button', signature: 'Signature' }
 
 export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelProps<O>) {
@@ -102,7 +102,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
           <span className="ml-auto">{zoom.bar}</span>
         </div>
         <div ref={zoom.scroller} className="max-h-[75vh] overflow-auto">
-          <div className="relative mx-auto [container-type:size]" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
+          <div className="relative mx-auto @container-size" style={{ aspectRatio: `${size.width} / ${size.height}`, width: zoom.width || '100%' }}>
             <PdfPage key={current} file={file} page={current} renderWidth={zoom.renderWidth} />
             {form.fields.map((f, i) =>
               f.unsupported
@@ -135,7 +135,7 @@ export function Panel({ options: o, onChange, files, pdfHost, actions }: PanelPr
             return (
               <li key={f.name} className="space-y-1 text-sm">
                 <div className="flex flex-wrap items-baseline gap-x-2">
-                  <button type="button" onClick={() => show(i)} disabled={!placed} className="min-w-0 break-words text-left font-medium hover:underline focus-visible:outline-2 focus-visible:outline-accent disabled:no-underline">
+                  <button type="button" onClick={() => show(i)} disabled={!placed} className="min-w-0 wrap-break-word text-left font-medium hover:underline focus-visible:outline-2 focus-visible:outline-accent disabled:no-underline">
                     {f.name}
                   </button>
                   <span className="text-xs text-muted">
@@ -179,7 +179,7 @@ function FieldControl({ id, field: f, state, value, onChange, className, style, 
   const disabled = f.readOnly
   const label = f.name
   if (f.kind === 'checkbox') {
-    const box = <input id={id} type="checkbox" checked={value === true} disabled={disabled} onChange={(e) => onChange(e.target.checked)} aria-label={label} className={list ? 'size-4' : 'absolute m-0 accent-accent [color-scheme:light]'} style={style} />
+    const box = <input id={id} type="checkbox" checked={value === true} disabled={disabled} onChange={(e) => onChange(e.target.checked)} aria-label={label} className={list ? 'size-4' : 'absolute m-0 accent-accent scheme-light'} style={style} />
     return list ? <label className="flex items-center gap-2 text-sm">{box} Ticked</label> : box
   }
   if (f.kind === 'radio') {
@@ -195,7 +195,7 @@ function FieldControl({ id, field: f, state, value, onChange, className, style, 
         </select>
       )
     }
-    return <input id={id} type="radio" name={`radio-${f.name}`} checked={state !== null && value === state} disabled={disabled} onChange={() => state && onChange(state)} aria-label={`${label}: ${f.options.find((x) => x.value === state)?.label ?? state}`} className="absolute m-0 accent-accent [color-scheme:light]" style={style} />
+    return <input id={id} type="radio" name={`radio-${f.name}`} checked={state !== null && value === state} disabled={disabled} onChange={() => state && onChange(state)} aria-label={`${label}: ${f.options.find((x) => x.value === state)?.label ?? state}`} className="absolute m-0 accent-accent scheme-light" style={style} />
   }
   if (f.kind === 'choice') {
     if (f.editable) {

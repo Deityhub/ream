@@ -150,7 +150,7 @@ function TextView({ file }: { file: File }) {
   const cut = text !== null && (file.size > TEXT_SHOWN * 4 || text.length > TEXT_SHOWN)
   return (
     <figure className="space-y-2">
-      <pre tabIndex={0} aria-label={`Text of ${file.name}`} className="max-h-[calc(100vh-14rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-surface-2 p-3 text-sm focus-visible:outline-2 focus-visible:outline-accent">
+      <pre tabIndex={0} aria-label={`Text of ${file.name}`} className="max-h-[calc(100vh-14rem)] overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg border border-line bg-surface-2 p-3 text-sm focus-visible:outline-2 focus-visible:outline-accent">
         {text === null ? 'Reading…' : text.slice(0, TEXT_SHOWN) || 'No text.'}
       </pre>
       {cut && <p className="text-xs text-muted">Showing the start. The saved file has all of it.</p>}
