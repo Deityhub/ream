@@ -41,6 +41,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
 | M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms. Edit content: change, move and delete the page's own lines of text (in the PDF's font when it has the letters), move, resize, replace and delete its pictures, erase areas |
+| M2.7 ✅ | Redesign | Near-black theme with one cool accent and a green kept for "done on this device", Manrope and JetBrains Mono, tools home per category (`#/tools/pdf`, `#/tools/image`) with a drop bar, a clickable breadcrumb under the top bar on the tools home and tool pages, web-only landing and desktop-app pages |
 | M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
@@ -156,7 +157,7 @@ Office files (`.docx`, `.xlsx`, `.pptx`) are zips of XML; Ream reads and writes 
 
 ## Known M6 limits
 
-- **Text is drawn by the browser.** Watermark text and meme captions are made into a transparent picture in the panel (with Inter and the bundled Anton font) and the engine only places that picture, so the engine has no font code and the tool's `run` can't make text by itself (tests pass a ready-made picture). Anything that can't be typed in those fonts falls back to the system font.
+- **Text is drawn by the browser.** Watermark text and meme captions are made into a transparent picture in the panel (with Manrope and the bundled Anton font) and the engine only places that picture, so the engine has no font code and the tool's `run` can't make text by itself (tests pass a ready-made picture). Anything that can't be typed in those fonts falls back to the system font.
 - **Watermark image:** text or a logo, one mark in one of nine spots or repeated over the picture (rows offset by half a step), any angle from -90 to 90 (the mark is turned before it is placed), size as a share of each picture's width, opacity. Every picture gets the same mark.
 - **Blur or hide parts:** any number of rectangles, all treated the same way (pixelate, blur or a solid box). Strength is relative to each rectangle. The saved file is encoded afresh, so a covered area's pixels and any camera data are gone. A light blur can sometimes be partly undone by sharpening; the panel says so and recommends pixelate or cover for anything sensitive. Rectangles only: no freehand or oval areas, and no automatic face detection.
 - **Filters:** brightness, contrast, colour, warmth, sepia, vignette, blur and sharpen, with a few one-click looks. Adjustments work on the stored (sRGB) values like a browser's CSS filters, not in linear light, and there are no colour curves or LUTs.
@@ -204,8 +205,9 @@ The result preview waits 600 ms after the last change to any option before it re
 
 ## Design
 
-- **Palette**: `packages/ui/src/theme.css` holds the five colour scales. Components only use the semantic tokens (`bg-surface`, `text-muted`, `bg-accent`, `border-field`, `text-danger`, ...), which switch between light and dark with `light-dark()`. jet-black is the neutral scale and cerulean the accent; muted-teal tints image tools and success. The palette has no red or amber, so danger and warning use Tailwind's red and amber stops.
+- **Palette**: the semantic tokens in `packages/ui/src/theme.css` (`bg-surface`, `text-muted`, `bg-accent`, `border-field`, `text-success`, `bg-success-soft`, `text-danger`, ...) switch between light and dark with `light-dark()`. Dark mode is the design's own colours (near-black ground, accent #7DBAD6, green #5CD6B8 used only to say work was done on this device); light mode is derived from them and is not part of the design. The five older scales stay in the file for the image category tint.
 - `node scripts/contrast.ts` checks every token pair (4.5:1 for text, 3:1 for icons and input borders) in both modes and fails if one drops below.
-- **Font**: Inter, bundled through `@fontsource-variable/inter` so it works offline and nothing loads from a CDN.
+- **Fonts**: Manrope for text and JetBrains Mono for numbers, sizes and page counts, bundled through `@fontsource-variable/manrope` and `@fontsource-variable/jetbrains-mono` so they work offline and nothing loads from a CDN. Text watermarks on images (Watermark image) are drawn in Manrope.
 - **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` and `apps/desktop/build/icon.{svg,png}` are the static versions. `.icns` and `.ico` packaging belongs to M8.
-- Not done: page thumbnails strip in the tool page (waits for M3 tools whose output keeps one page per input page), sidebar and command palette (when the tool list outgrows the home grid).
+- **Pages**: `#/` is the landing page and `#/download` the desktop app page, both in the web build only; the desktop app opens on the tools home (`#/tools`). The download page has no installers to offer yet (packaging is M8), so its buttons are disabled and it says so.
+- Not done: page thumbnails strip in the tool page (waits for M3 tools whose output keeps one page per input page), command palette. The design's network monitor, recent-files list, save-to folder and "Show in folder" were left out: Ream has none of them.

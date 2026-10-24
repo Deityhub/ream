@@ -8,9 +8,11 @@ type Props = {
   onFiles: (files: File[]) => void
   /** a slim "add more" bar instead of the big drop area */
   compact?: boolean
+  /** a wide bar with its own wording and a button on the right (the tools home) */
+  bar?: { title: string; hint: string }
 }
 
-export function Dropzone({ accept, multiple = true, onFiles, compact = false }: Props) {
+export function Dropzone({ accept, multiple = true, onFiles, compact = false, bar }: Props) {
   const [over, setOver] = useState(false)
   const [skipped, setSkipped] = useState(0)
   const take = (list: FileList | null) => {
@@ -27,8 +29,12 @@ export function Dropzone({ accept, multiple = true, onFiles, compact = false }: 
         onDragOver={(e) => { e.preventDefault(); setOver(true) }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files) }}
-        className={`flex cursor-pointer items-center border-dashed text-center transition-colors duration-150 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent ${over ? 'border-accent bg-accent-soft' : 'border-field bg-surface hover:bg-accent-soft'} ${
-          compact ? 'justify-center gap-2 rounded-lg border px-3 py-2 text-sm' : 'flex-col justify-center gap-3 rounded-2xl border-2 px-6 py-12'
+        className={`flex cursor-pointer border-dashed transition-colors duration-150 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent ${over ? 'border-accent bg-accent-soft' : 'border-field bg-canvas hover:bg-accent-soft'} ${
+          compact
+            ? 'items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-sm'
+            : bar
+              ? 'flex-wrap items-center gap-5 rounded-2xl border-[1.5px] px-6 py-5'
+              : 'flex-col items-center justify-center gap-3 rounded-2xl border-[1.5px] px-6 py-12 text-center'
         }`}
       >
         {compact ? (
@@ -36,13 +42,25 @@ export function Dropzone({ accept, multiple = true, onFiles, compact = false }: 
             <Icon name="upload" className="size-4 text-accent-ink" />
             <span className="text-accent-ink">{multiple ? 'Add more files' : 'Replace file'}</span>
           </>
+        ) : bar ? (
+          <>
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-ink">
+              <Icon name="upload" className="size-6" />
+            </span>
+            <span className="min-w-0 flex-[1_1_16rem]">
+              <span className="block font-bold">{bar.title}</span>
+              <span className="mt-0.5 block text-sm text-muted">{bar.hint}</span>
+            </span>
+            <span className="inline-flex min-h-11 items-center rounded-[10px] border border-line bg-surface-2 px-4 text-sm font-semibold">Choose files</span>
+          </>
         ) : (
           <>
-            <span className="flex size-12 items-center justify-center rounded-full bg-accent-soft text-accent-ink">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent-ink">
               <Icon name="upload" className="size-6" />
             </span>
             <span className="text-sm">
               Drop {noun} here or <span className="font-medium text-accent-ink underline">choose {noun}</span>
+              <span className="mt-1 block text-muted">They are opened on this device, not uploaded.</span>
             </span>
           </>
         )}

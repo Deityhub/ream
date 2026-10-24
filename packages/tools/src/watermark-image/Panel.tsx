@@ -21,7 +21,7 @@ export const defaultOptions: O = {
   spacing: 40,
 }
 
-const FAMILY = '"Inter Variable", Inter, system-ui, sans-serif'
+const FAMILY = '"Manrope Variable", Manrope, system-ui, sans-serif'
 
 export function Panel({ options: o, onChange }: PanelProps<O>) {
   const set = (patch: Partial<O>) => onChange({ ...o, ...patch })

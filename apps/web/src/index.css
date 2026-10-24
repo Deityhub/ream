@@ -1,12 +1,13 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/jetbrains-mono';
 @import '@ream/ui/theme.css';
 @source '../../../packages/ui/src';
 @source '../../../packages/tools/src';
 
 body {
   @apply bg-canvas text-ink antialiased;
-  font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  @apply font-sans;
 }
 
 input { accent-color: var(--accent); }
@@ -15,8 +16,11 @@ input { accent-color: var(--accent); }
 fieldset { min-width: 0; }
 select, input { max-width: 100%; }
 
-/* Tailwind v4 resets buttons to the default cursor */
-button:not(:disabled), [role='tab']:not(:disabled) { cursor: pointer; }
+/* Tailwind v4 resets buttons to the default cursor; everything else that reacts to a click gets the pointer too */
+button:not(:disabled), [role='tab']:not(:disabled), [role='button'], a[href], summary, select:not(:disabled),
+input:is([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']):not(:disabled),
+label:has(input:is([type='checkbox'], [type='radio']):not(:disabled)) { cursor: pointer; }
+:is(button, select, input):disabled { cursor: not-allowed; }
 
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

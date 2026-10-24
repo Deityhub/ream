@@ -4,7 +4,7 @@ import { IMAGE_ACCEPT } from '../image-formats.ts'
 export const filtersImage: Tool = {
   id: 'filters-image',
   title: 'Filters',
-  description: 'Looks, colour and sharpness',
+  description: 'Brightness, contrast, colour, warmth, sharpness and ready-made looks',
   category: 'image',
   icon: 'sliders',
   accept: IMAGE_ACCEPT,

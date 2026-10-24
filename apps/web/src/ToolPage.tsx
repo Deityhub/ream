@@ -14,6 +14,7 @@ import { Preview } from './Preview'
 import { SizeEstimate } from './SizeEstimate'
 import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
+import { Breadcrumb, TopBar, focus } from './TopBar'
 
 type State =
   | { kind: 'idle' }
@@ -88,16 +89,14 @@ export function ToolPage({ tool }: { tool?: Tool }) {
     }
   }, [tool])
 
-  const back = (
-    <a href="#/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-      <Icon name="arrow-left" className="size-4" /> All tools
-    </a>
-  )
   if (!tool) {
     return (
       <>
-        {back}
-        <p className="text-sm">That tool doesn't exist.</p>
+        <TopBar />
+        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8">
+          <Breadcrumb cat="all" />
+          <p className="text-[15px]">That tool doesn't exist. <a href="#/tools" className={`font-semibold text-accent-ink underline ${focus}`}>See all tools</a>.</p>
+        </main>
       </>
     )
   }
@@ -160,7 +159,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   const grid = empty
     ? 'mx-auto max-w-2xl'
     : showPreview
-      ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[18rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]'
+      ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[20rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]'
       : panel?.placesActions
         ? 'grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[22rem_minmax(0,1fr)]'
         : // no preview and no surface of its own (metadata, compress): the options card stays a readable width
@@ -176,7 +175,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
         <Progress value={state.progress} onCancel={cancel} />
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
+          <Button size="lg" className="w-full" onClick={run} disabled={missing > 0 || !!asking}>{tool.action}</Button>
           {asking && <span className="text-sm text-muted">Unlock {asking.name} to continue, or skip it.</span>}
           {!asking && missing > 0 && (
             <span className="text-sm text-muted">
@@ -201,9 +200,11 @@ export function ToolPage({ tool }: { tool?: Tool }) {
 
   return (
     <>
-      {back}
-      <h1 className="text-2xl font-medium tracking-tight">{tool.title}</h1>
-      <p className="mb-6 text-sm text-muted">{tool.description}</p>
+      <TopBar />
+      <main className="mx-auto max-w-[1600px] px-4 pb-14 pt-6 sm:px-8">
+      <Breadcrumb cat={tool.category} tool={tool} />
+      {/* the breadcrumb shows the name; the heading is kept for screen readers */}
+      <h1 className="sr-only">{tool.title}</h1>
 
       <div className={`${grid} items-start`}>
         <div className={`min-w-0 space-y-3 ${railPos}`}>
@@ -214,9 +215,10 @@ export function ToolPage({ tool }: { tool?: Tool }) {
             onFiles={(added) => changeFiles(tool.multiple ? [...files, ...added] : added)}
           />
           {!empty && (
-            <ul className="divide-y divide-line overflow-auto rounded-xl border border-line bg-surface lg:max-h-60 xl:max-h-none">
+            <ul className="space-y-2 overflow-auto lg:max-h-72 xl:max-h-none">
               {files.map((f, i) => (
-                <li key={`${f.name}-${i}`} className={`flex items-center gap-1 px-3 py-2 text-sm ${showPreview && i === active ? 'bg-accent-soft' : ''}`}>
+                <li key={`${f.name}-${i}`} className={`flex items-center gap-1 rounded-[14px] border px-3 py-2.5 text-sm ${showPreview && i === active ? 'border-accent-2 bg-accent-soft' : 'border-line bg-surface'}`}>
+                  {tool.multiple && files.length > 1 && <span className="w-6 shrink-0 font-mono text-[13px] text-accent-ink">{String(i + 1).padStart(2, '0')}</span>}
                   <button
                     onClick={() => setActive(i)}
                     aria-label={`Preview ${f.name}`}
@@ -226,7 +228,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
                   >
                     <Thumb file={f} />
                     <span className="min-w-0">
-                      <span className="block truncate">{f.name}</span>
+                      <span className="block truncate font-semibold">{f.name}</span>
                       <FileMeta file={f} />
                     </span>
                   </button>
@@ -250,7 +252,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
               // a tool with its own surface lays out its own cards (surface, controls) in the same grid
               panelBody
             ) : (
-              <Card className="space-y-4">
+              <Card className="space-y-5 rounded-2xl p-5">
               {soon ? (
                 <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
               ) : (
@@ -271,6 +273,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           </aside>
         )}
       </div>
+      </main>
       {state.kind === 'done' && <ResultDialog tool={tool} outputs={state.outputs} onClose={() => setState({ kind: 'idle' })} onReset={() => changeFiles([])} />}
       {asking && (
         <PasswordDialog
@@ -291,9 +294,9 @@ function IconButton({ label, icon, disabled, onClick }: { label: string; icon: s
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="rounded p-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-30 disabled:hover:bg-transparent"
+      className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-ink hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-30 disabled:hover:bg-transparent"
     >
-      <Icon name={icon} className="size-4" />
+      <Icon name={icon} className="size-[18px]" />
     </button>
   )
 }
@@ -338,23 +341,26 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
       }}
       // a click on the dimmed area (the dialog element itself, outside its padded content) closes it
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="m-auto w-[min(32rem,92vw)] rounded-xl border border-line bg-surface p-0 text-ink backdrop:bg-black/50"
+      className="m-auto w-[min(32rem,92vw)] rounded-2xl border border-line bg-surface p-0 text-ink backdrop:bg-black/60"
     >
       <div className="space-y-4 p-6">
         <div className="flex items-start justify-between gap-3">
-          <h2 id={titleId} role="status" className="flex items-center gap-2 text-lg font-semibold">
-            <Icon name="check" className="size-5 text-accent" />
-            Done: {outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}
+          <h2 id={titleId} role="status" className="flex flex-1 items-center gap-3 rounded-[14px] border border-success/40 bg-success-soft px-4 py-3 text-base font-bold">
+            <Icon name="check" className="size-5 shrink-0 text-success" />
+            <span>
+              Done on this device
+              <span className="block font-mono text-[13px] font-normal text-muted">{outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}</span>
+            </span>
           </h2>
           <button onClick={onClose} aria-label="Close" className="-m-1 rounded p-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent">
             <Icon name="x" className="size-5" />
           </button>
         </div>
-        <ul className="max-h-60 divide-y divide-line overflow-auto rounded-lg border border-line text-sm">
+        <ul className="max-h-60 divide-y divide-line overflow-auto rounded-[14px] border border-line text-sm">
           {outputs.map((o, i) => (
             <li key={i} className="flex gap-3 px-3 py-1.5">
               <span className="min-w-0 flex-1 truncate">{o.name}</span>
-              <span className="text-xs text-muted">{formatBytes(o.bytes.length)}</span>
+              <span className="font-mono text-xs text-muted">{formatBytes(o.bytes.length)}</span>
             </li>
           ))}
         </ul>
