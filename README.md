@@ -122,6 +122,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
   - **Forms (XObjects):** redacted as private copies.
   - **Gradients (shadings):** kept under the box, since they hold no text.
   - **Annotations:** comments, links and form fields whose rectangle meets an area are removed, the fields with their values.
+  - **Fonts without widths:** letters in Helvetica, Times or Courier (any style) that the file gives no widths for use the standard widths, so a word is found where it is drawn. A font with no widths that isn't one of these (and isn't embedded) is placed by an estimate, and a redaction box over its text may miss letters; check the result or redact the whole line.
   - **Hidden data:** "Remove document properties and hidden data" (on by default) also drops the title and other document information, XMP metadata, page thumbnails and private application data. Bookmarks, other pages' content and attachments stay.
   - **Not done:** finding text to redact (areas are drawn by hand), and text that is part of a scanned picture (that is wiped as pixels like any picture). Checked with pypdf's text extraction and Chromium's viewer on Chromium-printed pages.
 - **Fill PDF form:** fields are filled on the page, or from the list of every field beside it.

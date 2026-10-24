@@ -308,10 +308,9 @@ export async function editContent(doc: PdfDocument, edits: Map<number, PageConte
         content = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
         parts.reduce((i, p) => (content.set(p, i), i + p.length), 0)
       }
-      // the page's own content in a q/Q pair, so the state it leaves can't move what is drawn after it; the moved
-      // pictures go in before the passes below, so an erased area reaches them and their names are kept
+      // the page's own content in a q/Q pair, so the state it leaves can't move what is drawn after it
       const enc = new TextEncoder()
-      content = new Uint8Array([...enc.encode('q\n'), ...content, ...enc.encode(`\nQ\n${redrawn}`)])
+      content = new Uint8Array([...enc.encode('q\n'), ...content, ...enc.encode('\nQ\n')])
 
       // lines: their letters out (by their middles, so the lines next to them are safe), then shown again in their own font
       const changed = (change.lines ?? []).flatMap((c) => {
@@ -333,8 +332,19 @@ export async function editContent(doc: PdfDocument, edits: Map<number, PageConte
         res = r.res
       }
       const shown = changed.filter(({ c }) => c.own && c.text.trim()).map(({ l, c }) => ownLine(l, c, back)).join('')
+      // what was moved or retyped goes on after the passes: they take out what the page had, not what was put there since.
+      // The passes drop the names the content no longer uses, so a moved picture's name is put back.
+      const again = [...redrawn.matchAll(/\/([^\s/<>[\]()]+)\s+Do\b/g)].map((m) => m[1])
+      const was = doc.resolve(original.get('XObject'))
+      if (again.length && isDict(was)) {
+        const now = doc.resolve(res.get('XObject'))
+        const table = new Map(isDict(now) ? now : [])
+        for (const n of again) if (was.has(n) && !table.has(n)) table.set(n, was.get(n)!)
+        res = new Map(res)
+        res.set('XObject', table)
+      }
 
-      const body = new Uint8Array([...content, ...enc.encode(`\n${shown}`)])
+      const body = new Uint8Array([...content, ...enc.encode(`\n${redrawn}${shown}`)])
       const dict = e.edit(pageRef)
       dict.set('Contents', e.add(new PdfStream(new Map([['Filter', new PdfName('FlateDecode')]]), await deflate(body))))
       if (res !== original || !page.dict.has('Resources')) dict.set('Resources', res)

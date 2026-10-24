@@ -263,10 +263,11 @@ describe('showing text', () => {
     expect((await shown(narrow, 'BT /F1 10 Tf (A) Tj ET')).drawn[0].matrix[0]).toBe(0.5 * K)
   })
 
-  test('without /Widths the canvas measurement decides the advance', async () => {
-    const bare = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
-    const { drawn } = await shown(bare, 'BT /F1 10 Tf (AB) Tj ET')
-    expect(drawn[1].matrix[4]).toBe(5) // the fake measures 5 px per character
+  test('without /Widths a font of unknown metrics is measured by the canvas, a standard font has its standard widths', async () => {
+    const unknown = await shown('<< /Type /Font /Subtype /Type1 /BaseFont /Futura >>', 'BT /F1 10 Tf (AB) Tj ET')
+    expect(unknown.drawn[1].matrix[4]).toBe(5) // the fake measures 5 px per character
+    const helvetica = await shown('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', 'BT /F1 10 Tf (AB) Tj ET')
+    expect(helvetica.drawn[1].matrix[4]).toBeCloseTo(6.67, 2) // A is 667 wide in Helvetica
   })
 
   test('Quartz style: font size 1 with the size in the text matrix still draws at full size, upright', async () => {
@@ -439,7 +440,8 @@ describe('embedded fonts: the letters are the font program\'s own shapes', () =>
     const { glyphs, all, result } = await drawn(helvetica, 'BT /F1 10 Tf (AA) Tj ET', {}, platform)
     expect(asked).toEqual(['sans bold'])
     expect(all('fillText')).toEqual([])
-    expect(glyphs[1].matrix[4] - glyphs[0].matrix[4]).toBeCloseTo(6) // A is 600 wide in the look-alike
+    // the advance is the standard font's (Helvetica-Bold A is 722), not the look-alike's own 600: a viewer moves by the font's metrics
+    expect(glyphs[1].matrix[4] - glyphs[0].matrix[4]).toBeCloseTo(7.22)
     expect(result.warnings).toEqual([])
     // other fonts keep the system's
     const other = await drawn('<< /Type /Font /Subtype /Type1 /BaseFont /Futura >>', 'BT /F1 10 Tf (A) Tj ET', {}, platform)

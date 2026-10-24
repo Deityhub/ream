@@ -2,6 +2,7 @@ import { PdfName, PdfStream, PdfString, decodeStream, decodeTextString, fontFami
 import { parseToUnicode, type ToUnicode } from './cmap.ts'
 import { baseEncodings, glyphToUnicode, standard, winAnsi } from './encodings.ts'
 import { numbers } from './function.ts'
+import { standardWidth } from './standard-widths.ts'
 import type { Matrix } from './matrix.ts'
 import { embeddedFile, readProgram, type EmbeddedFile, type GlyphPath, type Program } from './outlines/index.ts'
 
@@ -270,13 +271,16 @@ async function build(doc: PdfDocument, dict: PdfDict): Promise<Font> {
     if (embedded || !STANDARD.test(bare)) notes.push('Fonts are shown with similar ones')
   }
   const shape = program ? simpleShapes(program, { symbolic: (flags & 4) !== 0, named, differences, base }) : undefined
+  const std = !embedded && STANDARD.test(bare) && !/symbol|dingbats|narrow|condensed|compressed/i.test(bare) ? { kind: style.kind, bold: style.bold, italic: style.italic } : undefined
   return {
     ...style, type3: null, notes, shape,
-    standard: !embedded && STANDARD.test(bare) && !/symbol|dingbats|narrow|condensed|compressed/i.test(bare) ? { kind: style.kind, bold: style.bold, italic: style.italic } : undefined,
+    standard: std,
     decode: (bytes) =>
       Array.from(bytes, (c) => {
         const w = widths && typeof first === 'number' ? widths[c - first] : undefined
-        return { text: textOf(c), code: c, space: c === 32, width: w ?? missing ?? null }
+        const text = textOf(c)
+        // a standard font with no widths in the file has the widths of its standard self, not whatever a canvas measures
+        return { text, code: c, space: c === 32, width: w ?? missing ?? (std && !program ? standardWidth(text, std.kind, std.bold, std.italic) : null) }
       }),
   }
 }

@@ -221,6 +221,8 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
       className={`relative size-full touch-none select-none ${tool === 'select' ? '' : 'cursor-crosshair'}`}
     >
       {children}
+      {/* what the page had where something was changed, painted over in the page's colour: one layer under everything, so a cover never hides what was moved onto it */}
+      {shown.flatMap((i) => coverOf(i, editing)).map((c, k) => <Cover key={k} r={c.r} colour={c.colour} />)}
       <svg viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible" aria-hidden="true">
         {shown.map((i) => (
           <g key={i.id} style={{ pointerEvents: hit }} onPointerDown={(e) => onItemDown(e, i)}>
@@ -259,7 +261,7 @@ export function Overlay({ page, size, width, items, tool, style, fonts, selected
           return <LineView key={i.id} item={i} scale={scale} hit={hit} onPointerDown={(e) => onItemDown(e, i)} />
         }
         if (i.kind === 'picture') return <PictureView key={i.id} item={i} url={i.replace ? urls.get(i.replace.data) : i.preview} hit={hit} onPointerDown={(e) => onItemDown(e, i)} />
-        if (i.kind === 'erase') return <div key={i.id} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} onPointerDown={(e) => onItemDown(e, i)} className="absolute border border-dashed border-[rgb(220_38_38)] bg-white" title="Erased" />
+        if (i.kind === 'erase') return <div key={i.id} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} onPointerDown={(e) => onItemDown(e, i)} className="absolute border border-dashed border-[rgb(220_38_38)]" title="Erased" />
         if (i.kind === 'field') return <FieldView key={i.id} item={i} scale={scale} pageHeight={height} hit={fieldsActive ? hit : 'none'} faint={!fieldsActive} number={order?.numbers.get(i.id)} onPointerDown={(e) => onItemDown(e, i)} />
         if (i.kind === 'note') {
           return (
@@ -471,13 +473,25 @@ function lineStyle(i: LineEditItem, scale: number) {
 }
 
 /** white over where something of the page's own was, so the editor shows it changed (the saved file really removes it) */
-const Cover = ({ r, colour }: { r: Rect; colour?: string }) => <div aria-hidden="true" className="pointer-events-none absolute" style={{ background: colour ?? '#ffffff', left: `calc(${r.x * 100}% - 1px)`, top: `calc(${r.y * 100}% - 1px)`, width: `calc(${r.w * 100}% + 2px)`, height: `calc(${r.h * 100}% + 2px)` }} />
+const Cover = ({ r, colour }: { r: Rect; colour?: string }) => {
+  // only the part over the page: the page's colour means nothing beyond its edge, and a patch there would stay behind
+  const [x0, y0, x1, y1] = [Math.max(0, r.x), Math.max(0, r.y), Math.min(1, r.x + r.w), Math.min(1, r.y + r.h)]
+  if (x1 <= x0 || y1 <= y0) return null
+  return <div aria-hidden="true" className="pointer-events-none absolute" style={{ background: colour ?? '#ffffff', left: `calc(${x0 * 100}% - 1px)`, top: `calc(${y0 * 100}% - 1px)`, width: `calc(${(x1 - x0) * 100}% + 2px)`, height: `calc(${(y1 - y0) * 100}% + 2px)` }} />
+}
+
+/** the places a changed item leaves behind, with the colour to paint them (an erased area is white) */
+function coverOf(i: Item, editing: string | null): { r: Rect; colour?: string }[] {
+  if (i.kind === 'textline') return lineChanged(i) || i.id === editing ? [{ r: i.from, colour: i.cover }] : []
+  if (i.kind === 'picture') return i.deleted || i.replace || i.box.x !== i.from.x || i.box.y !== i.from.y || i.box.w !== i.from.w || i.box.h !== i.from.h ? [{ r: i.from, colour: i.cover }] : []
+  if (i.kind === 'erase') return [{ r: i.box }]
+  return []
+}
 
 function LineView({ item: i, scale, hit, onPointerDown }: { item: LineEditItem; scale: number; hit: 'auto' | 'none'; onPointerDown: (e: ReactPointerEvent) => void }) {
   const changed = lineChanged(i)
   return (
     <>
-      {changed && <Cover r={i.from} colour={i.cover} />}
       <div
         onPointerDown={onPointerDown}
         style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, minWidth: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit, ...(changed ? lineStyle(i, scale) : {}) }}
@@ -498,7 +512,6 @@ function LineEditor({ item, scale, onDone }: { item: LineEditItem; scale: number
   }, [])
   return (
     <>
-      <Cover r={item.from} colour={item.cover} />
       <input
         ref={ref}
         value={text}
@@ -521,7 +534,6 @@ function PictureView({ item: i, url, hit, onPointerDown }: { item: PictureEditIt
   const changed = !!i.deleted || !!i.replace || i.box.x !== i.from.x || i.box.y !== i.from.y || i.box.w !== i.from.w || i.box.h !== i.from.h
   return (
     <>
-      {changed && <Cover r={i.from} colour={i.cover} />}
       <div onPointerDown={onPointerDown} style={{ left: `${i.box.x * 100}%`, top: `${i.box.y * 100}%`, width: `${i.box.w * 100}%`, height: `${i.box.h * 100}%`, pointerEvents: hit }} className="absolute">
         {changed && !i.deleted && url && <img src={url} alt="" draggable={false} className="size-full" />}
       </div>
@@ -554,6 +566,13 @@ function Selection({ item, scale, size, onHandleDown }: { item: Item; scale: num
     b = { ...b, h: (lines * item.size * item.spacing) / size.height }
   }
   if (item.kind === 'note') b = { ...b, w: 20 / size.width, h: 20 / size.height }
+  if (item.kind === 'textline') {
+    // the outline follows what is typed: the line is as wide as its text is, and as tall as its size says
+    const changed = item.text !== item.original || item.size !== item.originalSize || item.font !== 'own'
+    const px = item.size * scale
+    const text = changed ? measurer(fallbackFont(item), item.bold, item.italic, px)(item.text) / (size.width * scale) : b.w
+    b = { ...b, w: Math.max(text, 4 / (size.width * scale)), h: (b.h * item.size) / item.originalSize }
+  }
   const outline = <div key="o" className="pointer-events-none absolute outline-2 outline-dashed outline-accent" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }} />
   if (!('box' in item) || item.kind === 'textline') return outline
   const { x, y, w, h } = b

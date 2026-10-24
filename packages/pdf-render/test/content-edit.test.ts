@@ -20,11 +20,12 @@ const pdf = (rotate = 0, content = CONTENT) =>
   PdfDocument.load(assemble([
     [1, '<< /Type /Catalog /Pages 2 0 R >>'],
     [2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'],
-    [3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Rotate ${rotate} /Resources << /Font << /F1 5 0 R /F2 7 0 R >> /XObject << /Im1 8 0 R >> >> /Contents 4 0 R >>`],
+    [3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Rotate ${rotate} /Resources << /Font << /F1 5 0 R /F2 7 0 R /F3 10 0 R >> /XObject << /Im1 8 0 R >> >> /Contents 4 0 R >>`],
     [4, stream('', content)],
     [5, `<< /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+Test /FirstChar 32 /LastChar 255 /Widths [${Array(224).fill(600).join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor 6 0 R >>`],
     [6, '<< /Type /FontDescriptor /FontName /ABCDEF+Test /Flags 32 /FontFile2 9 0 R >>'],
     [7, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'],
+    [10, '<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>'],
     [8, stream('/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /ASCIIHexDecode', '00ff00ff>')],
     [9, stream('/Filter /ASCIIHexDecode', hex(makeTtf()))],
   ]).bytes)
@@ -44,6 +45,23 @@ describe('editing a page\'s own content', () => {
     expect(lines[0].baseline[1]).toBeCloseTo(20)
     expect(lines[0].size).toBeCloseTo(10)
     expect(pictures).toEqual([{ id: 0, box: { x0: 120, y0: 70, x1: 160, y1: 90 } }])
+  })
+
+  test('letters of a standard font that has no widths in the file are as wide as the standard font says', async () => {
+    const { lines } = await pageContentItems(await pdf(), 0)
+    // "Hello" in Helvetica at 10 pt: H 722 + e 556 + l 222 + l 222 + o 556, in thousandths
+    expect(lines[2].box.x1 - lines[2].box.x0).toBeCloseTo(22.78, 1)
+    const times = await pageContentItems(await pdf(0, CONTENT.replace('/F2 10 Tf', '/F3 10 Tf')), 0)
+    // Times is narrower than Helvetica: H 722 + e 444 + l 278 + l 278 + o 500
+    expect(times.lines[2].box.x1 - times.lines[2].box.x0).toBeCloseTo(22.22, 1)
+  })
+
+  test('redacting one word of such a line removes that word and no other letter', async () => {
+    const { redactPdf } = await import('../src/redact.ts')
+    const doc = await pdf(0, 'BT /F2 10 Tf 1 0 0 1 20 40 Tm (Hello World) Tj ET')
+    // "Hello " is 6 letters: H 722 e 556 l 222 l 222 o 556 space 278 = 2556 -> 25.56 pt; "World" starts there
+    const out = await PdfDocument.load(await redactPdf(doc, new Map([[0, [[20 + 25.56 + 0.3, 30, 120, 55]]]]), { platform, hidden: false }))
+    expect((await pageChars(out, 0)).chars.map((c) => c.text).join('')).toBe('Hello ')
   })
 
   test('a line changed in its own font, the lines around it untouched', async () => {
@@ -91,6 +109,15 @@ describe('editing a page\'s own content', () => {
     expect(pictures.map((p) => [p.box.x0, p.box.y0].map(Math.round))).toEqual([[20, 70]])
     const xo = (out.resolve((out.resolve(out.pages()[0].dict.get('Resources')) as Map<string, unknown>).get('XObject') as never) as Map<string, unknown>)
     expect([...xo.keys()]).toContain('Im1')
+  })
+
+  test('erasing takes out what the page had, not what was moved there: a picture moved into an erased area stays', async () => {
+    const doc = await pdf()
+    // the erased area is over the line "Hello" and the empty space left of the picture; the picture is moved onto it
+    const out = await PdfDocument.load(await editContent(doc, new Map([[0, { erase: [{ x0: 10, y0: 50, x1: 100, y1: 95 }], pictures: [{ id: 0, box: { x0: 30, y0: 60, x1: 70, y1: 80 } }] }]]), platform))
+    const { lines, pictures } = await pageContentItems(out, 0)
+    expect(lines.map((l) => l.text)).toEqual(['AA A', 'A'])
+    expect(pictures.map((p) => [p.box.x0, p.box.y0].map(Math.round))).toEqual([[30, 60]])
   })
 
   test('an erased area loses its text and pictures; the rest stays', async () => {

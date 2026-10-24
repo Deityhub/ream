@@ -5,7 +5,7 @@ import { onePage, stream } from './helpers.ts'
 
 const WIDTHS = `/FirstChar 32 /LastChar 126 /Widths [${Array(95).fill(500).join(' ')}]`
 const FONT = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica ${WIDTHS} >>` // every glyph half an em wide
-const BARE_FONT = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>' // no widths: the renderer would have to guess
+const BARE_FONT = '<< /Type /Font /Subtype /Type1 /BaseFont /Futura >>' // no widths: the renderer would have to guess
 const IMAGE = stream('/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8', 'A')
 const page = (content: string, extra: { resources?: string; objects?: Record<number, string> } = {}) => onePage({ content, box: '[0 0 200 200]', ...extra })
 const bboxes = async (content: string, extra = {}) => (await analyzePage(await page(content, extra), 0)).ops.filter((o) => o.bbox).map((o) => [o.op, o.bbox as Box] as const)
