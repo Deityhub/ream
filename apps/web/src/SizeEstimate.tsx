@@ -21,7 +21,7 @@ export function SizeEstimate({ files, preview, onRefresh }: { files: File[]; pre
   const dim = preview.stale || preview.computing
   return (
     <div role="status" aria-busy={preview.computing} className={`rounded-lg bg-surface-2 px-3 py-2 text-sm transition-opacity ${dim ? 'opacity-60' : ''}`}>
-      <p className="flex flex-wrap items-baseline gap-x-2 font-mono">
+      <p className="flex flex-wrap items-baseline gap-x-2 tabular-nums">
         <span className="text-muted">New size</span>
         <span className="font-medium">{formatBytes(after)}</span>
         <span className="text-muted">was {formatBytes(before)}</span>

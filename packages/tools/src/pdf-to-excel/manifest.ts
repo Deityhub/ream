@@ -5,7 +5,7 @@ export const pdfToExcel: Tool = {
   title: 'PDF to Excel',
   description: 'Get tables out as an Excel workbook',
   category: 'pdf',
-  icon: 'grid',
+  icon: 'spreadsheet',
   accept: ['.pdf'],
   action: 'Save as Excel',
   multiple: false,

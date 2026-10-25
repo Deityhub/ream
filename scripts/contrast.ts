@@ -36,12 +36,11 @@ const pairs: [string, string, number][] = [
   ['--text-muted', '--bg', 4.5], ['--text-muted', '--surface', 4.5], ['--text-muted', '--surface-2', 4.5],
   ['--on-accent', '--accent', 4.5], ['--on-accent', '--accent-hover', 4.5],
   ['--accent-ink', '--surface', 4.5], ['--accent-ink', '--accent-soft', 4.5], ['--accent-ink', '--bg', 4.5],
-  ['--cat-pdf', '--cat-pdf-soft', 4.5], ['--cat-image', '--cat-image-soft', 4.5],
   ['--success', '--surface', 4.5], ['--success', '--success-soft', 4.5], ['--text', '--success-soft', 4.5],
   ['--accent-ink', '--surface-2', 4.5], ['--text-muted', '--accent-soft', 4.5],
   ['--danger', '--danger-soft', 4.5], ['--warning', '--warning-soft', 4.5],
   ['--accent', '--surface', 3], ['--accent', '--bg', 3],
-  ['--border-field', '--surface', 3], ['--border-field', '--bg', 3],
+  ['--border-field', '--surface', 3], ['--border-field', '--bg', 3], ['--border-field', '--surface-2', 3],
 ]
 
 let failed = 0

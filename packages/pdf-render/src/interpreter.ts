@@ -142,6 +142,9 @@ export type GlyphInfo = {
 export type HideBox = { x: number; y: number; w: number; h: number }
 const inBox = (boxes: HideBox[], x: number, y: number) => boxes.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
 
+// far beyond any glyph, in its own units: the box a knocked-out stroke is clipped to, less the glyph
+const OUTSIDE = 1e5
+
 function pathOf(path: GlyphShape['path']): Path2D {
   const p = new Path2D()
   tracePath(p, path)
@@ -621,8 +624,31 @@ export class Interpreter {
             ctx.globalAlpha = s.strokeAlpha
             ctx.strokeStyle = css(s.stroke.rgb)
             ctx.lineWidth = (s.lineWidth * scaleOf(mul(s.ctm, this.base))) / (scaleOf(m) || 1)
+            // text knockout (PDF 9.3.6, TK on by default): a glyph's fill and stroke are one object, so where they overlap
+            // a see-through stroke must not darken the fill. Stroking only outside the glyph gets that right.
+            // ponytail: exact when fill and stroke share colour and alpha (bold drawn with a stroke); a differently coloured
+            // stroke shows the fill on its inner half, and overlapping contours get the stroke inside; an offscreen
+            // group is the exact upgrade
+            const knockout = fillIt && (s.fillAlpha < 1 || s.strokeAlpha < 1)
+            if (knockout) {
+              ctx.save()
+              if (p2d) {
+                const outside = new Path2D()
+                outside.rect(-OUTSIDE, -OUTSIDE, 2 * OUTSIDE, 2 * OUTSIDE)
+                outside.addPath(p2d)
+                ctx.clip(outside, 'evenodd')
+              } else {
+                ctx.beginPath()
+                ctx.rect(-OUTSIDE, -OUTSIDE, 2 * OUTSIDE, 2 * OUTSIDE)
+                tracePath(ctx, shape.path)
+                ctx.clip('evenodd')
+                ctx.beginPath()
+                tracePath(ctx, shape.path)
+              }
+            }
             if (p2d) ctx.stroke(p2d)
             else ctx.stroke()
+            if (knockout) ctx.restore()
           }
           ctx.globalAlpha = 1
           ctx.globalCompositeOperation = 'source-over'

@@ -36,7 +36,7 @@ export function Preview({ tool, files, active, preview, onRefresh }: Props) {
   const busy = preview.kind === 'ready' && preview.computing
   return (
     <ZoomContext.Provider value={{ zoom, report: setPercent }}>
-    <section aria-label="Preview" className="space-y-3 rounded-xl border border-line bg-surface p-4">
+    <section aria-label="Preview" className="blueprint space-y-3 border border-line p-4">
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Preview of" className="inline-flex rounded-lg border border-line p-0.5 text-sm">
           {(['original', 'result'] as const).map((t) => (

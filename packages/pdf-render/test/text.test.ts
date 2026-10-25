@@ -393,6 +393,25 @@ describe('embedded fonts: the letters are the font program\'s own shapes', () =>
     expect(result.warnings).toEqual([])
   })
 
+  test('filled and stroked see-through letters: the stroke stays outside the glyph, so it does not darken the fill (text knockout)', async () => {
+    const page = (content: string) =>
+      onePage({ content, resources: '/Font << /F1 10 0 R >> /ExtGState << /G << /ca 0.5 /CA 0.5 >> >>', objects: { 10: simple('TrueType'), 11: file(makeTtf()), 12: descriptor('FontFile2') } })
+    const draw = async (content: string) => {
+      const f = fakeCtx()
+      await renderPage(await page(content), 0, f.ctx, 100, { platform: fakePlatform().platform })
+      return f.calls.map((c) => c[0])
+    }
+    const see = await draw('/G gs BT /F1 10 Tf 2 Tr (A) Tj ET')
+    const stroke = see.indexOf('stroke')
+    // fill, then a clip to everything but the letter, then the stroke inside it
+    expect(see.slice(see.indexOf('fill'), stroke)).toEqual(expect.arrayContaining(['save', 'rect', 'clip']))
+    expect(see.indexOf('restore')).toBeGreaterThan(stroke)
+    // opaque letters need no clip: fill and stroke over each other look the same
+    expect(await draw('BT /F1 10 Tf 2 Tr (A) Tj ET')).not.toContain('clip')
+    // only stroked: nothing to knock out
+    expect(await draw('/G gs BT /F1 10 Tf 1 Tr (A) Tj ET')).not.toContain('clip')
+  })
+
   test('which TrueType glyph a code is: Differences names through the Unicode cmap; symbol fonts at 0xF000 + code', async () => {
     const zhe = await drawn(simple('TrueType', '/Encoding << /BaseEncoding /WinAnsiEncoding /Differences [65 /uni0416] >>'), 'BT /F1 10 Tf (A) Tj ET', { 11: file(makeTtf()), 12: descriptor('FontFile2') })
     expect(zhe.glyphs.map((g) => g.at)).toEqual([[40, 0]])

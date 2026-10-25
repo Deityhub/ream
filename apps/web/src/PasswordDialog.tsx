@@ -50,10 +50,10 @@ export function PasswordDialog({ name, others = 0, onSubmit, onSkip }: Props) {
         e.preventDefault() // Escape counts as "Skip", so the file never lingers locked
         onSkip()
       }}
-      className="m-auto w-[min(28rem,92vw)] rounded-xl border border-line bg-surface p-6 text-ink backdrop:bg-black/50"
+      className="m-auto w-[min(28rem,92vw)] border border-line bg-canvas p-6 text-ink shadow-lg backdrop:bg-black/50"
     >
       <form onSubmit={submit} className="space-y-4">
-        <h2 id={titleId} className="text-lg font-semibold">
+        <h2 id={titleId} className="text-2xl">
           Password needed
         </h2>
         <p className="text-sm">

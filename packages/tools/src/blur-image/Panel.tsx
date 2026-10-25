@@ -139,7 +139,7 @@ export function Panel({ options: o, onChange, files, actions }: PanelProps<O>) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">Parts</span>
             {o.areas.map((_, i) => (
-              <span key={i} className={`inline-flex items-center rounded-full border text-xs ${i === selected ? 'border-accent bg-accent-soft' : 'border-line'}`}>
+              <span key={i} className={`inline-flex items-center border text-xs ${i === selected ? 'border-accent bg-accent-soft' : 'border-line'}`}>
                 <button type="button" onClick={() => setSelected(i)} aria-pressed={i === selected} className="rounded-l-full py-1 pl-2.5 pr-1 focus-visible:outline-2 focus-visible:outline-accent">
                   Part {i + 1}
                 </button>

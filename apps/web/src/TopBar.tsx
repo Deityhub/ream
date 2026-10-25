@@ -16,10 +16,10 @@ const filterName: Record<Filter, string> = { all: 'All tools', pdf: 'PDF', image
 /** The app's bar: logo on the left; what the page adds (search) and the theme on the right. */
 export function TopBar({ children }: { children?: ReactNode }) {
   return (
-    <header className="border-b border-line bg-surface">
+    <header>
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-4 sm:px-8">
-        <a href={homeHref} className={`mr-auto flex items-center gap-2.5 rounded-md text-xl font-bold tracking-tight ${focus}`}>
-          <Logo size={26} /> Ream
+        <a href={homeHref} className={`mr-auto flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
+          <Logo size={24} /> Ream
         </a>
         {children}
         <ThemeToggle />
@@ -35,7 +35,7 @@ export function Breadcrumb({ cat, tool, className = 'mb-6' }: { cat: Filter; too
   if (tool) levels.push({ href: `#/tool/${tool.id}`, label: tool.title })
   return (
     <nav aria-label="Breadcrumb" className={className}>
-      <ol className="flex min-w-0 flex-wrap items-center gap-2.5 text-sm text-muted">
+      <ol className="flex min-w-0 flex-wrap items-center gap-2.5 text-[13px] font-semibold tracking-widest text-muted uppercase">
         {levels.map((l, i) => {
           const last = i === levels.length - 1
           return (
@@ -44,7 +44,7 @@ export function Breadcrumb({ cat, tool, className = 'mb-6' }: { cat: Filter; too
               <a
                 href={l.href}
                 aria-current={last ? 'page' : undefined}
-                className={`truncate rounded-md hover:text-ink hover:underline ${focus} ${last ? 'font-semibold text-ink' : ''}`}
+                className={`truncate hover:text-accent-ink hover:underline ${focus} ${last ? 'text-ink' : ''}`}
               >
                 {l.label}
               </a>

@@ -47,14 +47,14 @@ function PdfThumb({ file, box }: { file: File; box: string }) {
 
 /** second line under a file name: size, plus page count for PDFs */
 export function FileMeta({ file }: { file: File }) {
-  return isPreviewable(file) ? <PdfMeta file={file} /> : <span className="font-mono text-xs text-muted">{formatBytes(file.size)}</span>
+  return isPreviewable(file) ? <PdfMeta file={file} /> : <span className="text-xs tabular-nums text-muted">{formatBytes(file.size)}</span>
 }
 
 function PdfMeta({ file }: { file: File }) {
   const info = usePdfInfo(file)
   const pages = pageCount(info, file.name)
   return (
-    <span className="font-mono text-xs text-muted">
+    <span className="text-xs tabular-nums text-muted">
       {[pages, formatBytes(file.size), wasUnlocked(file) ? 'unlocked' : null].filter(Boolean).join(' · ')}
       {info !== 'loading' && info.kind === 'error' && ` · ${info.message}`}
     </span>

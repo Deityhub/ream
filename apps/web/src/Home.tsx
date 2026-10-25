@@ -38,14 +38,14 @@ export function Home({ cat }: { cat: Filter }) {
     <div className="min-h-screen">
       <TopBar>
         <div className="relative min-w-0 max-sm:order-1 max-sm:w-full sm:w-80 lg:w-96">
-          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 size-4.5 -translate-y-1/2 text-muted" />
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4.5 -translate-y-1/2 text-muted" />
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search tools, e.g. merge, resize"
             aria-label="Search tools"
-            className={`h-11 w-full rounded-xl border border-field bg-canvas pl-11 pr-3 text-[15px] placeholder:text-muted ${focus}`}
+            className={`h-9 w-full border border-field bg-surface-2 pl-10 pr-3 text-sm placeholder:text-muted pointer-coarse:h-11 ${focus}`}
           />
         </div>
       </TopBar>
@@ -69,20 +69,20 @@ export function Home({ cat }: { cat: Filter }) {
                 {dropped.length === 1 ? dropped[0].name : `${dropped.length} files ready`}.{' '}
                 {tools.some(fits) ? 'Pick a tool below.' : 'No single tool takes all of these. Try one type of file at a time.'}
               </span>
-              <button onClick={() => setDropped([])} className={`rounded-md font-semibold text-accent-ink underline ${focus}`}>Clear</button>
+              <button onClick={() => setDropped([])} className={`font-semibold text-accent-ink underline ${focus}`}>Clear</button>
             </p>
           )}
         </div>
 
-        {shown.length === 0 && <p className="rounded-2xl border border-line p-7 text-[15px] text-muted">No tool matches “{q.trim()}”. Try a shorter word, such as “pdf” or “image”.</p>}
+        {shown.length === 0 && <p className="border border-line p-7 text-[15px] text-muted">No tool matches “{q.trim()}”. Try a shorter word, such as “pdf” or “image”.</p>}
         {sections.filter((s) => s.tools.length).map((s, i) => (
-          <section key={s.title ?? i} aria-label={s.title ?? head} className="space-y-3">
+          <section key={s.title ?? i} aria-label={s.title ?? head} className="space-y-5">
             {s.title && (
-              <h2 className="text-lg font-bold">
-                {s.href ? <a href={s.href} className={`rounded-md hover:text-accent-ink hover:underline ${focus}`}>{s.title}</a> : s.title}
+              <h2 className="border-b border-line pb-2 text-2xl uppercase">
+                {s.href ? <a href={s.href} className={`hover:text-accent-ink hover:underline ${focus}`}>{s.title}</a> : s.title}
               </h2>
             )}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(250px,100%),1fr))] gap-3.5">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(250px,100%),1fr))] gap-5">
               {s.tools.map((t) => (
                 <ToolCard key={t.id} tool={t} suggested={dropped.length > 0 && !s.dim} dim={s.dim} onOpen={dropped.length ? () => open(t) : undefined} />
               ))}
@@ -95,22 +95,22 @@ export function Home({ cat }: { cat: Filter }) {
 }
 
 export function ToolCard({ tool: t, suggested, dim, onOpen }: { tool: Tool; suggested?: boolean; dim?: boolean; onOpen?: () => void }) {
+  // Industry's card: kicker, condensed title, body; the icon sits opposite the kicker
   const body = (
     <>
-      <span className="flex size-9.5 shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-accent-ink">
-        <Icon name={t.icon} className="size-4.75" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[15.5px] font-bold">
-          {t.title}
-          {t.status === 'soon' && <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-normal text-muted">Soon</span>}
+      <span className="flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold tracking-widest text-accent-ink uppercase">
+          {t.category === 'pdf' ? 'PDF' : 'Image'}
+          {t.status === 'soon' && ' · Soon'}
         </span>
-        <span className="mt-0.5 block text-[13.5px] leading-snug text-muted">{t.description}</span>
+        <Icon name={t.icon} className="size-5 text-accent-ink" />
       </span>
+      <span className="font-heading text-xl leading-tight font-semibold">{t.title}</span>
+      <span className="text-sm leading-snug text-muted">{t.description}</span>
     </>
   )
-  const edge = suggested ? 'border-accent ring-1 ring-accent' : dim ? 'border-line' : 'border-line hover:border-accent-2 hover:bg-surface-2'
-  const box = `flex h-full w-full items-start gap-3.5 rounded-[14px] border bg-surface p-4.5 text-left transition-colors duration-150 ${edge}`
+  const edge = suggested ? 'border-accent ring-1 ring-accent' : dim ? 'border-line' : 'border-line hover:border-accent-2 hover:bg-ink/4'
+  const box = `blueprint flex h-full w-full flex-col gap-1.5 border p-4 text-left transition-colors duration-150 ${edge}`
   if (dim) return <div aria-disabled="true" className={`${box} opacity-50`}>{body}</div>
   if (onOpen) return <button onClick={onOpen} className={`${box} ${focus}`}>{body}</button>
   return <a href={`#/tool/${t.id}`} className={`${box} ${focus}`}>{body}</a>

@@ -217,14 +217,14 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           {!empty && (
             <ul className="space-y-2 overflow-auto lg:max-h-72 xl:max-h-none">
               {files.map((f, i) => (
-                <li key={`${f.name}-${i}`} className={`flex items-center gap-1 rounded-[14px] border px-3 py-2.5 text-sm ${showPreview && i === active ? 'border-accent-2 bg-accent-soft' : 'border-line bg-surface'}`}>
-                  {tool.multiple && files.length > 1 && <span className="w-6 shrink-0 font-mono text-[13px] text-accent-ink">{String(i + 1).padStart(2, '0')}</span>}
+                <li key={`${f.name}-${i}`} className={`flex items-center gap-1 border px-3 py-2.5 text-sm ${showPreview && i === active ? 'border-accent-2 bg-accent-soft' : 'border-line'}`}>
+                  {tool.multiple && files.length > 1 && <span className="w-6 shrink-0 text-[13px] font-semibold tabular-nums tracking-widest text-accent-ink">{String(i + 1).padStart(2, '0')}</span>}
                   <button
                     onClick={() => setActive(i)}
                     aria-label={`Preview ${f.name}`}
                     aria-current={showPreview && i === active ? 'true' : undefined}
                     title={f.name}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-accent"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-accent"
                   >
                     <Thumb file={f} />
                     <span className="min-w-0">
@@ -252,7 +252,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
               // a tool with its own surface lays out its own cards (surface, controls) in the same grid
               panelBody
             ) : (
-              <Card className="space-y-5 rounded-2xl p-5">
+              <Card className="space-y-5 p-5">
               {soon ? (
                 <p className="text-sm text-muted">This tool isn't built yet. Files you add here stay in your browser and nothing runs.</p>
               ) : (
@@ -294,7 +294,7 @@ function IconButton({ label, icon, disabled, onClick }: { label: string; icon: s
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-ink hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-30 disabled:hover:bg-transparent"
+      className="flex size-8 shrink-0 items-center justify-center text-ink hover:bg-ink/7 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-30 disabled:hover:bg-transparent"
     >
       <Icon name={icon} className="size-4.5" />
     </button>
@@ -305,7 +305,7 @@ function Progress({ value, onCancel }: { value: number; onCancel: () => void }) 
   const pct = Math.round(value * 100)
   return (
     <div className="flex items-center gap-3">
-      <div role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+      <div role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-2 flex-1 overflow-hidden bg-surface-2">
         <div className="h-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
       </div>
       <span role="status" className="w-10 text-right text-sm text-muted">{pct}%</span>
@@ -341,26 +341,26 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
       }}
       // a click on the dimmed area (the dialog element itself, outside its padded content) closes it
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="m-auto w-[min(32rem,92vw)] rounded-2xl border border-line bg-surface p-0 text-ink backdrop:bg-black/60"
+      className="m-auto w-[min(32rem,92vw)] border border-line bg-canvas p-0 text-ink shadow-lg backdrop:bg-black/50"
     >
       <div className="space-y-4 p-6">
         <div className="flex items-start justify-between gap-3">
-          <h2 id={titleId} role="status" className="flex flex-1 items-center gap-3 rounded-[14px] border border-success/40 bg-success-soft px-4 py-3 text-base font-bold">
+          <h2 id={titleId} role="status" className="flex flex-1 items-center gap-3 border border-success/40 bg-success-soft px-4 py-3 text-2xl">
             <Icon name="check" className="size-5 shrink-0 text-success" />
             <span>
               Done on this device
-              <span className="block font-mono text-[13px] font-normal text-muted">{outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}</span>
+              <span className="block font-sans text-[13px] font-normal tracking-normal tabular-nums text-muted">{outputs.length} {outputs.length === 1 ? 'file' : 'files'}, {formatBytes(total)}</span>
             </span>
           </h2>
-          <button onClick={onClose} aria-label="Close" className="-m-1 rounded p-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent">
+          <button onClick={onClose} aria-label="Close" className="-m-1 p-1 hover:bg-ink/7 focus-visible:outline-2 focus-visible:outline-accent">
             <Icon name="x" className="size-5" />
           </button>
         </div>
-        <ul className="max-h-60 divide-y divide-line overflow-auto rounded-[14px] border border-line text-sm">
+        <ul className="max-h-60 divide-y divide-line overflow-auto border border-line text-sm">
           {outputs.map((o, i) => (
             <li key={i} className="flex gap-3 px-3 py-1.5">
               <span className="min-w-0 flex-1 truncate">{o.name}</span>
-              <span className="font-mono text-xs text-muted">{formatBytes(o.bytes.length)}</span>
+              <span className="text-xs tabular-nums text-muted">{formatBytes(o.bytes.length)}</span>
             </li>
           ))}
         </ul>
@@ -381,7 +381,7 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
                   setHandoff(outputs.map(toFile))
                   location.hash = `#/tool/${t.id}`
                 }}
-                className="rounded-full border border-line bg-surface px-3 py-1 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
+                className="border border-line px-2.5 py-1 hover:bg-ink/7 focus-visible:outline-2 focus-visible:outline-accent"
               >
                 {t.title}
               </button>

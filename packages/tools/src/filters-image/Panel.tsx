@@ -27,7 +27,7 @@ export function Panel({ options: o, onChange }: PanelProps<O>) {
             type="button"
             aria-pressed={look === p.id}
             onClick={() => onChange(presetValues(p.id))}
-            className={`rounded-full border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:py-2.5 ${look === p.id ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface-2'}`}
+            className={`border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:py-2.5 ${look === p.id ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface-2'}`}
           >
             {p.label}
           </button>

@@ -438,20 +438,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fontsource-variable/jetbrains-mono@npm:^5.3.0":
-  version: 5.3.0
-  resolution: "@fontsource-variable/jetbrains-mono@npm:5.3.0"
-  checksum: 10c0/ba983321b530a56696b12390a377c79a962376a33359eeda37c9a2141450802e0b630e6c232d90aab0281179e623d01c77d1bc8059ce595fe865fbc6d6022ffb
-  languageName: node
-  linkType: hard
-
-"@fontsource-variable/manrope@npm:^5.3.0":
-  version: 5.3.0
-  resolution: "@fontsource-variable/manrope@npm:5.3.0"
-  checksum: 10c0/8b760dff605c6d43c64e39243568c89f7806e59e86ac80e83a0dab42dfadfb1498d8f1816c78c24875e2f743b5340653c8bdd33cd75d051a1af56ed3802bfd0d
-  languageName: node
-  linkType: hard
-
 "@fontsource/anton@npm:^5.3.0":
   version: 5.3.0
   resolution: "@fontsource/anton@npm:5.3.0"
@@ -463,6 +449,20 @@ __metadata:
   version: 5.3.0
   resolution: "@fontsource/arimo@npm:5.3.0"
   checksum: 10c0/87cfd2a0a184ba7091d056906427181220ed1492ab6bede6dca1e260d69596b0380abfe578298ba41de3a9b1d3279e7f2ce86e95a96191501868d24552573a8a
+  languageName: node
+  linkType: hard
+
+"@fontsource/barlow-condensed@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/barlow-condensed@npm:5.3.0"
+  checksum: 10c0/0b2a913cc5e75ca66cdeddbc5304be3fff5dbb374f70e82cdf515f4fec32871bb5dd50e16fe3faf2bc2f656b387be475dd95d039463a035b583209d625c94643
+  languageName: node
+  linkType: hard
+
+"@fontsource/barlow@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/barlow@npm:5.3.0"
+  checksum: 10c0/2efe5abb3dac2ef2eb3ae9a3fd5acdc6955daf85efc1b5439081003e2d67ea90d62aae1d54fd1dcf6fc0eccfc815174bb77e70120a4973c0142431827d0b9c6d
   languageName: node
   linkType: hard
 
@@ -675,8 +675,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ream/web@workspace:apps/web"
   dependencies:
-    "@fontsource-variable/jetbrains-mono": "npm:^5.3.0"
-    "@fontsource-variable/manrope": "npm:^5.3.0"
+    "@fontsource/barlow": "npm:^5.3.0"
+    "@fontsource/barlow-condensed": "npm:^5.3.0"
     "@ream/core": "workspace:*"
     "@ream/image-core": "workspace:*"
     "@ream/office-core": "workspace:*"

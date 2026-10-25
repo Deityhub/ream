@@ -1,15 +1,16 @@
 import { Icon } from '@ream/ui'
 import { findTool, tools } from '@ream/tools'
 import type { Category, Tool } from '@ream/core'
-import { Glow, Marketing, primary, secondary } from './Marketing'
+import { Marketing, kicker, primary, secondary, wrap } from './Marketing'
 import { ToolCard } from './Home'
 import { filterHref, focus } from './TopBar'
 
 const ready = tools.filter((t) => t.status === 'ready')
 const pick = (ids: string[]) => ids.map(findTool).filter((t): t is Tool => !!t)
-const groups: { cat: Category; title: string; blurb: string; noun: string; tools: Tool[] }[] = [
+const groups: { cat: Category; label: string; title: string; blurb: string; noun: string; tools: Tool[] }[] = [
   {
     cat: 'pdf',
+    label: 'Documents',
     title: 'PDF tools',
     blurb: 'Merge, split, edit, sign, protect and convert PDFs.',
     noun: 'PDF',
@@ -17,6 +18,7 @@ const groups: { cat: Category; title: string; blurb: string; noun: string; tools
   },
   {
     cat: 'image',
+    label: 'Pictures',
     title: 'Image tools',
     blurb: 'Resize, compress, convert, crop and clean up images.',
     noun: 'image',
@@ -37,93 +39,111 @@ const steps = [
 ]
 
 const facts = [
-  ['Files sent to a server', 'none'],
-  ['Account', 'none'],
-  ['Analytics or trackers', 'none'],
-  ['Network requests', 'font names, on your click'],
+  ['Files sent to a server', 'None'],
+  ['Account', 'None'],
+  ['Analytics or trackers', 'None'],
+  ['Network requests', 'Font names, on your click'],
 ]
+
+const no = (i: number) => String(i + 1).padStart(2, '0')
+const cell = 'blueprint flex flex-col gap-2 border border-line p-5'
 
 export function Landing() {
   return (
     <Marketing>
-      <section className="relative overflow-hidden">
-        <Glow />
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-7 px-4 pt-20 text-center sm:px-8 sm:pt-24">
-          <h1 className="max-w-4xl text-balance text-[clamp(2.5rem,6.4vw,4.75rem)] font-bold leading-[1.04] tracking-tight">
-            PDF and image tools that run <span className="text-accent-ink">on your computer.</span>
-          </h1>
-          <p className="max-w-2xl text-pretty text-lg leading-relaxed text-muted">
-            Merge, split, sign and redact PDFs, turn them into Word, Excel or PowerPoint, and resize, compress or convert images. The work happens on your machine, so your files never reach a server.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3.5">
-            <a className={primary} href="#/tools">Open the tools</a>
-            <a className={secondary} href="#/download">Get the desktop app</a>
-          </div>
+      <section className={`${wrap} pb-20 pt-16 sm:pt-24`}>
+        <h1 className="text-[clamp(3rem,7vw,6rem)] leading-[1.04] tracking-normal uppercase">
+          <span className="block">PDF and image tools</span>
+          <span className="block">that run on</span>
+          <span className="block text-accent-ink">your computer.</span>
+        </h1>
+        <p className="mt-8 max-w-[60ch] text-pretty text-lg leading-relaxed text-muted">
+          Merge, split, sign and redact PDFs, turn them into Word, Excel or PowerPoint, and resize, compress or convert images. The work happens on your machine, so your files never reach a server.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <a className={primary} href="#/tools">Open the tools</a>
+          <a className={secondary} href="#/download">Get the desktop app</a>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pt-24 sm:px-8">
-        <ol className="mt-9 grid grid-cols-[repeat(auto-fit,minmax(min(18rem,100%),1fr))] gap-5">
-          {trust.map((t, i) => (
-            <li key={t.title} className="space-y-3 rounded-2xl border border-line bg-surface p-6">
+      <section className={`${wrap} pt-8`}>
+        <h2 className={kicker}>01 · Privacy</h2>
+        <ul className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(min(18rem,100%),1fr))] gap-6">
+          {trust.map((t) => (
+            <li key={t.title} className={cell}>
               <Icon name={t.icon} className="size-6 text-accent-ink" />
-              <h3 className="text-lg font-bold">{t.title}</h3>
+              <h3 className="mt-2 text-2xl uppercase">{t.title}</h3>
               <p className="text-[15px] leading-relaxed text-muted">{t.body}</p>
             </li>
           ))}
-        </ol>
+        </ul>
       </section>
 
-
-      <section className="mx-auto max-w-6xl px-4 pt-24 sm:px-8">
-        <h2 className="text-center text-4xl font-bold tracking-tight">Your files stay where they already are.</h2>
-        <ol className="mt-9 grid grid-cols-[repeat(auto-fit,minmax(min(18rem,100%),1fr))] gap-5">
+      <section className={`${wrap} pt-24`}>
+        <span className={kicker}>02 · How it works</span>
+        <h2 className="mt-6 text-4xl uppercase">Your files stay where they already are.</h2>
+        <ol className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(min(18rem,100%),1fr))] gap-6">
           {steps.map((s, i) => (
-            <li key={s.title} className="space-y-3 rounded-2xl border border-line bg-surface p-6">
-              <span className="block font-mono text-[13px] text-accent-ink">{String(i + 1).padStart(2, '0')}</span>
-              <h3 className="text-lg font-bold">{s.title}</h3>
+            <li key={s.title} className={cell}>
+              <span className="text-[13px] font-semibold tracking-widest text-accent-ink tabular-nums">{no(i)}</span>
+              <h3 className="text-2xl uppercase">{s.title}</h3>
               <p className="text-[15px] leading-relaxed text-muted">{s.body}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pt-24 sm:px-8">
-        <div className="flex flex-wrap items-center gap-12 rounded-[22px] border border-line bg-surface p-6 sm:p-11">
-          <div className="min-w-0 flex-[1_1_22rem] space-y-4">
-            <h2 className="text-balance text-[34px] font-bold tracking-tight">Check it yourself.</h2>
-            <p className="text-[16.5px] leading-relaxed text-muted">
-              Open your browser's developer tools and watch the Network tab while a tool runs. Your file never appears there. The one request Ream can make is Download free fonts in the PDF tool (shown in Edit PDF, Excel to PDF and PowerPoint to PDF), which sends font names only, on your click.
-            </p>
+      <section className={`${wrap} pt-24`}>
+        {/* the spec sheet: a framed plate with a title block over the facts, tabulated */}
+        <div className="blueprint border border-line">
+          <div className="flex flex-wrap border-b border-line text-[13px] font-semibold tracking-widest uppercase">
+            <h2 className="min-w-[16ch] flex-1 px-6 py-3 font-sans text-[13px] tracking-widest">Check it yourself</h2>
+            <span className="border-l border-line px-6 py-3 text-muted">Sheet 03</span>
           </div>
-          <dl className="min-w-0 flex-[1_1_22rem] space-y-3 rounded-[14px] border border-line bg-canvas p-5 font-mono text-[13px]">
-            {facts.map(([k, v]) => (
-              <div key={k} className="flex flex-wrap justify-between gap-x-4 border-line not-first:border-t not-first:pt-3">
-                <dt className="text-muted">{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
+          <p className="max-w-[70ch] px-6 pt-5 text-[15px] leading-relaxed text-muted">
+            Open your browser's developer tools and watch the Network tab while a tool runs. Your file never appears there. The one request Ream can make is Download free fonts in the PDF tool (shown in Edit PDF, Excel to PDF and PowerPoint to PDF), which sends font names only, on your click.
+          </p>
+          <div className="overflow-x-auto px-6 pb-3 pt-4">
+            <table className="w-full min-w-md text-left">
+              <thead>
+                <tr className="border-b border-line text-[13px] text-muted">
+                  <th scope="col" className="w-16 py-3 font-semibold">№</th>
+                  <th scope="col" className="py-3 font-semibold">Property</th>
+                  <th scope="col" className="py-3 font-semibold">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {facts.map(([k, v], i) => (
+                  <tr key={k} className="border-b border-line/50 last:border-0">
+                    <td className="py-3 text-[13px] font-semibold tracking-widest text-accent-ink tabular-nums">{no(i)}</td>
+                    <td className="py-3 text-[15px]">{k}</td>
+                    <td className="py-3 font-heading text-lg font-semibold">{v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 pt-24 text-center sm:px-8">
-        <h2 className="max-w-2xl text-balance text-[clamp(2rem,4.6vw,3.25rem)] font-bold tracking-tight">Pick a tool and start. Your files stay with you.</h2>
+      <section className={`${wrap} flex flex-col items-start gap-6 pt-24`}>
+        <h2 className="max-w-3xl text-[clamp(2.25rem,4.6vw,3.5rem)] leading-[1.04] uppercase">Pick a tool and start. Your files stay with you.</h2>
         <a className={primary} href="#/tools">Open the tools</a>
       </section>
 
-      {groups.map((g) => (
-        <section key={g.cat} className="mx-auto max-w-6xl px-4 pt-16 sm:px-8">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      {groups.map((g, i) => (
+        <section key={g.cat} className={`${wrap} pt-24`}>
+          <span className={kicker}>{no(i + 3)} · {g.label}</span>
+          <div className="mb-8 mt-6 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-[32px] font-bold tracking-tight">{g.title}</h2>
-              <p className="mt-1.5 text-[17px] text-muted">{g.blurb}</p>
+              <h2 className="text-4xl uppercase">{g.title}</h2>
+              <p className="mt-1 text-[17px] text-muted">{g.blurb}</p>
             </div>
-            <a href={filterHref(g.cat)} className={`rounded-md text-[15px] font-semibold text-accent-ink hover:underline ${focus}`}>
+            <a href={filterHref(g.cat)} className={`font-heading text-lg font-semibold tracking-wide text-accent-ink uppercase hover:underline ${focus}`}>
               All {ready.filter((t) => t.category === g.cat).length} {g.noun} tools →
             </a>
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(16rem,100%),1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(16rem,100%),1fr))] gap-6">
             {g.tools.map((t) => <ToolCard key={t.id} tool={t} />)}
           </div>
         </section>

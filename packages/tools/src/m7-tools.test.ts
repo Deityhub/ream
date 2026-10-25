@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import type { FileData } from '@ream/core'
-import { PdfDocument, extract, fillForm, merge, readForm, readOutline, type OutlineItem } from '@ream/pdf-core'
+import { PdfDocument, extract, fillForm, merge, readForm, readOutline, type FontFaceInfo, type OutlineItem } from '@ream/pdf-core'
 import { brokenXrefPdf, classicPdf, formPdf, pageTexts } from '../../pdf-core/test/helpers.ts'
 import { run as bookmarks } from './bookmarks-pdf/run.ts'
 import { run as organize } from './organize-pdf/run.ts'
 import { duplicate, isOriginal, moveTo, original, removeAt, turn } from './organize-pdf/pages.ts'
 import { run as repair } from './repair-pdf/run.ts'
 import { run as toText } from './pdf-to-text/run.ts'
-import { run as watermark, type WatermarkOptions } from './watermark/run.ts'
+import { faceFor, run as watermark, type WatermarkOptions } from './watermark/run.ts'
 import { makeTtf } from '../../pdf-core/test/ttf-helper.ts'
 import { indent, insertAfter, move, outdent, remove, rows, siblings, update } from './bookmarks-pdf/tree.ts'
 
@@ -179,6 +179,37 @@ describe('watermark with an uploaded font', () => {
   test('a letter the font lacks, and a file that is not a font, are explained', async () => {
     await expect(watermark([pdf(1)], o({ text: 'Aש' }), ctx)).rejects.toThrow('no glyph for')
     await expect(watermark([pdf(1)], o({ fontFile: new TextEncoder().encode('not a font at all, really') }), ctx)).rejects.toThrow("isn't a TrueType or OpenType font")
+  })
+
+  test('bold and italic are drawn when the font has no face for them: an outline in the text colour, and a slant', async () => {
+    const raw = async (patch: Partial<WatermarkOptions>) => new TextDecoder('latin1').decode((await watermark([pdf(1)], o(patch), ctx))[0].bytes)
+    const plain = await raw({})
+    expect(plain).not.toContain(' Tr ')
+    expect(plain).toMatch(/1 0 0 1 [-\d.]+ [-\d.]+ Tm <00020003> Tj/)
+    // 3% of the 40 pt size, filled and stroked in the watermark's grey
+    expect(await raw({ bold: true })).toContain('/ReamEmbWm 40 Tf 2 Tr 1.2 w 1 j 0.533 0.533 0.533 RG')
+    expect(await raw({ italic: true })).toMatch(/1 0 0\.2126 1 [-\d.]+ [-\d.]+ Tm <00020003> Tj/)
+  })
+
+  test('the file\'s own bold or italic face is used when it has one, and only what is missing is drawn', () => {
+    const face = (style: string, embeddable = true): FontFaceInfo => ({ family: 'Sans', style, postscript: `Sans-${style.replace(' ', '')}`, embeddable })
+    const all = [face('Regular'), face('Bold'), face('Italic'), face('Bold Italic')]
+    expect(faceFor(all, true, false)).toEqual({ face: 'Sans-Bold', fakeBold: false, fakeItalic: false })
+    expect(faceFor(all, true, true)).toEqual({ face: 'Sans-BoldItalic', fakeBold: false, fakeItalic: false })
+    expect(faceFor(all, false, false)).toEqual({ face: 'Sans-Regular', fakeBold: false, fakeItalic: false })
+    // no bold italic: the bold face, slanted
+    expect(faceFor([face('Regular'), face('Bold')], true, true)).toEqual({ face: 'Sans-Bold', fakeBold: false, fakeItalic: true })
+    // a bold face whose licence forbids embedding is passed over for the regular one, drawn bold
+    expect(faceFor([face('Regular'), face('Bold', false)], true, false)).toEqual({ face: 'Sans-Regular', fakeBold: true, fakeItalic: false })
+    // a file that only has a bold face stays bold, and gets nothing added
+    expect(faceFor([face('Black')], false, false)).toEqual({ face: 'Sans-Black', fakeBold: false, fakeItalic: false })
+    // a big family: the faces named Regular and Bold, not Medium or Demi Bold
+    const family = ['Bold', 'Bold Italic', 'Demi Bold', 'Italic', 'Medium', 'Regular', 'Heavy', 'Ultra Light'].map((st) => face(st))
+    expect(faceFor(family, false, false).face).toBe('Sans-Regular')
+    expect(faceFor(family, true, false).face).toBe('Sans-Bold')
+    expect(faceFor(family, false, true).face).toBe('Sans-Italic')
+    // a font without names (the test font) is its first face, with everything drawn
+    expect(faceFor([], true, true)).toEqual({ face: 0, fakeBold: true, fakeItalic: true })
   })
 
   test('without a font file it is Helvetica and Latin only, as before', async () => {

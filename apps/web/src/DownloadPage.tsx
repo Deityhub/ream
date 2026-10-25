@@ -1,5 +1,5 @@
 import { Icon } from '@ream/ui'
-import { Glow, Marketing, primary } from './Marketing'
+import { Marketing, kicker, primary, wrap } from './Marketing'
 
 // the supported systems are Electron 38's
 const platforms = [
@@ -19,41 +19,42 @@ const differences = [
 export function DownloadPage() {
   return (
     <Marketing>
-      <section className="relative overflow-hidden">
-        <Glow />
-        <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-5 px-4 pb-10 pt-20 text-center sm:px-8">
-          <h1 className="text-balance text-[clamp(2.25rem,5.2vw,3.75rem)] font-bold leading-[1.06] tracking-tight">
-            Ream for your desktop. <span className="text-accent-ink">No connection needed.</span>
-          </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-muted">The same tools as the web version, in an app for macOS, Windows and Linux. No account, no sign-in.</p>
-        </div>
+      <section className={`${wrap} pb-14 pt-16 sm:pt-24`}>
+        <h1 className="text-[clamp(2.75rem,6vw,5rem)] leading-[1.04] tracking-normal uppercase">
+          <span className="block">Ream for your desktop.</span>
+          <span className="block text-accent-ink">No connection needed.</span>
+        </h1>
+        <p className="mt-8 max-w-[60ch] text-lg leading-relaxed text-muted">The same tools as the web version, in an app for macOS, Windows and Linux. No account, no sign-in.</p>
       </section>
 
-      <div className="mx-auto max-w-5xl space-y-5 px-4 sm:px-8">
-        <p role="note" className="flex items-start gap-3 rounded-[14px] border border-line bg-surface px-5 py-4 text-[15px] leading-relaxed">
+      <div className={`${wrap} space-y-8`}>
+        <p role="note" className="flex items-start gap-3 border border-line px-5 py-4 text-[15px] leading-relaxed">
           <Icon name="info" className="mt-0.5 size-5 shrink-0 text-accent-ink" />
           <span>
             Installers aren't published yet. Until they are, use Ream in your browser: <a className="font-semibold text-accent-ink underline" href="#/tools">open the tools</a>. Developers can run the app from the source code with <code className="font-mono text-sm">yarn desktop</code>.
           </span>
         </p>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(17rem,100%),1fr))] gap-5">
-          {platforms.map((p) => (
-            <div key={p.id} className={`flex flex-col gap-4 rounded-[18px] border bg-surface p-6 ${p.id === detected ? 'border-accent-2' : 'border-line'}`}>
-              <span className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-extrabold">{p.name}</h2>
-                {p.id === detected && <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-on-accent">Your system</span>}
-              </span>
-              <p className="flex-1 text-[14.5px] leading-relaxed text-muted">{p.req}</p>
-              <button disabled className="min-h-12 rounded-xl border border-line bg-surface-2 px-4 text-[15px] font-bold disabled:cursor-not-allowed disabled:opacity-60">
-                Not released yet
-              </button>
-            </div>
-          ))}
-        </div>
+        <section>
+          <h2 className={kicker}>01 · Platforms</h2>
+          <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(min(17rem,100%),1fr))] gap-6">
+            {platforms.map((p) => (
+              <div key={p.id} className={`blueprint flex flex-col gap-3 border p-5 ${p.id === detected ? 'border-accent-2' : 'border-line'}`}>
+                <span className="flex items-center justify-between gap-3">
+                  <h3 className="text-2xl uppercase">{p.name}</h3>
+                  {p.id === detected && <span className="bg-accent-soft px-2.5 py-0.5 text-[11px] font-semibold tracking-widest text-accent-ink uppercase">Your system</span>}
+                </span>
+                <p className="flex-1 text-[15px] leading-relaxed text-muted">{p.req}</p>
+                <button disabled className="mt-2 min-h-11 border border-line px-4 font-heading text-[17px] font-semibold tracking-wide disabled:opacity-60">
+                  Not released yet
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
 
-        <div className="space-y-4 rounded-[18px] border border-line bg-surface p-7">
-          <h2 className="text-lg font-extrabold">How the desktop app differs</h2>
+        <section className="space-y-6 pt-8">
+          <h2 className={kicker}>02 · How the desktop app differs</h2>
           <ul className="space-y-3">
             {differences.map((d) => (
               <li key={d} className="flex items-start gap-3 text-[15px] leading-relaxed">
@@ -62,9 +63,9 @@ export function DownloadPage() {
               </li>
             ))}
           </ul>
-        </div>
+        </section>
 
-        <div className="flex justify-center pt-8">
+        <div className="pt-8">
           <a className={primary} href="#/tools">Use Ream in your browser</a>
         </div>
       </div>

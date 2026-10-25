@@ -1,101 +1,62 @@
-/* Palette scales: usable as Tailwind colours (bg-cerulean-600, text-jet-black-700, ...).
-   jet-black is the neutral scale and cerulean the accent; the other three tint categories and status. */
+/* Industry design system. The ramps are its own (100-900, generated in OKLCH on one lightness scale);
+   steel is the single accent, neutral the greys. Usable as Tailwind colours, but components use the semantic tokens below. */
 @theme {
-  --color-jet-black-50: #eef4f6;
-  --color-jet-black-100: #ddeaee;
-  --color-jet-black-200: #bbd5dd;
-  --color-jet-black-300: #99c0cc;
-  --color-jet-black-400: #77abbb;
-  --color-jet-black-500: #5596aa;
-  --color-jet-black-600: #447888;
-  --color-jet-black-700: #335a66;
-  --color-jet-black-800: #223c44;
-  --color-jet-black-900: #111e22;
-  --color-jet-black-950: #0c1518;
+  --color-neutral-100: #f5f5f8;
+  --color-neutral-200: #e7e7ea;
+  --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba;
+  --color-neutral-500: #98989b;
+  --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60;
+  --color-neutral-800: #424244;
+  --color-neutral-900: #2b2b2d;
 
-  --color-cerulean-50: #eef5f7;
-  --color-cerulean-100: #dceaef;
-  --color-cerulean-200: #b9d5df;
-  --color-cerulean-300: #96c1cf;
-  --color-cerulean-400: #73acbf;
-  --color-cerulean-500: #5097af;
-  --color-cerulean-600: #40798c;
-  --color-cerulean-700: #305b69;
-  --color-cerulean-800: #203c46;
-  --color-cerulean-900: #101e23;
-  --color-cerulean-950: #0b1518;
-
-  --color-tropical-teal-50: #eff5f5;
-  --color-tropical-teal-100: #dfecea;
-  --color-tropical-teal-200: #bfd9d5;
-  --color-tropical-teal-300: #9fc6c1;
-  --color-tropical-teal-400: #80b3ac;
-  --color-tropical-teal-500: #609f97;
-  --color-tropical-teal-600: #4d8079;
-  --color-tropical-teal-700: #39605b;
-  --color-tropical-teal-800: #26403c;
-  --color-tropical-teal-900: #13201e;
-  --color-tropical-teal-950: #0d1615;
-
-  --color-muted-teal-50: #eff5f0;
-  --color-muted-teal-100: #e0ebe2;
-  --color-muted-teal-200: #c1d7c4;
-  --color-muted-teal-300: #a2c3a7;
-  --color-muted-teal-400: #83af89;
-  --color-muted-teal-500: #639c6c;
-  --color-muted-teal-600: #507c56;
-  --color-muted-teal-700: #3c5d41;
-  --color-muted-teal-800: #283e2b;
-  --color-muted-teal-900: #141f16;
-  --color-muted-teal-950: #0e160f;
-
-  --color-tea-green-50: #f2f6ee;
-  --color-tea-green-100: #e4eedd;
-  --color-tea-green-200: #c9dcbc;
-  --color-tea-green-300: #aecb9a;
-  --color-tea-green-400: #94ba78;
-  --color-tea-green-500: #79a857;
-  --color-tea-green-600: #618745;
-  --color-tea-green-700: #486534;
-  --color-tea-green-800: #304323;
-  --color-tea-green-900: #182211;
-  --color-tea-green-950: #11180c;
+  --color-steel-100: #eef6ff;
+  --color-steel-200: #d6ebff;
+  --color-steel-300: #b5d9fd;
+  --color-steel-400: #94bce3;
+  --color-steel-500: #749dc4;
+  --color-steel-600: #597ea3;
+  --color-steel-700: #416180;
+  --color-steel-800: #2c455d;
+  --color-steel-900: #1d2d3d;
 }
 
-/* Semantic tokens: components use these, never the scales directly. light-dark() picks per colour-scheme;
+/* Semantic tokens: components use these, never the ramps directly. light-dark() picks per colour-scheme;
    data-theme overrides the system setting. `node scripts/contrast.ts` checks every pair below.
-   Dark values are the design system's own (near-black ground, one cool accent, green only for "done on this device");
-   light values are derived from them. */
+   Light is Industry's paper ground. Its base steel (#5980a6) is 3.7:1 on that ground, so text and the
+   primary fill take the 700 step (5.8:1), and muted text the neutral 700 instead of 55% ink.
+   Industry has no dark mode; ours is derived: the deep steel as ground, type reversed to paper. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f4f7f9, #0a1014);
-  --surface: light-dark(#ffffff, #0f171c);
-  --surface-2: light-dark(#e8eef2, #141f26);
-  --border: light-dark(#d3dee5, #1f2d36);
+  --bg: light-dark(#f2f2f3, var(--color-steel-900));
+  /* cards and figures are line drawings: no fill of their own */
+  --surface: light-dark(#f2f2f3, var(--color-steel-900));
+  /* inputs, hovers and raised rows */
+  --surface-2: light-dark(#e9e9ea, var(--color-steel-800));
+  /* hairlines: 16% ink on paper, 18% paper on steel */
+  --border: light-dark(#d0d0d1, #43515e);
   /* borders of inputs need 3:1 against the surface, hairlines do not */
-  --border-field: light-dark(#768c9a, #557080);
-  --text: light-dark(#0a1014, #eaf1f5);
-  --text-muted: light-dark(#4a5d69, #9db0bc);
+  --border-field: light-dark(var(--color-neutral-600), var(--color-steel-500));
+  --text: light-dark(#1d1f20, #f2f2f3);
+  --text-muted: light-dark(var(--color-neutral-700), var(--color-neutral-400));
   /* fills: buttons, progress, selected states */
-  --accent: light-dark(#2f6f8c, #7dbad6);
-  --accent-hover: light-dark(#255a72, #98cbe2);
-  --accent-soft: light-dark(#e1eef4, #17262f);
-  --on-accent: light-dark(#ffffff, #08141a);
-  /* accent-coloured text and links: darker than the fill in light mode so small text stays readable */
-  --accent-ink: light-dark(#255a72, #7dbad6);
-  /* second half of the logo, and hover edges */
-  --accent-2: light-dark(#7dbad6, #3c7e9c);
-  /* tool categories */
-  --cat-pdf: light-dark(#255a72, #7dbad6);
-  --cat-pdf-soft: light-dark(#e1eef4, #17262f);
-  --cat-image: light-dark(var(--color-muted-teal-700), var(--color-muted-teal-400));
-  --cat-image-soft: light-dark(var(--color-muted-teal-100), var(--color-muted-teal-800));
-  /* green means one thing: the work happened on this device */
-  --success: light-dark(#1e6e5a, #5cd6b8);
-  --success-soft: light-dark(#e2f4ee, #0e2220);
-  /* status: the palette has no red or amber, these are Tailwind's red and amber stops */
-  --danger: light-dark(#b91c1c, #f0a8a0);
-  --danger-soft: light-dark(#fef2f2, #3a1412);
+  --accent: light-dark(var(--color-steel-700), var(--color-steel-400));
+  --accent-hover: light-dark(var(--color-steel-800), var(--color-steel-300));
+  --accent-soft: light-dark(var(--color-steel-200), var(--color-steel-800));
+  --on-accent: light-dark(#f2f2f3, var(--color-steel-900));
+  /* accent-coloured text and links */
+  --accent-ink: light-dark(var(--color-steel-700), var(--color-steel-300));
+  /* the base steel: the logo's second half, hover edges and other chrome that isn't text */
+  --accent-2: light-dark(var(--color-steel-600), var(--color-steel-500));
+  /* the registration marks on framed objects */
+  --mark: light-dark(#7d7e7f, #9299a1);
+  /* a mono scheme: done reads in steel too */
+  --success: light-dark(var(--color-steel-800), var(--color-steel-300));
+  --success-soft: light-dark(var(--color-steel-100), var(--color-steel-800));
+  /* status: the system has no red or amber, these are Tailwind's red and amber stops */
+  --danger: light-dark(#b91c1c, #fca5a5);
+  --danger-soft: light-dark(#fef2f2, #450a0a);
   --warning: light-dark(#92400e, #fcd34d);
   --warning-soft: light-dark(#fffbeb, #451a03);
 }
@@ -103,8 +64,22 @@
 :root[data-theme='dark'] { color-scheme: dark; }
 
 @theme {
-  --font-sans: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-heading: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  /* everything is square: cards, buttons, inputs, figures. rounded-full (dots) is not a variable and stays round */
+  --radius: 0;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  /* Industry's elevation, tuned to the paper ground */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
 }
 
 @theme inline {
@@ -121,14 +96,31 @@
   --color-on-accent: var(--on-accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-2: var(--accent-2);
-  --color-cat-pdf: var(--cat-pdf);
-  --color-cat-pdf-soft: var(--cat-pdf-soft);
-  --color-cat-image: var(--cat-image);
-  --color-cat-image-soft: var(--cat-image-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+}
+
+/* Industry's frame: "+" registration marks on the corners of a hairline box (give it `border border-line`),
+   drawn by one pseudo-element (eight 1px lines) so markup needs no extra children. The marks reach 5px
+   outside the box, so a framed element must not clip (overflow: hidden) and needs that much room around it. */
+@utility blueprint {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    /* from the padding box: 6px out puts each cross's centre on a 1px border */
+    inset: -6px;
+    pointer-events: none;
+    --l: linear-gradient(var(--mark), var(--mark));
+    background:
+      var(--l) left 0 top 5px / 11px 1px, var(--l) left 5px top 0 / 1px 11px,
+      var(--l) right 0 top 5px / 11px 1px, var(--l) right 5px top 0 / 1px 11px,
+      var(--l) left 0 bottom 5px / 11px 1px, var(--l) left 5px bottom 0 / 1px 11px,
+      var(--l) right 0 bottom 5px / 11px 1px, var(--l) right 5px bottom 0 / 1px 11px;
+    background-repeat: no-repeat;
+  }
 }

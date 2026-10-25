@@ -3,17 +3,22 @@ import { Logo } from '@ream/ui'
 import { ThemeToggle } from './ThemeToggle'
 import { focus } from './TopBar'
 
-export const primary = `inline-flex min-h-12 items-center justify-center rounded-xl bg-accent px-6 text-base font-bold text-on-accent transition-colors duration-150 hover:bg-accent-hover ${focus}`
-export const secondary = `inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-surface px-6 text-base font-semibold transition-colors duration-150 hover:border-accent-2 ${focus}`
+const action = `inline-flex min-h-11 items-center justify-center px-5 font-heading text-[17px] font-semibold tracking-wide transition-colors duration-150 ${focus}`
+/** the one solid object on a page: an accent fill wearing the corner marks */
+export const primary = `${action} blueprint border border-accent bg-accent text-on-accent hover:border-accent-hover hover:bg-accent-hover`
+export const secondary = `${action} border border-line hover:bg-ink/7`
+/** a section's label: small caps in the deep steel, sitting over a hairline */
+export const kicker = 'block border-b border-line pb-2 font-sans text-[13px] font-semibold tracking-widest text-accent-ink uppercase tabular-nums'
+export const wrap = 'mx-auto max-w-[1600px] px-4 sm:px-8'
 
 /** Frame of the web-only pages (landing, download): their own nav and footer, not the app's bar. */
 export function Marketing({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-8">
-          <a href="#/" className={`flex items-center gap-2.5 rounded-md text-xl font-bold tracking-tight ${focus}`}>
-            <Logo size={26} /> Ream
+      <header>
+        <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 py-4`}>
+          <a href="#/" className={`flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
+            <Logo size={24} /> Ream
           </a>
           <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] font-medium">
             <ThemeToggle />
@@ -21,25 +26,14 @@ export function Marketing({ children }: { children: ReactNode }) {
         </div>
       </header>
       {children}
-      <footer className="mt-24 border-t border-line">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-7 text-sm text-muted sm:px-8">
-          <span className="flex items-center gap-2.5 font-bold text-ink">
-            <Logo size={22} /> Ream
+      <footer className="mt-24">
+        <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 border-t border-line py-7 text-sm text-muted`}>
+          <span className="flex items-center gap-2 font-heading text-lg font-semibold tracking-wide text-ink uppercase">
+            <Logo size={20} /> Ream
           </span>
           <span className="text-[13px] text-muted">© {new Date().getFullYear()} Ream, Inc. All rights reserved.</span>
-          
         </div>
       </footer>
     </div>
-  )
-}
-
-/** the soft accent glow behind a hero; decoration only */
-export function Glow() {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute -top-32 left-1/2 h-120 w-[min(56rem,100%)] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--accent-2)_32%,transparent),transparent_70%)]"
-    />
   )
 }

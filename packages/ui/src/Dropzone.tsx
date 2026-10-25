@@ -29,12 +29,12 @@ export function Dropzone({ accept, multiple = true, onFiles, compact = false, ba
         onDragOver={(e) => { e.preventDefault(); setOver(true) }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files) }}
-        className={`flex cursor-pointer border-dashed transition-colors duration-150 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent ${over ? 'border-accent bg-accent-soft' : 'border-field bg-canvas hover:bg-accent-soft'} ${
+        className={`flex cursor-pointer border border-dashed transition-colors duration-150 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent ${over ? 'border-accent bg-accent-soft' : 'border-field hover:bg-ink/4'} ${
           compact
-            ? 'items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-sm'
+            ? 'items-center justify-center gap-2 px-3 py-2.5 text-sm'
             : bar
-              ? 'flex-wrap items-center gap-5 rounded-2xl border-[1.5px] px-6 py-5'
-              : 'flex-col items-center justify-center gap-3 rounded-2xl border-[1.5px] px-6 py-12 text-center'
+              ? 'flex-wrap items-center gap-5 px-6 py-5'
+              : 'flex-col items-center justify-center gap-3 px-6 py-12 text-center'
         }`}
       >
         {compact ? (
@@ -44,20 +44,16 @@ export function Dropzone({ accept, multiple = true, onFiles, compact = false, ba
           </>
         ) : bar ? (
           <>
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-ink">
-              <Icon name="upload" className="size-6" />
-            </span>
+            <Icon name="upload" className="size-7 shrink-0 text-accent-ink" />
             <span className="min-w-0 flex-[1_1_16rem]">
-              <span className="block font-bold">{bar.title}</span>
-              <span className="mt-0.5 block text-sm text-muted">{bar.hint}</span>
+              <span className="block font-heading text-lg font-semibold">{bar.title}</span>
+              <span className="block text-sm text-muted">{bar.hint}</span>
             </span>
-            <span className="inline-flex min-h-11 items-center rounded-[10px] border border-line bg-surface-2 px-4 text-sm font-semibold">Choose files</span>
+            <span className="inline-flex min-h-9 items-center border border-line px-3.5 font-heading text-[15px] font-semibold tracking-wide pointer-coarse:min-h-11">Choose files</span>
           </>
         ) : (
           <>
-            <span className="flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent-ink">
-              <Icon name="upload" className="size-6" />
-            </span>
+            <Icon name="upload" className="size-8 text-accent-ink" />
             <span className="text-sm">
               Drop {noun} here or <span className="font-medium text-accent-ink underline">choose {noun}</span>
               <span className="mt-1 block text-muted">They are opened on this device, not uploaded.</span>

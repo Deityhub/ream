@@ -52,10 +52,10 @@ export function Panel({ options, onChange }: PanelProps<O>) {
           <input type="color" value={options.color} onChange={(e) => set({ color: e.target.value })} className="h-8 w-10 rounded border border-field bg-surface" />
         </label>
         <label className="flex items-center gap-2">
-          <input type="checkbox" disabled={!!options.fontFile} checked={options.bold} onChange={(e) => set({ bold: e.target.checked })} /> Bold
+          <input type="checkbox" checked={options.bold} onChange={(e) => set({ bold: e.target.checked })} /> Bold
         </label>
         <label className="flex items-center gap-2">
-          <input type="checkbox" disabled={!!options.fontFile} checked={options.italic} onChange={(e) => set({ italic: e.target.checked })} /> Italic
+          <input type="checkbox" checked={options.italic} onChange={(e) => set({ italic: e.target.checked })} /> Italic
         </label>
       </div>
       <RangeField label="Opacity" value={options.opacity} min={5} max={100} unit="%" onChange={(opacity) => set({ opacity })} />
@@ -90,7 +90,7 @@ export function Panel({ options, onChange }: PanelProps<O>) {
         Pages
         <input type="text" value={options.pages} onChange={(e) => set({ pages: e.target.value })} placeholder="All pages, or like 1-3, 5" className={`${inputClass} w-full`} />
       </label>
-      <p className="text-xs text-muted">{options.fontFile ? 'The font must be a TrueType or OpenType file (.ttf, .otf) that allows embedding, and have every letter of the text. Letters are placed one after another with no kerning, so scripts that need shaping (Arabic, Indic) are not supported. ' : 'Helvetica has Latin letters, digits and common symbols; use a font file for other scripts. '}Text behind the page is hidden where the page has a solid background.</p>
+      <p className="text-xs text-muted">{options.fontFile ? 'The font must be a TrueType or OpenType file (.ttf, .otf) that allows embedding, and have every letter of the text. Letters are placed one after another with no kerning, so scripts that need shaping (Arabic, Indic) are not supported. Bold and italic use the file\'s own bold and italic when it has them (a .ttc collection can hold several); otherwise the letters are drawn thicker and slanted. ' : 'Helvetica has Latin letters, digits and common symbols; use a font file for other scripts. '}Text behind the page is hidden where the page has a solid background.</p>
     </fieldset>
   )
 }
