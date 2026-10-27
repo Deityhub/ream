@@ -14,7 +14,8 @@ export const wrap = 'mx-auto max-w-[1600px] px-4 sm:px-8'
 /** Frame of the landing, licence and notices pages: their own nav and footer, not the app's bar. */
 export function Marketing({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen">
+    // a column at least the window's height: the content takes the free space, so a short page still ends in its footer
+    <div className="flex min-h-screen flex-col">
       <header>
         <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 py-4`}>
           <a href="#/" className={`flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
@@ -25,7 +26,7 @@ export function Marketing({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      {children}
+      <main className="flex-1">{children}</main>
       <footer className="mt-24">
         <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 border-t border-line py-7 text-sm text-muted`}>
           <span className="flex items-center gap-2 font-heading text-lg font-semibold tracking-wide text-ink uppercase">
