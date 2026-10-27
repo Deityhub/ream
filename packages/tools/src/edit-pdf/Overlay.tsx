@@ -361,11 +361,16 @@ function Shape({ item: i, P }: { item: Item; P: (v: number, axis: 'x' | 'y') => 
       const a = Math.atan2(ty - fy, tx - fx)
       return [[tx, ty], [tx - head * Math.cos(a + 0.45), ty - head * Math.sin(a + 0.45)], [tx - head * Math.cos(a - 0.45), ty - head * Math.sin(a - 0.45)]].map((p) => p.join(',')).join(' ')
     }
+    // the shaft stops inside the head, so its square end doesn't poke through the point (as in the saved file)
+    const len = Math.hypot(x2 - x1, y2 - y1) || 1
+    const [ux, uy] = [(x2 - x1) / len, (y2 - y1) / len]
+    const [ex, ey] = i.arrow !== 'none' ? [x2 - ux * head * 0.8, y2 - uy * head * 0.8] : [x2, y2]
+    const [sx, sy] = i.arrow === 'both' ? [x1 + ux * head * 0.8, y1 + uy * head * 0.8] : [x1, y1]
     return (
       <g opacity={i.opacity}>
         {/* a wide invisible line makes a thin one easy to pick */}
         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={Math.max(12, i.width + 8)} />
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={i.colour} strokeWidth={i.width} />
+        <line x1={sx} y1={sy} x2={ex} y2={ey} stroke={i.colour} strokeWidth={i.width} />
         {i.arrow !== 'none' && <polygon points={tri(x2, y2, x1, y1)} fill={i.colour} />}
         {i.arrow === 'both' && <polygon points={tri(x1, y1, x2, y2)} fill={i.colour} />}
       </g>
