@@ -1,12 +1,12 @@
 # Ream
 
-**PDF and image tools that run on your computer.** Merge, split, sign, redact and edit PDFs, turn them into Word, Excel or PowerPoint and back, and resize, compress or convert images, all in your browser. Your files are opened and processed on your own device and never reach a server. No account, no uploads, no trackers, and it works offline.
+**Ream is the file toolkit that runs on your computer.** Convert, edit, compress and secure PDFs, images and Office documents in your browser, with more kinds of file on the way. Your files are opened and processed on your own device and never reach a server. No account, no uploads, no trackers, and it works offline.
 
 **Use it at [ream.deityhub.com](https://ream.deityhub.com).**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/landing-dark.png">
-  <img alt="Ream's home page: PDF and image tools that run on your computer" src="docs/images/landing-light.png">
+  <img alt="Ream's home page: the file toolkit that runs on your computer" src="docs/images/landing-light.png">
 </picture>
 
 <picture>
@@ -20,7 +20,7 @@
 - **Conversions:** PDF to Word, Excel, PowerPoint and images; Excel, PowerPoint and images to PDF.
 - **Images:** resize, compress, convert, crop, rotate and flip, merge, blur or hide parts, filters, watermark, photo metadata, animated GIFs, memes.
 
-Everything runs in the page, on Ream's own engines (PDF parser, writer and renderer, image codecs, Office readers), with no server behind them. The one network request Ream can make is **Download free fonts**, which sends font names only, when you click it. [docs/limits.md](docs/limits.md) says honestly what is approximate or not supported yet.
+Everything runs in the page, on Ream's own engines (PDF parser, writer and renderer, image codecs, Office readers), with no server behind them. The one network request Ream can make is **Download free fonts**, which sends font names only, when you click it.
 
 ## Installation
 
@@ -67,7 +67,7 @@ The production site is a folder of static files: any web server can serve `apps/
 
 Contributions are welcome. Branch from `dev`, open a pull request into `dev`, and make sure `yarn typecheck`, `yarn test` and `yarn build` pass; the pipeline checks the same on every pull request and links a preview of your change. Ream keeps a few firm rules: nothing leaves the user's device, its engines have no runtime dependencies, and everything shipped is MIT-compatible.
 
-[CONTRIBUTING.md](CONTRIBUTING.md) has the details, and [AGENTS.md](AGENTS.md) is the full guide to the code. More in [docs/](docs): the [roadmap](docs/roadmap.md), the [known limits](docs/limits.md), the [design](docs/design.md), and [deploys and releases](docs/deploy.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) has the details, and [AGENTS.md](AGENTS.md) is the full guide to the code. More in [docs/](docs): the [design](docs/design.md), and [deploys and releases](docs/deploy.md).
 
 ## Licence
 

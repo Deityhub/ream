@@ -1,6 +1,6 @@
 # Contributing to Ream
 
-Thanks for helping. Ream is a set of PDF and image tools that run entirely in the browser: files are never uploaded. Keep that true in everything you change.
+Thanks for helping. Ream is a client-side file toolkit: tools for PDFs, images and Office documents, with more kinds of file (such as SVG) to come, all running on the user's device. Files are never uploaded. Keep that true in everything you change.
 
 ## Setting up
 
@@ -37,7 +37,6 @@ Add tests with your change: engines and tools are tested in plain Node, and a to
 - **Nothing leaves the device.** No network request may carry a user's file or anything about it. The only request Ream makes is Download free fonts (font names, on the user's click). A new host needs the content security policy in `apps/web/public/_headers` changed, and a good reason.
 - **Own engines.** The PDF parser and writer, the renderer, the image codecs and the Office readers are Ream's own. The engine packages have no runtime dependencies; don't add pdf.js, pdf-lib, sharp and the like.
 - **MIT-compatible only.** Ream is MIT licensed. Anything shipped must be too (MIT, ISC, BSD, Apache-2.0, OFL for fonts); no GPL, AGPL or LGPL. `node scripts/notices.ts` fails on anything else.
-- **Honest limits.** When something is approximate or unsupported, say so in the tool's panel and in [docs/limits.md](docs/limits.md).
 - **Copy:** British spelling, sentence case, plain words; say what happened and what to do.
 
 [AGENTS.md](AGENTS.md) has the full guide to the code: the tool contract, the engines, the design system and how changes are checked. Read it before larger changes.
@@ -55,7 +54,7 @@ Add tests with your change: engines and tools are tested in plain Node, and a to
 | `packages/tools` | One folder per tool, plus the registry |
 | `apps/web` | The web app (Vite, React, Tailwind) and its service worker |
 | `scripts/` | Dev tooling: CLI, fixtures, renderer comparison, contrast and licence checks, headless Chrome |
-| `docs/` | Roadmap, known limits, design, deploy and releases |
+| `docs/` | design, deploy and releases |
 
 ## Licence
 

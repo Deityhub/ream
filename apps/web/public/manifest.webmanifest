@@ -1,7 +1,7 @@
 {
-  "name": "Ream: PDF and image tools",
+  "name": "Ream: file toolkit",
   "short_name": "Ream",
-  "description": "PDF and image tools that run on your computer. Your files never reach a server.",
+  "description": "A private file toolkit that runs on your computer. Convert, edit and secure PDFs, images and documents without uploading them.",
   "id": "./",
   "start_url": "./#/tools",
   "scope": "./",

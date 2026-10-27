@@ -79,12 +79,12 @@ export function Landing() {
     <Marketing>
       <section className={`${wrap} pb-20 pt-16 sm:pt-24`}>
         <h1 className="text-[clamp(3rem,7vw,6rem)] leading-[1.04] tracking-normal uppercase">
-          <span className="block">PDF and image tools</span>
-          <span className="block">that run on</span>
+          <span className="block">The file toolkit</span>
+          <span className="block">that runs on</span>
           <span className="block text-accent-ink">your computer.</span>
         </h1>
         <p className="mt-8 max-w-[60ch] text-pretty text-lg leading-relaxed text-muted">
-          Merge, split, sign and redact PDFs, turn them into Word, Excel or PowerPoint, and resize, compress or convert images. The work happens on your machine, so your files never reach a server.
+          Convert, edit, compress and secure your files: PDFs, images and Office documents today, with more kinds of file on the way. Every tool runs on your own machine, so your files never reach a server.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a className={primary} href="#/tools">Open the tools</a>

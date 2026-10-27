@@ -18,7 +18,7 @@ RUN yarn install --immutable \
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="Ream" \
-      org.opencontainers.image.description="PDF and image tools that run on your computer. Your files never reach a server." \
+      org.opencontainers.image.description="A private file toolkit that runs on your computer. Convert, edit and secure PDFs, images and documents without uploading them." \
       org.opencontainers.image.source="https://github.com/Deityhub/ream" \
       org.opencontainers.image.url="https://ream.deityhub.com" \
       org.opencontainers.image.licenses="MIT" \
