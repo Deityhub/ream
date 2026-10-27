@@ -31,7 +31,11 @@ export function Marketing({ children }: { children: ReactNode }) {
           <span className="flex items-center gap-2 font-heading text-lg font-semibold tracking-wide text-ink uppercase">
             <Logo size={20} /> Ream
           </span>
-          <span className="text-[13px] text-muted">© {new Date().getFullYear()} Ream, Inc. All rights reserved.</span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
+            <span>© 2026 Chizoba Jude Ojini</span>
+            <a className={`underline hover:text-ink ${focus}`} href="./license.txt">MIT licence</a>
+            <a className={`underline hover:text-ink ${focus}`} href="./third-party-notices.txt">Third-party notices</a>
+          </span>
         </div>
       </footer>
     </div>

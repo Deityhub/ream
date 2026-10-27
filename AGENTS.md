@@ -34,6 +34,7 @@ yarn vitest run <path>       # one file or folder
 yarn typecheck               # tsc -p tsconfig.json (covers packages/*/src, packages/*/test, apps/web/src)
 node scripts/pdf.ts <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rotate | split | decrypt (-p <password>)
 node scripts/contrast.ts     # WCAG contrast check of every colour token in both modes
+node scripts/notices.ts      # rewrite THIRD-PARTY-NOTICES.md (--check: fail if out of date); fails on GPL/AGPL/unknown licences
 node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails above recorded limits (embedded fonts: real system fonts read at run time, never committed)
 ```
 
@@ -192,7 +193,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Match the surrounding code: comment density, naming and idiom. Comments explain *why* (limits, gotchas, reasons), not what.
 - Mark deliberate shortcuts that have a known ceiling with a `ponytail:` comment naming the ceiling and the upgrade path.
 - Small files, one folder per tool, no abstractions without a second user, no config for values that never change.
-- Prefer the platform (CSS, native elements) over code, and the standard library over dependencies. Do not add runtime dependencies to engine packages. UI-only asset packages (fonts) are fine.
+- Prefer the platform (CSS, native elements) over code, and the standard library over dependencies. Do not add runtime dependencies to engine packages. UI-only asset packages (fonts) are fine. Ream is MIT: anything shipped must be MIT-compatible (no GPL, AGPL or LGPL), and adding, removing or updating a runtime dependency means running `node scripts/notices.ts`. Code copied in by hand (like Lucide's shapes) keeps its notice in the file and gets an entry in `scripts/notices.ts`.
 - Never ship silent data loss: a tool that drops something (bookmarks, hidden layers) must say so in its panel or in the README limits.
 - Do not put personal data in URLs, logs or tests.
 
