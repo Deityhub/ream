@@ -5,6 +5,7 @@ What changed in each release of Ream. `yarn release patch|minor|major` writes a 
 ## 0.2.0 (2026-10-27)
 
 - Faster tool processing ([#7](https://github.com/Deityhub/ream/pull/7))
+- A changelog for each release, written by `yarn release` or the Prepare release workflow, and used as the release notes
 
 ## 0.1.0 (2026-10-27)
 

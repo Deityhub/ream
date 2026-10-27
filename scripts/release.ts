@@ -47,7 +47,7 @@ function entries(from: string | null): string[] {
     if (!subject) continue
     const pr = /^Merge pull request #(\d+) from [^/]+\/(\S+)/.exec(subject)
     if (pr) {
-      if (pr[2] === 'dev' || pr[2] === 'main') continue // an earlier release (dev into main)
+      if (pr[2] === 'dev' || pr[2] === 'main' || pr[2].startsWith('release/')) continue // an earlier release (dev into main, or its version raise)
       out.push(`- ${body.trim().split('\n')[0] || pr[2]} ([#${pr[1]}](${repo}/pull/${pr[1]}))`)
     } else if (!/^Merge /.test(subject) && !/^Release v\d/.test(subject)) out.push(`- ${subject}`)
   }
