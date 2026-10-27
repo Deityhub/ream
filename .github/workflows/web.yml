@@ -1,7 +1,8 @@
 # Ream's pipeline. Linux only, a few minutes a run, inside GitHub's free allowance.
 #   pull request into dev    check, then a preview deploy (<branch>.ream-bqb.pages.dev) with its link on the PR
 #   pull request into main   check, and the version must be new (a release: see CONTRIBUTING.md)
-#   merge into main          check, then production (ream.deityhub.com), the v<version> tag and a GitHub Release
+#   merge into main          check, then production (ream.deityhub.com), the v<version> tag, a GitHub Release and the
+#                            Docker image (ghcr.io/deityhub/ream, docker.io/deityhub/ream)
 # A released version can be put back with the Deploy a version workflow (deploy-version.yml).
 # Plain pushes to other branches run nothing. `check` is the status the branch rules require
 # (.github/rulesets/protect-dev-main.json).
@@ -41,6 +42,22 @@ jobs:
       - run: yarn test
       - run: node scripts/notices.ts --check
       - run: yarn build
+      - name: The Docker image builds, serves the app and sends the security headers
+        run: |
+          docker build -t ream:check .
+          docker run -d --name ream -p 8080:8080 ream:check
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:8080/ && break; sleep 1; done
+          headers() { curl -sS -o /dev/null -D - "http://localhost:8080$1" | tr -d '\r'; }
+          fail() { echo "::error::$1"; docker logs ream; exit 1; }
+          headers / | grep -q '^HTTP/1.1 200' || fail 'the page is not served'
+          headers / | grep -qi "^content-security-policy: default-src 'self'" || fail 'no security policy on the page'
+          headers /sw.js | grep -qi '^cache-control: no-cache' || fail 'sw.js is cached'
+          headers /manifest.webmanifest | grep -qi '^content-type: application/manifest+json' || fail 'the manifest has the wrong type'
+          asset=$(docker exec ream sh -c 'ls /usr/share/nginx/html/assets | head -1')
+          headers "/assets/$asset" | grep -qi '^cache-control: public, max-age=31536000, immutable' || fail 'assets are not cached for good'
+          headers /no-such-file | grep -q '^HTTP/1.1 404' || fail 'a missing file is not a 404'
+          [ "$(docker exec ream id -u)" != 0 ] || fail 'NGINX runs as root'
+          echo "image: $(docker image inspect ream:check --format '{{.Size}}') bytes"
       - uses: actions/upload-artifact@v4
         with:
           name: site
@@ -86,6 +103,10 @@ jobs:
     concurrency: production
     permissions:
       contents: write # the tag and the GitHub Release
+      packages: write # the image on ghcr.io
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -106,3 +127,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "v${{ steps.version.outputs.version }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes
+      # the image for self-hosting: Intel/AMD and ARM, tagged with the version and latest. The site is built once, on
+      # the runner's own platform; each platform's image only copies the files, so no emulation is needed.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - if: env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+      - id: tags
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          tags="ghcr.io/deityhub/ream:$V,ghcr.io/deityhub/ream:latest"
+          # Docker Hub only once its secrets are set
+          if [ -n "$DOCKERHUB_TOKEN" ]; then tags="$tags,docker.io/$DOCKERHUB_USERNAME/ream:$V,docker.io/$DOCKERHUB_USERNAME/ream:latest"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
