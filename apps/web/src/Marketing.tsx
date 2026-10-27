@@ -11,7 +11,7 @@ export const secondary = `${action} border border-line hover:bg-ink/7`
 export const kicker = 'block border-b border-line pb-2 font-sans text-[13px] font-semibold tracking-widest text-accent-ink uppercase tabular-nums'
 export const wrap = 'mx-auto max-w-[1600px] px-4 sm:px-8'
 
-/** Frame of the landing page: its own nav and footer, not the app's bar. */
+/** Frame of the landing, licence and notices pages: their own nav and footer, not the app's bar. */
 export function Marketing({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
@@ -33,8 +33,8 @@ export function Marketing({ children }: { children: ReactNode }) {
           </span>
           <span className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
             <span>© 2026 Chizoba Jude Ojini</span>
-            <a className={`underline hover:text-ink ${focus}`} href="./license.txt">MIT licence</a>
-            <a className={`underline hover:text-ink ${focus}`} href="./third-party-notices.txt">Third-party notices</a>
+            <a className={`underline hover:text-ink ${focus}`} href="#/licence">MIT licence</a>
+            <a className={`underline hover:text-ink ${focus}`} href="#/notices">Third-party notices</a>
           </span>
         </div>
       </footer>

@@ -11,7 +11,7 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 
 ## Licence
 
-Ream is MIT licensed: see [LICENSE](LICENSE). The software and fonts it ships from others (React, the Lucide icon shapes, and the OFL fonts) are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `node scripts/notices.ts` writes; the site links both from the footer.
+Ream is MIT licensed: see [LICENSE](LICENSE). The software and fonts it ships from others (React, the Lucide icon shapes, and the OFL fonts) are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `node scripts/notices.ts` writes; the site shows both as pages (`#/licence`, `#/notices`), linked from the footer.
 
 ## Layout
 
