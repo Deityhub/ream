@@ -27,10 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the release tags, for the version check
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: corepack enable
@@ -58,7 +58,7 @@ jobs:
           headers /no-such-file | grep -q '^HTTP/1.1 404' || fail 'a missing file is not a 404'
           [ "$(docker exec ream id -u)" != 0 ] || fail 'NGINX runs as root'
           echo "image: $(docker image inspect ream:check --format '{{.Size}}') bytes"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: site
           path: apps/web/dist
@@ -75,12 +75,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: site
           path: dist
       - id: deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -108,17 +108,17 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22 # scripts/release.ts is TypeScript, run directly
       - id: version
         run: echo "version=$(node scripts/release.ts version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: site
           path: dist
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -129,14 +129,14 @@ jobs:
         run: gh release create "v${{ steps.version.outputs.version }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes
       # the image for self-hosting: Intel/AMD and ARM, tagged with the version and latest. The site is built once, on
       # the runner's own platform; each platform's image only copies the files, so no emulation is needed.
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
       - if: env.DOCKERHUB_TOKEN != ''
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
@@ -148,7 +148,7 @@ jobs:
           # Docker Hub only once its secrets are set
           if [ -n "$DOCKERHUB_TOKEN" ]; then tags="$tags,docker.io/$DOCKERHUB_USERNAME/ream:$V,docker.io/$DOCKERHUB_USERNAME/ream:latest"; fi
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
