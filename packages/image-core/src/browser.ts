@@ -1,5 +1,5 @@
 import { UserError } from '@ream/core'
-import { UnsupportedImage, checkPixels } from './buffer.ts'
+import { UnsupportedImage, checkPixels, type ImageBuffer } from './buffer.ts'
 import type { Codec, OutputMime } from './codec.ts'
 import { ownCodec } from './own.ts'
 
@@ -10,7 +10,8 @@ export const browserCodec: Codec = {
   async decode(bytes, type) {
     let bitmap: ImageBitmap
     try {
-      bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type }))
+      // samples as stored, like our decoder (a colour profile is carried over by the tools that keep it, not applied); turned upright by EXIF
+      bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type }), { colorSpaceConversion: 'none', imageOrientation: 'from-image' })
     } catch {
       throw new UserError("Couldn't read this image. It may be damaged, or this browser can't open that kind of file.")
     }
@@ -35,12 +36,27 @@ export const browserCodec: Codec = {
   },
 }
 
+const isJpeg = (b: Uint8Array) => b[0] === 0xff && b[1] === 0xd8
+const opaque = (img: ImageBuffer) => {
+  for (let i = 3; i < img.data.length; i += 4) if (img.data[i] !== 255) return false
+  return true
+}
+
 /**
- * What the app uses: our own codec for everything it can do, the browser only for WebP and for files that use something
- * ours doesn't (when the browser can't read them either, the more precise message of ours is shown).
+ * What the app uses: the browser's native codec where it is many times faster than ours (JPEG both ways, PNG writing),
+ * ours for everything else and whenever the browser fails. A canvas stores premultiplied alpha, so it can't keep
+ * see-through pixels exact: PNGs with transparency, and every PNG read, stay with ours (lossless stays lossless).
+ * GIF and BMP are ours only: browsers can't write them.
  */
 export const appCodec: Codec = {
   async decode(bytes, type) {
+    if (isJpeg(bytes)) {
+      try {
+        return await browserCodec.decode(bytes, 'image/jpeg')
+      } catch {
+        // ours gives the precise reason, or reads what the browser couldn't
+      }
+    }
     try {
       return await ownCodec.decode(bytes, type)
     } catch (e) {
@@ -52,5 +68,15 @@ export const appCodec: Codec = {
       }
     }
   },
-  encode: (img, type, quality) => (type === 'image/webp' ? browserCodec : ownCodec).encode(img, type, quality),
+  async encode(img, type, quality) {
+    if (type === 'image/webp') return browserCodec.encode(img, type, quality)
+    if (type === 'image/jpeg' || (type === 'image/png' && opaque(img))) {
+      try {
+        return await browserCodec.encode(img, type, quality)
+      } catch {
+        // too big for a canvas here, or out of memory: ours can still do it
+      }
+    }
+    return ownCodec.encode(img, type, quality)
+  },
 }

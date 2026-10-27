@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./runners": "./src/runners.ts",
+    "./image-common": "./src/image-common.ts",
     "./panels": "./src/panels.ts",
     "./office-preview": "./src/office-preview.ts",
     "./standard-fonts": "./src/fonts/standard-browser.ts"

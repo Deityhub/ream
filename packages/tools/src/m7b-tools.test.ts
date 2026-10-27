@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, test } from 'vitest'
+import { beforeAll, describe, expect, test } from 'vitest'
 import type { FileData } from '@ream/core'
-import { decodeJpeg, decodePng } from '@ream/image-core'
+import { decodeJpeg, decodePng, ownCodec, setCodec } from '@ream/image-core'
 import { PdfDocument } from '@ream/pdf-core'
 import type { PageRaster } from '@ream/pdf-render'
 import { readXlsx, writeXlsx, writePptx, parseXml, kids, child, type Sheet, type XmlNode } from '@ream/office-core'
@@ -19,6 +19,8 @@ import { familyOf } from './office-fonts.ts'
 import { nodeFonts } from './fonts/node.ts'
 import { parseNumber } from './pdf-to-excel/number.ts'
 import { docxToPdf, officeToPdf } from './office-preview.ts'
+
+beforeAll(() => setCodec(ownCodec)) // JPG pages go through the codec; the browser's is checked in the app
 
 const ctx = { progress: () => {} }
 const pdf = (n = 3, name = 'doc.pdf'): FileData => ({ name, type: 'application/pdf', bytes: classicPdf(Array.from({ length: n }, (_, i) => `P${i + 1}`)) })

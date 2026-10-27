@@ -56,6 +56,17 @@ export async function decodePng(bytes: Uint8Array): Promise<ImageBuffer> {
     const rowBytes = (channels * depth * pw + 7) >> 3
     if (raw.length < off + ph * (rowBytes + 1)) throw new UserError('This PNG is damaged.')
     const px = pngPredictor(raw.subarray(off, off + ph * (rowBytes + 1)), pw, channels, depth)
+    // the common photos and screenshots, straight across (no interlacing: the place of a pixel is its index)
+    if (!hdr.interlace && depth === 8 && color === 6) return out.data.set(px)
+    if (!hdr.interlace && depth === 8 && color === 2 && !trns) {
+      for (let i = 0, o = 0; i < px.length; i += 3, o += 4) {
+        out.data[o] = px[i]
+        out.data[o + 1] = px[i + 1]
+        out.data[o + 2] = px[i + 2]
+        out.data[o + 3] = 255
+      }
+      return
+    }
     for (let y = 0; y < ph; y++) {
       const row = y * rowBytes
       // one sample (0 .. 2^depth-1; 16-bit keeps its high byte)
@@ -78,12 +89,11 @@ export async function decodePng(bytes: Uint8Array): Promise<ImageBuffer> {
           // ponytail: colour-key transparency (tRNS) is honoured for depths up to 8 only
           else if (trns && depth < 16 && s === trns[1]) a = 0
         } else {
-          const s = [sample(x * channels), sample(x * channels + 1), sample(x * channels + 2)]
-          r = s[0]
-          g = s[1]
-          b = s[2]
+          r = sample(x * channels)
+          g = sample(x * channels + 1)
+          b = sample(x * channels + 2)
           if (color === 6) a = sample(x * 4 + 3)
-          else if (trns && depth === 8 && s[0] === trns[1] && s[1] === trns[3] && s[2] === trns[5]) a = 0
+          else if (trns && depth === 8 && r === trns[1] && g === trns[3] && b === trns[5]) a = 0
         }
         out.data[o] = r
         out.data[o + 1] = g
@@ -184,7 +194,12 @@ function layoutOf(img: ImageBuffer, optimize: boolean, allowPalette = true): Lay
   // up to 256 distinct colours are kept, as r, g, b, a packed into one number
   const index = new Map<number, number>()
   let many = false
+  // neighbours mostly share a colour (pages, screenshots): the map is only asked when it changes
+  let last = -1
+  // a pixel the same as the one before tells nothing new (a 32-bit view compares it in one go, when the bytes are aligned)
+  const same = data.byteOffset % 4 === 0 ? new Uint32Array(data.buffer, data.byteOffset, n) : null
   for (let i = 0; i < n; i++) {
+    if (same && i && same[i] === same[i - 1]) continue
     const r = data[i * 4]
     const g = data[i * 4 + 1]
     const b = data[i * 4 + 2]
@@ -193,11 +208,12 @@ function layoutOf(img: ImageBuffer, optimize: boolean, allowPalette = true): Lay
     if (r !== g || r !== b) grey = false
     if (!many) {
       const key = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
-      if (!index.has(key)) {
+      if (key !== last && !index.has(key)) {
         if (index.size === 256) many = true
         else index.set(key, index.size)
       }
-    }
+      last = key
+    } else if (alpha && !grey) break // nothing left to learn
   }
 
   // a palette pays off up to 256 colours, except for plain grey with many levels (grey8 has no palette to store)
@@ -219,10 +235,16 @@ function layoutOf(img: ImageBuffer, optimize: boolean, allowPalette = true): Lay
     const depth = entries.length <= 2 ? 1 : entries.length <= 4 ? 2 : entries.length <= 16 ? 4 : 8
     const stride = (w * depth + 7) >> 3
     const pixels = new Uint8Array(stride * h)
+    let lastKey = -1
+    let k = 0
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4
-        const k = slot.get((((data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3]) >>> 0))!
+        const key = ((data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3]) >>> 0
+        if (key !== lastKey) {
+          k = slot.get(key)!
+          lastKey = key
+        }
         if (depth === 8) pixels[y * stride + x] = k
         else pixels[y * stride + ((x * depth) >> 3)] |= k << (8 - depth - ((x * depth) & 7))
       }

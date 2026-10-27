@@ -1,13 +1,14 @@
-import { UserError, type RunFn } from '@ream/core'
+import { UserError, type FileData, type RunContext } from '@ream/core'
 import { PdfStream, isName, optimize } from '@ream/pdf-core'
-import { imagePlacements } from '@ream/pdf-render'
+import { browserPlatform, imagePlacements, type Platform } from '@ream/pdf-render'
 import { baseName, loadPdf, pdfFile } from '../pdf-common.ts'
 import { recompressImage } from './images.ts'
 import { LEVELS, type CompressPdfOptions } from './options.ts'
 
 export type { CompressPdfOptions }
 
-export const run: RunFn<CompressPdfOptions> = async (files, { level }, { progress }) => {
+/** `platform` decodes colour photos (the browser's decoder; where it can't, as in Node tests, ours is used) */
+export async function run(files: FileData[], { level }: CompressPdfOptions, { progress }: RunContext, platform: Platform | undefined = browserPlatform): Promise<FileData[]> {
   const plan = LEVELS[level]
   if (!plan) throw new UserError('Choose how much to compress.')
   const f = files[0]
@@ -21,7 +22,7 @@ export const run: RunFn<CompressPdfOptions> = async (files, { level }, { progres
       progress(0.3)
       for (const [i, im] of images.entries()) {
         try {
-          const smaller = await recompressImage(doc, im, placed.get(im), plan)
+          const smaller = await recompressImage(doc, im, placed.get(im), plan, platform)
           if (smaller) replace.set(im, smaller)
         } catch {
           // a picture that can't be redone stays as it is

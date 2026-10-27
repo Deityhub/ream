@@ -1,5 +1,5 @@
 import { UserError, type FileData, type RunContext } from '@ream/core'
-import { checkPixels, flattenOnWhite, encodePng, encodeJpeg } from '@ream/image-core'
+import { checkPixels, codec, flattenOnWhite, encodePng } from '@ream/image-core'
 import { browserRaster, rasterSize, type PageRaster } from '@ream/pdf-render'
 import { baseName, clampInt, loadPdf, selectPages } from '../pdf-common.ts'
 
@@ -38,7 +38,8 @@ export async function run(files: FileData[], o: PdfToImageOptions, { progress }:
   for (const [n, p] of pages.entries()) {
     progress(n / pages.length)
     const px = await raster(doc, p, widths[n])
-    const bytes = jpg ? encodeJpeg(flattenOnWhite(px), { quality }) : await encodePng(px)
+    // JPG through the app's codec (the browser's, many times faster); PNG stays ours, whose palette keeps pages of text small
+    const bytes = jpg ? await codec().encode(flattenOnWhite(px), 'image/jpeg', quality / 100) : await encodePng(px)
     out.push({ name: `${base}-page-${String(p + 1).padStart(digits, '0')}.${jpg ? 'jpg' : 'png'}`, type: jpg ? 'image/jpeg' : 'image/png', bytes })
   }
   progress(1)

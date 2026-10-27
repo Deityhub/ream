@@ -58,27 +58,37 @@ export function pngPredictor(data: Uint8Array, columns: number, colors = 1, bpc 
   const row = (colors * bpc * columns + 7) >> 3
   const rows = Math.floor(data.length / (row + 1))
   const out = new Uint8Array(rows * row)
+  // one loop per filter type: deciding per byte was most of the cost of reading a big PNG or a predicted PDF stream
   for (let r = 0; r < rows; r++) {
     const ft = data[r * (row + 1)]
     const src = r * (row + 1) + 1
     const dst = r * row
-    for (let i = 0; i < row; i++) {
-      const x = data[src + i]
-      const a = i >= bpp ? out[dst + i - bpp] : 0
-      const b = r > 0 ? out[dst - row + i] : 0
-      const c = i >= bpp && r > 0 ? out[dst - row + i - bpp] : 0
-      let v = x
-      if (ft === 1) v = x + a
-      else if (ft === 2) v = x + b
-      else if (ft === 3) v = x + ((a + b) >> 1)
-      else if (ft === 4) {
+    const up = dst - row // the row above, when there is one (r > 0)
+    if (ft === 1) {
+      for (let i = 0; i < row; i++) out[dst + i] = data[src + i] + (i >= bpp ? out[dst + i - bpp] : 0)
+    } else if (ft === 2 && r > 0) {
+      for (let i = 0; i < row; i++) out[dst + i] = data[src + i] + out[up + i]
+    } else if (ft === 3) {
+      for (let i = 0; i < row; i++) out[dst + i] = data[src + i] + (((i >= bpp ? out[dst + i - bpp] : 0) + (r > 0 ? out[up + i] : 0)) >> 1)
+    } else if (ft === 4 && r === 0) {
+      // Paeth with nothing above always picks the left neighbour (Sub)
+      for (let i = 0; i < row; i++) out[dst + i] = data[src + i] + (i >= bpp ? out[dst + i - bpp] : 0)
+    } else if (ft === 4) {
+      // with nothing to the left it picks the byte above (Up)
+      for (let i = 0; i < bpp && i < row; i++) out[dst + i] = data[src + i] + out[up + i]
+      for (let i = bpp; i < row; i++) {
+        const a = out[dst + i - bpp]
+        const b = out[up + i]
+        const c = out[up + i - bpp]
         const p = a + b - c
         const pa = Math.abs(p - a)
         const pb = Math.abs(p - b)
         const pc = Math.abs(p - c)
-        v = x + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)
+        out[dst + i] = data[src + i] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)
       }
-      out[dst + i] = v & 255
+    } else {
+      // none, "up" on the first row, and unknown types: the bytes as they are
+      out.set(data.subarray(src, src + row), dst)
     }
   }
   return out

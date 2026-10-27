@@ -1,0 +1,62 @@
+# Start a release from GitHub (Actions → Prepare release → Run workflow): raises the version on a copy of dev, writes
+# its CHANGELOG.md section (yarn release), and opens the pull request "Release v<version>" into dev. Review and edit the
+# changelog there, merge it, then open dev → main as usual.
+# RELEASE_TOKEN (a fine-grained token: this repo, Contents and Pull requests read and write) opens the pull request as
+# you, so `check` and the preview run on it; GitHub doesn't start workflows for pull requests its own token opens.
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'patch (fixes), minor (new tools or features) or major (breaks how people use Ream)'
+        type: choice
+        options: [patch, minor, major]
+        default: minor
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: prepare-release
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 0 # the tags and history the changelog is made from
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22 # scripts/release.ts is TypeScript, run directly; it needs only git
+      - name: Raise the version and write the changelog
+        id: release
+        run: |
+          node scripts/release.ts prepare "${{ inputs.kind }}"
+          echo "version=$(node scripts/release.ts version)" >> "$GITHUB_OUTPUT"
+      - name: Open the pull request into dev
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "::error::$branch already exists: merge or delete its pull request first."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add package.json CHANGELOG.md
+          git commit -m "Release v$VERSION"
+          git push origin "$branch"
+          {
+            echo "Raises the version to $VERSION and adds its changelog section. Edit \`CHANGELOG.md\` here if the wording needs it; after merging, open the pull request from \`dev\` into \`main\` to release."
+            echo
+            node scripts/release.ts notes
+          } > body.md
+          gh pr create --base dev --head "$branch" --title "Release v$VERSION" --body-file body.md

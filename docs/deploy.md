@@ -21,8 +21,11 @@ Ream is a progressive web app. `apps/web/public/manifest.webmanifest` and the ic
 The release version is the root `package.json` `version` (semantic versioning: `major.minor.patch`).
 
 1. Work reaches `dev` through pull requests; each gets a preview.
-2. A release is a pull request from `dev` into `main` that raises the version: `yarn version patch` (fixes), `minor` (new tools or features) or `major` (anything that breaks how people use Ream). `check` fails while the version is one already released or older (`node scripts/release.ts check`).
-3. Merging it deploys production with the version in Cloudflare's deployment message, tags `v<version>`, creates a GitHub Release whose notes list the pull requests since the last one, and publishes the Docker image.
+2. To release, run Actions → **Prepare release** → Run workflow and pick `patch`, `minor` or `major`. It does the step below on a copy of `dev` and opens the pull request "Release v<version>" into `dev`; edit the changelog there if needed and merge it. It needs the `RELEASE_TOKEN` secret to get `check` and a preview on that pull request (see below); without it the pull request opens with no checks. Or do it by hand: branch from `dev` (`release/v<version>`) and run `yarn release patch` (fixes), `minor` (new tools or features) or `major` (anything that breaks how people use Ream). It raises the version (counted from the latest tag: `git fetch --tags` first) and adds a section to `CHANGELOG.md` listing the pull requests merged since the last release, each with its link. Edit the section into plain words if you like, commit `Release v<version>`, and merge it into `dev` through a pull request.
+3. Open the pull request from `dev` into `main`. `check` fails while the version is one already released or older, or `CHANGELOG.md` has no section for it (`node scripts/release.ts check`).
+4. Merging it deploys production with the version in Cloudflare's deployment message, tags `v<version>`, creates a GitHub Release whose notes are the version's `CHANGELOG.md` section, and publishes the Docker image.
+
+`RELEASE_TOKEN` is a fine-grained personal access token (GitHub → Settings → Developer settings → Fine-grained tokens): repository access only `Deityhub/ream`, permissions **Contents** and **Pull requests** read and write. Save it as a repository secret (Settings → Secrets and variables → Actions). It expires on the date you choose; make a new one when it does. GitHub doesn't run workflows for pull requests its own token opens, which is why the workflow uses yours. Like any manual workflow, **Prepare release** shows in the Actions tab only once it is on `main`.
 
 The footer shows the version, so a bug report can say which one it was.
 

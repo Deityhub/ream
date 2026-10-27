@@ -1,5 +1,5 @@
 import { UserError, type FileData, type RunFn } from '@ream/core'
-import { colourChunks, decodeGif, encodeGif, encodeJpeg, encodePng, quantize, readSegments, withOrientation, type ImageBuffer } from '@ream/image-core'
+import { codec, colourChunks, decodeGif, encodeGif, encodePng, quantize, readSegments, withOrientation, type ImageBuffer } from '@ream/image-core'
 import { decodeFile, encodeFile, outName } from '../image-common.ts'
 import { formatFor } from '../image-formats.ts'
 import type { CompressOptions } from './options.ts'
@@ -36,7 +36,13 @@ async function compress(f: FileData, o: CompressOptions): Promise<FileData> {
         for (let c = 0; c < 3; c++) flat[i + c] = flat[i + c] * a + 255 * (1 - a)
         flat[i + 3] = 255
       }
-      bytes = encodeJpeg({ width: img.width, height: img.height, data: flat }, { quality: o.quality, segments: segmentsToKeep(f.bytes, o.keepMetadata) })
+      const jpeg = await codec().encode({ width: img.width, height: img.height, data: flat }, 'image/jpeg', o.quality / 100)
+      // the encoder's own header (JFIF), then the kept metadata; anything else the encoder wrote goes (the browser
+      // adds an sRGB profile, which would contradict the file's own)
+      const { segments: own, rest } = readSegments(jpeg)
+      const parts = [jpeg.subarray(0, 2), ...own.filter((s) => s.kind === 'jfif').map((s) => s.bytes), ...segmentsToKeep(f.bytes, o.keepMetadata), jpeg.subarray(rest)]
+      bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+      parts.reduce((at, p) => (bytes.set(p, at), at + p.length), 0)
     } else if (fmt.mime === 'image/png') {
       bytes = await encodePng(o.reduceColors ? quantize(img, o.colors, o.dither) : img, { chunks: colourChunks(f.bytes) })
     } else {
