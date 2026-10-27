@@ -11,7 +11,7 @@ export const secondary = `${action} border border-line hover:bg-ink/7`
 export const kicker = 'block border-b border-line pb-2 font-sans text-[13px] font-semibold tracking-widest text-accent-ink uppercase tabular-nums'
 export const wrap = 'mx-auto max-w-[1600px] px-4 sm:px-8'
 
-/** Frame of the web-only pages (landing, download): their own nav and footer, not the app's bar. */
+/** Frame of the landing page: its own nav and footer, not the app's bar. */
 export function Marketing({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">

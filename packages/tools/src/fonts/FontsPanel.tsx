@@ -5,7 +5,7 @@ import { downloadFreeFont } from './download.ts'
 import { EXACT, LOOK_ALIKE_NAMES, closestFamily, lookAlikeFor, weightOf } from './match.ts'
 import { inputClass } from '../fields.tsx'
 
-// Chromium's local font access: the font files installed on the computer, once the user (or Electron) allows it
+// Chromium's local font access: the font files installed on the computer, once the user allows it
 type LocalFont = { family: string; style: string; postscriptName: string; blob(): Promise<Blob> }
 const queryLocalFonts = () => (globalThis as unknown as { queryLocalFonts?: () => Promise<LocalFont[]> }).queryLocalFonts
 async function permission(): Promise<PermissionState | 'unsupported'> {
@@ -32,7 +32,7 @@ const STYLES = /^(regular|book|roman|normal|light|bold|italic|bold italic|light 
 
 /**
  * The fonts a document uses and what each is drawn with. Fonts installed on the computer are used by themselves once the
- * browser allows reading them (Electron always does; Chrome asks once). Missing ones can be added from font files (several
+ * browser allows reading them (Chrome and Edge ask once). Missing ones can be added from font files (several
  * at once, each matched to the font it is) or downloaded when they are free. Everything found goes into the options.
  */
 export function FontsPanel({ file, readOfficeFonts, readFontFile, value, onChange }: Props) {
@@ -107,7 +107,7 @@ export function FontsPanel({ file, readOfficeFonts, readFontFile, value, onChang
       const state = await permission()
       if (!live) return
       setAccess(state)
-      // allowed before (or in Electron): installed fonts are used without asking again
+      // allowed before: installed fonts are used without asking again
       if (state === 'granted') await findInstalled(names)
     })()
     return () => {

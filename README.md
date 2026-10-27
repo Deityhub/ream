@@ -1,10 +1,9 @@
 # Ream
 
-PDF and image tools that run entirely on your device, in the browser or as an Electron app. Own engines, no runtime dependencies in phase 1.
+PDF and image tools that run entirely on your device, in the browser. Own engines, no runtime dependencies in phase 1.
 
 ```bash
 yarn dev          # web app on http://localhost:5173
-yarn desktop      # build, then open in Electron
 yarn test         # vitest
 yarn typecheck
 yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rotate | split | decrypt | optimize
@@ -21,15 +20,14 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | `packages/ui` | Theme tokens and shared React components |
 | `packages/tools` | One folder per tool, plus the registry |
 | `apps/web` | Vite + React + Tailwind v4 |
-| `apps/desktop` | Electron shell |
 
 ## Roadmap
 
 | # | Milestone | Contents |
 |---|---|---|
-| M0 ✅ | Skeleton | Monorepo, UI shell, registry, Electron |
+| M0 ✅ | Skeleton | Monorepo, UI shell, registry, Electron (removed in M8: Ream is a web app) |
 | M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
-| M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
+| M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits. Merge PDF is the first end-to-end tool |
 | M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
 | M2.5 ✅ | Previews | File thumbnails, live result preview, password-protected PDFs (open with a password), own canvas PDF renderer (graphics, then text) |
 | M2.6 ✅ | Look and feel | Teal palette (jet-black, cerulean, tropical-teal, muted-teal, tea-green), Inter font, split-sheet logo, drop-first home, three-region tool page (files, preview, options) |
@@ -41,8 +39,8 @@ yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rota
 | M7b ✅ | Conversions | PDF → image, Word, Excel, PowerPoint; Excel → PDF; PowerPoint → PDF; previews of Office files (Word → PDF is not done) |
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
 | M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms. Edit content: change, move and delete the page's own lines of text (in the PDF's font when it has the letters), move, resize, replace and delete its pictures, erase areas |
-| M7.7 ✅ | Redesign | Industry design system (paper ground, one steel accent, square hairline frames with corner registration marks, Barlow Condensed over Barlow, Lucide icons at 1.5), tools home per category (`#/tools/pdf`, `#/tools/image`) with a drop bar, a clickable breadcrumb under the top bar on the tools home and tool pages, web-only landing and desktop-app pages |
-| M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
+| M7.7 ✅ | Redesign | Industry design system (paper ground, one steel accent, square hairline frames with corner registration marks, Barlow Condensed over Barlow, Lucide icons at 1.5), tools home per category (`#/tools/pdf`, `#/tools/image`) with a drop bar, a clickable breadcrumb under the top bar on the tools home and tool pages, landing page |
+| M8 | Ship | Web app on Cloudflare Pages (ream.deityhub.com), installable offline PWA, CI, MIT licence |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
 Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), check accessibility on every new page.
@@ -51,7 +49,6 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 
 - Merge and page operations dropped bookmarks, form fields and named destinations; since M7 they keep them (see "Known M7 limits").
 - Encrypted PDFs need their password to be opened (see "Password-protected PDFs").
-- Electron save dialog: the Download button relies on Chromium's default download prompt; not yet checked by hand.
 - Streams other than Flate are copied through untouched but can't be decoded yet (only needed for xref/object streams).
 - All objects are parsed up front; make parsing lazy if very large files become a problem.
 
@@ -60,7 +57,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 - WebP goes through the browser's codec (OffscreenCanvas in the worker); everything else is ours since M4. Tools that keep the input's format save an animated GIF as a flat PNG (first frame); Compress image and Animated GIF are the ones that work with all frames.
 - HEIC, TIFF, RAW and SVG inputs are not accepted yet.
 - Crop is drag-to-select with mouse or touch, plus numeric fields for keyboard use.
-- Checked in Electron (Chromium) only; Safari and Firefox are untested.
+- Checked in Chrome only; Safari and Firefox are untested.
 
 ## Known M3 limits
 
@@ -142,7 +139,7 @@ Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), che
 
 Office files (`.docx`, `.xlsx`, `.pptx`) are zips of XML; Ream reads and writes them itself (`packages/office-core`). The output has been opened by independent readers (python-docx, python-pptx, openpyxl) and by macOS Quick Look and Chromium's PDF viewer, but **not by Microsoft Office**. Quick Look is a weak judge of designs: it can't draw custom shapes, many preset shapes or charts, and ignores Word frames, so slides and charts were also checked against files whose contents were known. Everything runs on the device like the other tools.
 
-- **Fonts (Excel and PowerPoint):** the panel lists the fonts the file uses and what each is drawn with. Fonts on this computer are used by themselves once the browser allows reading them (Electron always does; Chrome asks once), including close names ("Gill Sans Nova Light" uses an installed Gill Sans Light) but never a different kind of type ("Century" for "Century Gothic"), or a weight more than 150 away. A font whose licence forbids embedding is not used, and the panel says so (macOS's Gill Sans allows only SemiBold and UltraBold). Missing fonts can be added from files (several at once: .ttf, .otf, .ttc, .woff, each matched to the font it is, or assigned to one) or downloaded when they are free: **Download free fonts** asks Fontsource (Google Fonts and other openly licensed fonts) for them by name. That is the one network request Ream makes; it sends only the font names, only on that click, and takes the latin and latin-ext parts. Commercial fonts (most Microsoft cloud fonts, Monotype's) can't be downloaded and need a file. Fonts with PostScript outlines (.otf) are embedded whole rather than cut down, so they add their full size to the PDF; CID-keyed ones (most Chinese, Japanese and Korean .otf files) and variable CFF2 fonts are refused. Anything still missing is drawn with an open look-alike: Calibri, Cambria, Arial, Times New Roman and Courier New get Carlito, Caladea, Arimo, Tinos and Cousine (bundled, same letter widths); other fonts the closest of those, so lines can break a little differently from Office. Letters none of them have show as ?. No kerning or shaping. The PDF records the family each text asked for (/ReamFamily), so PDF to PowerPoint and Word name the original font. The preview pane shows the PDF as saved, real fonts included.
+- **Fonts (Excel and PowerPoint):** the panel lists the fonts the file uses and what each is drawn with. Fonts on this computer are used by themselves once the browser allows reading them (Chrome and Edge ask once; other browsers can't), including close names ("Gill Sans Nova Light" uses an installed Gill Sans Light) but never a different kind of type ("Century" for "Century Gothic"), or a weight more than 150 away. A font whose licence forbids embedding is not used, and the panel says so (macOS's Gill Sans allows only SemiBold and UltraBold). Missing fonts can be added from files (several at once: .ttf, .otf, .ttc, .woff, each matched to the font it is, or assigned to one) or downloaded when they are free: **Download free fonts** asks Fontsource (Google Fonts and other openly licensed fonts) for them by name. That is the one network request Ream makes; it sends only the font names, only on that click, and takes the latin and latin-ext parts. Commercial fonts (most Microsoft cloud fonts, Monotype's) can't be downloaded and need a file. Fonts with PostScript outlines (.otf) are embedded whole rather than cut down, so they add their full size to the PDF; CID-keyed ones (most Chinese, Japanese and Korean .otf files) and variable CFF2 fonts are refused. Anything still missing is drawn with an open look-alike: Calibri, Cambria, Arial, Times New Roman and Courier New get Carlito, Caladea, Arimo, Tinos and Cousine (bundled, same letter widths); other fonts the closest of those, so lines can break a little differently from Office. Letters none of them have show as ?. No kerning or shaping. The PDF records the family each text asked for (/ReamFamily), so PDF to PowerPoint and Word name the original font. The preview pane shows the PDF as saved, real fonts included.
 - **PDF to image:** PNG or JPG, 72 to 300 dpi, any pages, a ZIP when there are several. Pages are drawn by our own renderer (see the renderer limits: fonts that are not stored in the file are drawn in similar ones).
 - **PDF to Word:** three ways. *Editable, same layout* (the default) keeps the page's look: the page drawn without its text is a picture in front of the page, and each paragraph and table cell is a text box placed where it was, with its font name, size, colour, bold and italic. Text can be changed but doesn't flow from one box to the next, and shapes in the design move only as part of the picture. *Editable, flowing text* rebuilds each page as ordinary paragraphs (lines joined, hyphenated words rejoined), headings from type size, bullets, alignment, indents, spacing, tables and pictures; columns become one column and drawings, shapes and backgrounds are left out. *Page pictures* puts each page in as a picture: identical, not editable, no text. In every mode each PDF page is a section of its own size, ordered lists keep their numbers as text, and scans stay pictures.
 - **PDF to PowerPoint:** slides take the first page's size (pages of another size are scaled to fit and centred). *Editable text* puts the page drawn without its text behind the slide as a picture (left out when the page has no design) and the text on top in boxes where it was: lines are cut at wide gaps, and stacked into one box only where they are one line apart, the same size and share a left edge, centre or right edge, so columns, titles beside text and table cells stay apart. Each box keeps the page's lines (a line break at the end of each, wrapping off), so a slide shows the same lines even when PowerPoint uses another font; edited text doesn't re-flow by itself. Bullets drawn as letters become real bullets with their letter, colour and size; bullets drawn as shapes stay in the picture. Numbered items keep their numbers as text. Fonts are named as the PDF says: the family a Ream PDF recorded, else the embedded font's own name; Ream's open look-alikes map back to Calibri, Cambria, Arial, Times New Roman and Courier New. Tables are not rebuilt as tables (their lines are in the picture, their cells are boxes). *Page pictures* puts a picture of the page on each slide with the page's text behind it (searchable, and there if the picture is deleted).
@@ -198,7 +195,7 @@ The result preview waits 600 ms after the last change to any option before it re
 
 **Text** is drawn glyph by glyph at the exact positions the PDF gives, advancing by the PDF's own widths, so lines break where the original breaks. The letter shapes are the embedded font's own: our readers for TrueType (`glyf`, composite glyphs included), CFF (bare or inside OpenType, name-keyed and CID-keyed, Type 2 charstrings with subroutines, flex and accented letters) and Type 1 (eexec, flex, seac) turn each glyph into a path, picked the way PDF says (cmap subtables for TrueType, glyph names or the font's own encoding for Type 1 and CFF, CIDToGIDMap or the CFF charset for CID fonts). The standard fonts a file doesn't embed (Helvetica, Arial, Times, Courier) are drawn with the bundled look-alikes Arimo, Tinos and Cousine, so they look the same on every computer. Any other font that isn't embedded, or a letter a font program lacks, falls back to a similar system font squeezed to the PDF's width (the document's own font name first, so an installed copy is used as is), and the preview then says "Preview is approximate". Text extraction reads characters from the encoding, `/Differences` and ToUnicode as before. Text in the clipping render modes clips what follows to the letters.
 
-- Fonts: no hinting (small text is a little softer than in Acrobat or macOS); CFF2 (variable) and bitmap-only fonts, and CID fonts with a CMap other than Identity-H/V, fall back to a system font; TrueType composite glyphs placed by matching points sit at their origin; a letter drawn with a system font clips as its box in the clipping modes. Drawing letters as paths costs about twice the time of system-font text on a text-heavy page (about 12 ms against 6 for a full page in Electron).
+- Fonts: no hinting (small text is a little softer than in Acrobat or macOS); CFF2 (variable) and bitmap-only fonts, and CID fonts with a CMap other than Identity-H/V, fall back to a system font; TrueType composite glyphs placed by matching points sit at their origin; a letter drawn with a system font clips as its box in the clipping modes. Drawing letters as paths costs about twice the time of system-font text on a text-heavy page (about 12 ms against 6 for a full page in Chrome).
 - Not drawn yet: vertical writing, CJK fonts that only have a predefined CMap, tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (a grey box marks where they go).
 - CMYK uses a polynomial fit to a print profile, so it is close to Acrobat and macOS but not identical.
 - `node scripts/render-compare.ts` renders a corpus of feature PDFs (including a text sheet with the standard fonts and every text operator) and the real fixtures with our renderer and with macOS CoreGraphics (`sips`), writes side-by-side sheets with a difference image, and fails if the pixel mismatch grows past the recorded limits. `sips` mishandles `/Rotate`, `/CropBox` and annotation appearances, so those are checked against Chromium's PDF engine by eye instead.
@@ -210,6 +207,6 @@ The result preview waits 600 ms after the last change to any option before it re
 - `node scripts/contrast.ts` checks every token pair (4.5:1 for text, 3:1 for icons and input borders) in both modes and fails if one drops below.
 - **Fonts**: Barlow Condensed for headings and buttons over Barlow for text, bundled through `@fontsource/barlow-condensed` and `@fontsource/barlow` so they work offline (Industry's stylesheet loads them from Google Fonts; Ream doesn't). Numbers use tabular figures. Text watermarks on images (Watermark image) are drawn in Barlow.
 - **Icons**: Lucide's shapes at stroke 1.5, copied into `packages/ui/src/Icon.tsx` (ISC licence, no dependency). Whiteout, highlight and redact have no Lucide match and are drawn for Ream.
-- **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` (in the steel colours) and `apps/desktop/build/icon.{svg,png}` (still the earlier blue, redrawn with M8 packaging) are the static versions. `.icns` and `.ico` packaging belongs to M8.
-- **Pages**: `#/` is the landing page and `#/download` the desktop app page, both in the web build only; the desktop app opens on the tools home (`#/tools`). The download page has no installers to offer yet (packaging is M8), so its buttons are disabled and it says so.
+- **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` (in the steel colours) is the static version; `apps/web/icons/icon.{svg,png}` (still the earlier blue) is the source of the app icons, redrawn in M8.
+- **Pages**: `#/` is the landing page, `#/tools` the tools home.
 - Not done: page thumbnails strip in the tool page (waits for M3 tools whose output keeps one page per input page), command palette. The design's network monitor, recent-files list, save-to folder and "Show in folder" were left out: Ream has none of them.

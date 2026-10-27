@@ -4,7 +4,7 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 
 ## What this is
 
-**Ream** is a client-side PDF and image toolkit. It runs as a React web app and as an Electron app. **Everything is processed on the user's device; nothing is uploaded.** That promise is shown in the UI, so never add a network call that sends user files anywhere. The one network request is **Download free fonts** in the Office panels (`tools/src/fonts/download.ts`): Fontsource, only on that click, only font names.
+**Ream** is a client-side PDF and image toolkit. It is a React web app (an installable PWA), hosted on Cloudflare Pages. **Everything is processed on the user's device; nothing is uploaded.** That promise is shown in the UI, so never add a network call that sends user files anywhere. The one network request is **Download free fonts** in the Office panels (`tools/src/fonts/download.ts`): Fontsource, only on that click, only font names.
 
 ## Non-negotiable decisions
 
@@ -18,8 +18,8 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 
 ## Stack
 
-- TypeScript 5.9 (strict), React 19, Vite, **Tailwind v4**, Vitest 3, Electron 38.
-- **Yarn 4** workspaces with `nodeLinker: node-modules`. **Use Yarn, not pnpm or npm** (pnpm is broken on this machine). Yarn 4 has no `-s` flag. Build scripts are allowed only for Electron (`dependenciesMeta`); `enableScripts` is off globally.
+- TypeScript 5.9 (strict), React 19, Vite, **Tailwind v4**, Vitest 3.
+- **Yarn 4** workspaces with `nodeLinker: node-modules`. **Use Yarn, not pnpm or npm** (pnpm is broken on this machine). Yarn 4 has no `-s` flag. `enableScripts` is off globally (no package runs install scripts).
 - `tsconfig.json` is strict with `verbatimModuleSyntax`, `erasableSyntaxOnly` (no enums, no parameter properties, no namespaces), `allowImportingTsExtensions` (import local files with their `.ts`/`.tsx` extension in engine packages) and `isolatedModules`. Use `import type` for types.
 - Node runs `.ts` files directly (type stripping): `node scripts/pdf.ts`, `node scripts/contrast.ts`.
 
@@ -28,8 +28,7 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 ```bash
 yarn dev                     # web app on http://localhost:5173
 yarn build                   # production build of the web app (apps/web/dist)
-yarn desktop                 # build, then open in Electron
-yarn desktop:dev             # Electron against the dev server
+yarn workspace @ream/web preview   # serve the production build on http://localhost:4173
 yarn test                    # vitest run (all packages)
 yarn vitest run <path>       # one file or folder
 yarn typecheck               # tsc -p tsconfig.json (covers packages/*/src, packages/*/test, apps/web/src)
@@ -52,8 +51,7 @@ node scripts/render-compare.ts   # renderer vs macOS CoreGraphics (sips), fails 
 | `packages/ui` | Theme tokens (`theme.css`), `Button`, `Card`, `Dropzone`, `Icon`, `Logo` |
 | `packages/tools` | One folder per tool plus the registry, runners, panels and shared helpers |
 | `apps/web` | Vite + React + Tailwind v4 app (pages, preview plumbing, workers) |
-| `apps/desktop` | Electron shell (`main.cjs`, icon in `build/`) |
-| `scripts/` | Dev tooling: CLI, fixtures, renderer comparison, contrast check |
+| `scripts/` | Dev tooling: CLI, fixtures, renderer comparison, contrast check, `chrome.ts` (headless Chrome over CDP) |
 
 Dependency direction: `core` <- `pdf-core` / `image-core` <- `pdf-render` <- `tools` <- `apps/web`; `office-core` (on `core` and `image-core`) is used by `tools` only. `ui` is independent of the engines. Engines never import React or DOM types except behind a platform interface.
 
@@ -156,7 +154,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
   - **Edit content mode:** the `content` host call gives the page's lines and pictures; picking one makes a `LineEditItem` or `PictureEditItem` (deleting marks it `deleted`, so it can be put back), and the Erase tool makes `EraseItem`s. `contentEdits` (`content.ts`) turns them into `editContent`'s input plus what is drawn over the page instead (a line its own font can't show, as a `TextItem` on its old baseline; a replacement picture). The run goes `editForm`, `editContent`, `decorate`.
   - **What the editor shows:** the page is drawn *without* what was changed (`PdfPage hide`, the renderer's `hide`: letters and pictures whose middle is in a changed item's old box, the same test the saved file uses; erased areas as an even-odd clip), so there are no cover boxes. Everything is stacked in the saved file's order (`layerOf` in `geometry.ts`: the page's own content and changes, then added items in list order, then comments, then fields) with a z-index per item; page lines and pictures can be picked with Select in Add to pages too, under whatever was added over them. `stepOrder` / `canStep` move an item past the next one it overlaps in its layer.
   - **Fonts:** the `fonts` host call (`documentFonts` in pdf-render) lists the PDF's families for `FontsPanel`, whose choices go in `o.fonts`. A changed line its own subset can't show is drawn in its family (`fallbackFont`), so the font book uses a font added for it or the look-alike; `viewFonts.loadFont` mirrors that in the editor.
-- Routes (`App.tsx`, hash based): `#/tool/<id>` the tool page, `#/tools`, `#/tools/pdf` and `#/tools/image` the tools home for a category (`Home.tsx`, `filterHref` in `TopBar.tsx`), `#/download` (`DownloadPage.tsx`) and `#/` (`Landing.tsx`) in the web build only; in Electron (`desktop` in `TopBar.tsx`) every other route shows all tools and the logo goes to `#/tools` instead of `#/`. The web-only pages share `Marketing.tsx` (nav, footer, `primary`/`secondary` link styles); app pages render `TopBar` (logo on the left; search and theme on the right; 1600 px like the pages) and `Breadcrumb` under it (All tools, the category, the tool; every level a link). The breadcrumb replaces visible headings on the tools home and tool pages (the `h1` is `sr-only`); on All tools the PDF tools and Image tools section titles link to their category. `focus` in `TopBar.tsx` is the shared focus ring.
+- Routes (`App.tsx`, hash based): `#/tool/<id>` the tool page, `#/tools`, `#/tools/pdf` and `#/tools/image` the tools home for a category (`Home.tsx`, `filterHref` in `TopBar.tsx`), and `#/` (`Landing.tsx`); any other hash shows the landing page. The web-only pages share `Marketing.tsx` (nav, footer, `primary`/`secondary` link styles); app pages render `TopBar` (logo on the left; search and theme on the right; 1600 px like the pages) and `Breadcrumb` under it (All tools, the category, the tool; every level a link). The breadcrumb replaces visible headings on the tools home and tool pages (the `h1` is `sr-only`); on All tools the PDF tools and Image tools section titles link to their category. `focus` in `TopBar.tsx` is the shared focus ring.
 - Tools home (`Home.tsx`, at most 1600 px wide) is drop-first: the `Dropzone` `bar` layout, and dropped files handed to a tool through `handoff.ts`, the same mechanism as "Use in another tool".
 
 ## Design system
@@ -169,7 +167,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Icons are Lucide's shapes at stroke 1.5 in `Icon.tsx` (ISC notice at the top); add new ones from Lucide (`lucide-static` has the SVGs) rather than drawing them.
 - Interaction rules: visible focus rings on everything (`focus-visible:outline-2 focus-visible:outline-accent`), `cursor: pointer` is set globally in `index.css` for enabled buttons, links, selects, checkboxes, radios, sliders and labels that hold them (`not-allowed` when disabled), 44 px touch targets on coarse pointers (`pointer-coarse:`), transitions respect `prefers-reduced-motion`, no emoji as icons (icons are inline SVG in `Icon.tsx`), no horizontal page scroll at 375 px.
 - `fieldset` has `min-width: 0` globally; keep label rows `flex flex-wrap` so selects cannot overflow the inspector (18 rem wide).
-- Logo: the "split sheet" mark (`Logo.tsx`, `apps/web/public/favicon.svg`, `apps/desktop/build/icon.*`).
+- Logo: the "split sheet" mark (`Logo.tsx`, `apps/web/public/favicon.svg`, `apps/web/icons/icon.*` as the source of the app icons).
 - Copy: sentence case, plain words, say what happened and what to do, no "please", no exclamation marks, no raw exception text.
 
 ## Testing
@@ -183,10 +181,11 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 
 ## Verifying in the real app
 
-- The in-app browser pane cannot open local files. Drive the **built Electron app**: `yarn build`, then `node_modules/.bin/electron apps/desktop/main.cjs --remote-debugging-port=9333` and script it over the Chrome DevTools Protocol (`Runtime.evaluate`, `Input.dispatchMouseEvent`, `Page.captureScreenshot`, `Emulation.setDeviceMetricsOverride` and `setEmulatedMedia` for dark mode and phone widths). Use a real file input drop by dispatching a `DragEvent` with a `DataTransfer`. Look at the screenshots.
-- To view a PDF the way a real viewer does, load `file://...pdf` in an Electron `BrowserWindow` with `webPreferences.plugins: true`, wait a couple of seconds, `capturePage()`. The first window is often blank, so open a throwaway one first. Add `app.on('window-all-closed', () => {})` or the script quits after the first window.
+- Serve the **production build**: `yarn build`, then `yarn workspace @ream/web preview` (http://localhost:4173). Drive it with headless Google Chrome from a scratch script using `scripts/chrome.ts` (`openChrome()`, then `page.goto`, `evaluate`, `view` for phone widths and dark mode, `screenshot`, `setFiles` to put local files into the page's file input, `grant(origin, ['localFonts'])` so installed fonts are offered without the prompt). Raw CDP is there too (`page.send`), for `Input.dispatchMouseEvent`, `Network.emulateNetworkConditions` and the like. Look at the screenshots.
+- The in-app browser pane can show the served build too (it can't open local files), when the user should watch.
+- To view a PDF the way a real viewer does, `page.goto` its `file://` URL (Chrome's own viewer; add `#page=N` for a page), wait a couple of seconds and take a screenshot.
 - Keep throwaway scripts and screenshots in the session scratchpad, not in the repo. If you must put a temporary script in `scripts/` to resolve workspace imports, delete it afterwards.
-- Stop any Electron instance you started (`pkill -f remote-debugging-port=9333`).
+- Close every Chrome you started (`chrome.close()`, in a `finally`), and stop the preview server.
 
 ## Style
 
@@ -202,5 +201,5 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - For a feature, read the surrounding tool folders first and reuse the helpers above. For a bug, find the root cause (grep every caller) and fix it once where all callers route through.
 - Big or ambiguous changes: plan first, name the files, and ask about decisions that change behaviour (the user likes to see design options before committing to one).
 - Update `README.md` (roadmap row, known limits) when behaviour or limits change, and keep this file current when conventions change.
-- After a change: typecheck, tests, build, then verify visually in the app for anything with UI. Report what was verified and what was not (Safari, Firefox and touch input have not been tested; only Electron's Chromium has).
+- After a change: typecheck, tests, build, then verify visually in the app for anything with UI. Report what was verified and what was not (Safari, Firefox and touch input have not been tested; only Chrome has).
 - Leave changes uncommitted unless asked; offer a concise commit message.

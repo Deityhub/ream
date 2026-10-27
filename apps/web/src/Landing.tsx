@@ -1,7 +1,7 @@
 import { Icon } from '@ream/ui'
 import { findTool, tools } from '@ream/tools'
 import type { Category, Tool } from '@ream/core'
-import { Marketing, kicker, primary, secondary, wrap } from './Marketing'
+import { Marketing, kicker, primary, wrap } from './Marketing'
 import { ToolCard } from './Home'
 import { filterHref, focus } from './TopBar'
 
@@ -28,7 +28,7 @@ const groups: { cat: Category; label: string; title: string; blurb: string; noun
 
 const trust = [
   { icon: 'upload', title: 'No uploads', body: 'Files are read into memory on your computer and processed there. Ream has no server that receives files.' },
-  { icon: 'wifi-off', title: 'Works offline', body: 'The desktop app needs no connection at all. In the browser, nothing about your files goes over the network.' },
+  { icon: 'wifi-off', title: 'Nothing over the network', body: 'The tools run in this page. Nothing about your files goes over the network.' },
   { icon: 'user-off', title: 'No account', body: 'No sign-up, no email, no profile. Open a tool and drop a file in.' },
 ]
 
@@ -62,7 +62,6 @@ export function Landing() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a className={primary} href="#/tools">Open the tools</a>
-          <a className={secondary} href="#/download">Get the desktop app</a>
         </div>
       </section>
 

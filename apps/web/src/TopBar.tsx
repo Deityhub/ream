@@ -5,10 +5,6 @@ import { ThemeToggle } from './ThemeToggle'
 
 export const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
-// the landing and download pages sell the app; inside the desktop app they would only be in the way
-export const desktop = navigator.userAgent.includes('Electron')
-export const homeHref = desktop ? '#/tools' : '#/'
-
 export type Filter = Category | 'all'
 export const filterHref = (f: Filter) => (f === 'all' ? '#/tools' : `#/tools/${f}`)
 const filterName: Record<Filter, string> = { all: 'All tools', pdf: 'PDF', image: 'Images' }
@@ -18,7 +14,7 @@ export function TopBar({ children }: { children?: ReactNode }) {
   return (
     <header>
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-4 sm:px-8">
-        <a href={homeHref} className={`mr-auto flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
+        <a href="#/" className={`mr-auto flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
           <Logo size={24} /> Ream
         </a>
         {children}

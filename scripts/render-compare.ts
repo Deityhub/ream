@@ -2,6 +2,7 @@
 //   node scripts/render-compare.ts [outdir]
 // For each PDF it writes <name>.sheet.png: ours | reference | difference, and prints how many pixels differ noticeably.
 import { execFileSync, spawnSync } from 'node:child_process'
+import { openChrome } from './chrome.ts'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { assemble } from '../packages/pdf-core/test/helpers.ts'
@@ -224,19 +225,33 @@ async function main() {
   }) as unknown as Uint8Array)
   for (const f of ['cups.pdf', 'chromium.pdf']) add(`fixture-${f.replace('.pdf', '')}`, new Uint8Array(readFileSync(join(root, 'packages/pdf-core/test/fixtures', f))))
 
-  // bundle the harness for the Electron page
+  // bundle the harness for a Chrome page
   const bundle = join(out, 'harness.js')
   execFileSync(join(root, 'node_modules/.bin/esbuild'), [join(root, 'scripts/render-harness.ts'), '--bundle', '--format=iife', '--platform=browser', `--outfile=${bundle}`, '--log-level=error'], { cwd: root })
   // the renderer draws unembedded Helvetica, Times and Courier with the app's bundled look-alikes, as the app does
   const standard = standardFonts(nodeFonts)
   const fonts: Record<string, string[]> = {}
   for (const kind of ['sans', 'serif', 'mono'] as const) for (const bold of [false, true]) for (const italic of [false, true]) fonts[`${kind}${bold}${italic}`] = (await standard(kind, bold, italic)).map((b) => Buffer.from(b).toString('base64'))
-  const job = join(out, 'job.json')
-  writeFileSync(job, JSON.stringify({ bundle, items, fonts }))
-  const r = spawnSync(join(root, 'node_modules/.bin/electron'), [join(root, 'scripts/render-compare.cjs'), job], { encoding: 'utf8', maxBuffer: 1 << 28 })
-  const line = r.stdout.split('\n').find((l) => l.startsWith('RESULTS '))
-  if (!line) throw new Error('Electron produced no results:\n' + r.stdout.slice(-2000) + r.stderr.slice(-2000))
-  const results = JSON.parse(line.slice(8)) as Record<string, any>[]
+  const chrome = await openChrome()
+  const results: Record<string, any>[] = []
+  try {
+    const page = await chrome.page()
+    await page.evaluate(readFileSync(bundle, 'utf8'))
+    await page.evaluate(`Harness.setFonts(${JSON.stringify(fonts)})`)
+    for (const it of items) {
+      const b64 = (f: string) => JSON.stringify(readFileSync(f).toString('base64'))
+      try {
+        const r = await page.evaluate<Record<string, any>>(`Harness.compare(${b64(it.pdf)}, ${b64(it.ref)})`)
+        writeFileSync(it.out, Buffer.from(r.sheet, 'base64'))
+        delete r.sheet
+        results.push({ name: it.name, ...r })
+      } catch (e) {
+        results.push({ name: it.name, error: (e as Error).message.split('\n')[0] })
+      }
+    }
+  } finally {
+    await chrome.close()
+  }
   console.log('name'.padEnd(22) + 'size'.padEnd(11) + 'differ %'.padEnd(10) + 'mean'.padEnd(7) + 'ms'.padEnd(6) + 'warnings')
   for (const x of results) {
     if (x.error) console.log(x.name.padEnd(22) + 'ERROR ' + x.error)

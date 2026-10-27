@@ -1,5 +1,5 @@
 // Where the bundled look-alike fonts come from. In the app each WOFF is its own lazily loaded piece of the bundle (as a
-// data: URL, so it loads the same from a web server and from Electron's file:// pages); tests read the same files from disk.
+// data: URL inside a JS chunk, so it loads like the rest of the app); tests read the same files from disk.
 import type { FontSource } from './book.ts'
 
 export const browserFonts: FontSource = async (family, subset, weight, italic) => {
