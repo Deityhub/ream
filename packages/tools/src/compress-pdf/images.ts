@@ -1,9 +1,9 @@
 // Saving a PDF's pictures smaller: JPEGs and photographic pictures are decoded, brought down to the resolution they are
 // shown at, and saved as JPEG again. Anything this can't be sure about is left exactly as it is.
 import { deflate } from '@ream/core'
-import { PdfStream, decodeUntilImage, isName, name, type PdfDocument, type PdfObj } from '@ream/pdf-core'
-import { createImage, decodeJpeg, encodeJpeg, pngFilterRows, resize, type ImageBuffer } from '@ream/image-core'
-import type { Placement } from '@ream/pdf-render'
+import { PdfStream, decodeUntilImage, isName, jpegInfo, name, type PdfDocument, type PdfObj } from '@ream/pdf-core'
+import { codec, createImage, decodeJpeg, encodeJpeg, pngFilterRows, resize, type ImageBuffer } from '@ream/image-core'
+import type { Placement, Platform } from '@ream/pdf-render'
 
 export type ImagePlan = {
   /** 1 to 100 */
@@ -67,7 +67,7 @@ async function flateSamples(img: ImageBuffer, n: 1 | 3): Promise<Uint8Array> {
 }
 
 /** the picture saved smaller, or null when it should stay as it is (including when there is nothing to gain) */
-export async function recompressImage(doc: PdfDocument, im: PdfStream, placed: Placement | undefined, plan: ImagePlan): Promise<PdfStream | null> {
+export async function recompressImage(doc: PdfDocument, im: PdfStream, placed: Placement | undefined, plan: ImagePlan, platform?: Platform): Promise<PdfStream | null> {
   const d = im.dict
   if (!isName(doc.resolve(d.get('Subtype')), 'Image')) return null
   // stencils, colour-key masks and unusual decode ranges rely on exact sample values
@@ -90,9 +90,11 @@ export async function recompressImage(doc: PdfDocument, im: PdfStream, placed: P
   let wasJpeg = false
   if (dec.rest) {
     if (dec.rest.filter !== 'DCTDecode' && dec.rest.filter !== 'DCT') return null // JPEG 2000, CCITT, JBIG2: not ours
-    const j = decodeJpeg(dec.data)
-    if (j.components !== n) return null
-    pixels = j
+    if (jpegInfo(dec.data)?.components !== n) return null
+    // colour photos through the platform (the browser's decoder, ~5x faster than ours, drawn as stored like the renderer
+    // does); grey and CMYK, and anything the platform can't read, through ours
+    const native = n === 3 && platform ? await platform.decodeJpeg(dec.data).catch(() => null) : null
+    pixels = native ? { width: native.width, height: native.height, data: native.rgba } : decodeJpeg(dec.data)
     wasJpeg = true
   } else {
     if (dec.data.length < w * h * n) return null
@@ -131,7 +133,10 @@ export async function recompressImage(doc: PdfDocument, im: PdfStream, placed: P
   dict.set('Height', nh)
   dict.set('BitsPerComponent', 8)
   if (photo) {
-    const bytes = encodeJpeg(pixels, { quality: plan.quality, grey: n === 1 })
+    // the app's codec (the browser's, much faster) when it gives the components the dictionary says; ours otherwise
+    // (grey pictures, and RGB that only looks grey, which a codec for image files stores as grey)
+    let bytes = n === 3 ? await codec().encode(pixels, 'image/jpeg', plan.quality / 100) : null
+    if (!bytes || jpegInfo(bytes)?.components !== n) bytes = encodeJpeg(pixels, { quality: plan.quality, grey: n === 1 })
     // saving a JPEG again at a similar size only costs quality
     if (bytes.length >= im.data.length * (resized || !wasJpeg ? 1 : 0.9)) return null
     dict.set('Filter', name('DCTDecode'))

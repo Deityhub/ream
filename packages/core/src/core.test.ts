@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { UserError, acceptsFile, checkLimits, crc32, formatBytes, unzip, zip, zipPacked } from './index.ts'
+import { UserError, acceptsFile, checkLimits, crc32, formatBytes, pngPredictor, unzip, zip, zipPacked } from './index.ts'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
@@ -84,4 +84,40 @@ describe('unzip', () => {
     v.setUint32(cd + 24, 10, true)
     await expect(unzip(packed)).rejects.toBeInstanceOf(UserError)
   })
+})
+
+test('pngPredictor matches the PNG definition for every filter, pixel width and bit depth, the first row included', () => {
+  // the definition, byte by byte (PNG spec section 9)
+  const reference = (data: Uint8Array, columns: number, colors: number, bpc: number) => {
+    const bpp = Math.max(1, (colors * bpc + 7) >> 3)
+    const row = (colors * bpc * columns + 7) >> 3
+    const rows = Math.floor(data.length / (row + 1))
+    const out = new Uint8Array(rows * row)
+    for (let r = 0; r < rows; r++) {
+      const ft = data[r * (row + 1)]
+      for (let i = 0; i < row; i++) {
+        const x = data[r * (row + 1) + 1 + i]
+        const a = i >= bpp ? out[r * row + i - bpp] : 0
+        const b = r > 0 ? out[(r - 1) * row + i] : 0
+        const c = i >= bpp && r > 0 ? out[(r - 1) * row + i - bpp] : 0
+        const p = a + b - c
+        const paeth = Math.abs(p - a) <= Math.abs(p - b) && Math.abs(p - a) <= Math.abs(p - c) ? a : Math.abs(p - b) <= Math.abs(p - c) ? b : c
+        out[r * row + i] = x + [0, a, b, (a + b) >> 1, paeth][ft > 4 ? 0 : ft]
+      }
+    }
+    return out
+  }
+  let seed = 7
+  const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 16
+  for (const [colors, bpc] of [[1, 8], [3, 8], [4, 8], [1, 1], [2, 16], [4, 16]]) {
+    const columns = 13
+    const row = (colors * bpc * columns + 7) >> 3
+    const data = new Uint8Array(12 * (row + 1)).map(() => rand() & 255)
+    // every filter type on the first row and below, and one unknown type
+    for (let r = 0; r < 12; r++) data[r * (row + 1)] = r % 6 === 5 ? 9 : r % 6
+    for (const first of [0, 1, 2, 3, 4, 9]) {
+      data[0] = first
+      expect(Array.from(pngPredictor(data, columns, colors, bpc))).toEqual(Array.from(reference(data, columns, colors, bpc)))
+    }
+  }
 })

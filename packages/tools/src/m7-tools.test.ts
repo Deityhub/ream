@@ -142,8 +142,6 @@ describe('repair-pdf', () => {
   })
 })
 
-const form = (): FileData => ({ name: 'form.pdf', type: 'application/pdf', bytes: formPdf() })
-
 describe('pdf-to-text', () => {
   const decode = (f: FileData) => new TextDecoder().decode(f.bytes)
 

@@ -1,5 +1,5 @@
 import { UserError, type FileData, type RunFn } from '@ream/core'
-import { createImage, crop, encodeGif, resize, type ImageBuffer } from '@ream/image-core'
+import { createImage, crop, encodeGif, overlay, resize, type ImageBuffer } from '@ream/image-core'
 import { decodeFile } from '../image-common.ts'
 import { MAX_SIDE, type AnimatedGifOptions } from './options.ts'
 
@@ -8,8 +8,6 @@ export type { AnimatedGifOptions }
 const MAX_FRAMES = 300
 // every frame is held as full-colour pixels while the animation is built
 const MAX_PIXELS = 160_000_000
-
-const BACKGROUND = { white: [255, 255, 255, 255], black: [0, 0, 0, 255], transparent: [0, 0, 0, 0] }
 
 /** one picture made into a w x h frame the way `fit` says */
 function frame(img: ImageBuffer, w: number, h: number, fit: AnimatedGifOptions['fit'], background: AnimatedGifOptions['background']): ImageBuffer {
@@ -22,19 +20,16 @@ function frame(img: ImageBuffer, w: number, h: number, fit: AnimatedGifOptions['
   const scaled = sw === img.width && sh === img.height ? img : resize(img, sw, sh)
   if (fit === 'cover') return crop(scaled, (sw - w) >> 1, (sh - h) >> 1, w, h)
   const out = createImage(w, h)
-  const bg = BACKGROUND[background]
-  for (let i = 0; i < out.data.length; i += 4) out.data.set(bg, i)
   const ox = (w - sw) >> 1
   const oy = (h - sh) >> 1
-  for (let y = 0; y < sh; y++) {
-    for (let x = 0; x < sw; x++) {
-      const s = (y * sw + x) * 4
-      const d = ((oy + y) * w + ox + x) * 4
-      const a = scaled.data[s + 3] / 255
-      if (background === 'transparent' || a === 1) out.data.set(scaled.data.subarray(s, s + 4), d)
-      else for (let c = 0; c < 3; c++) out.data[d + c] = scaled.data[s + c] * a + bg[c] * (1 - a)
-    }
+  if (background === 'transparent') {
+    for (let y = 0; y < sh; y++) out.data.set(scaled.data.subarray(y * sw * 4, (y + 1) * sw * 4), ((oy + y) * w + ox) * 4)
+    return out
   }
+  out.data.fill(background === 'white' ? 255 : 0)
+  if (background === 'black') for (let i = 3; i < out.data.length; i += 4) out.data[i] = 255
+  // see-through parts of the picture show the background
+  overlay(out, scaled, ox, oy)
   return out
 }
 
