@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#305b69" />
-  <g transform="translate(4.8 4.8) scale(0.7)" stroke-width="2" stroke-linejoin="round">
-    <path d="M8 4H24V12L8 20Z" transform="translate(2.2 -1.1)" fill="#ffffff" stroke="#ffffff" />
-    <path d="M8 20L24 12V28H8Z" transform="translate(-2.2 1.1)" fill="#b9d5df" stroke="#b9d5df" />
+  <!-- Ream's app icon: the split sheet on the steel accent, full bleed and square like the rest of the design; the mark
+       sits inside the middle 80% so systems that crop icons to a circle (maskable) keep all of it -->
+  <rect width="32" height="32" fill="#416180" />
+  <g transform="translate(6.4 6.4) scale(0.6)" stroke-width="2" stroke-linejoin="round">
+    <path d="M8 4H24V12L8 20Z" transform="translate(2.2 -1.1)" fill="#f2f2f3" stroke="#f2f2f3" />
+    <path d="M8 20L24 12V28H8Z" transform="translate(-2.2 1.1)" fill="#b5d9fd" stroke="#b5d9fd" />
   </g>
 </svg>

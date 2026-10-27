@@ -15,6 +15,15 @@ The site is https://ream.deityhub.com, on Cloudflare Pages. `.github/workflows/w
 
 `apps/web/public/_headers` sets the response headers: a content security policy that lets the page load only its own files (plus Fontsource and jsDelivr, for Download free fonts), no inline scripts or styles, no framing; no referrer; and a year's caching for the content-named files in `/assets`. To try the headers locally: `yarn build`, then `yarn dlx wrangler@4 pages dev apps/web/dist`.
 
+## Installable and offline (PWA)
+
+Ream is a progressive web app. `apps/web/public/manifest.webmanifest` and the icons in `apps/web/public/icons` (drawn from `apps/web/icons/icon.svg` by `node scripts/icons.ts`) make it installable: Chrome and Edge show Install Ream on the landing page, Safari has File → Add to Dock, iPhone and iPad have Share → Add to Home Screen. The service worker (`apps/web/sw.js`, written into the build as `sw.js` with its file list by the `serviceWorker` plugin in `vite.config.ts`) keeps the app on the device:
+
+- On the first visit it downloads about 6 MB in the background: the app, its fonts, every tool, and the Office look-alike fonts for Latin scripts. After that every tool works with no connection.
+- Office fonts for other scripts (Cyrillic, Greek, Hebrew, Vietnamese) are kept the first time a file needs them; a file that needs one offline before then falls back like a missing font.
+- A new deploy is downloaded when the app is opened or comes back into view, and a bar offers to reload into it; it never switches by itself, so a tool isn't cut off half way. The page itself always comes from the network when there is one, so a plain reload is current.
+- Limits: the first visit needs a connection; Firefox works offline but can't install sites as apps on the desktop; the browser can clear the saved app when the device is short of space (it is then downloaded again on the next visit). Checked in Chrome only.
+
 ## Licence
 
 Ream is MIT licensed: see [LICENSE](LICENSE). The software and fonts it ships from others (React, the Lucide icon shapes, and the OFL fonts) are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `node scripts/notices.ts` writes; the site shows both as pages (`#/licence`, `#/notices`), linked from the footer.
@@ -50,7 +59,7 @@ Ream is MIT licensed: see [LICENSE](LICENSE). The software and fonts it ships fr
 | M7.5 ✅ | PDF redaction and forms | Redact PDF (removed for good, not covered), Fill PDF form |
 | M7.6 | Edit PDF | Add on top: text, pictures, shapes, drawings, whiteout, highlights, notes and links. Form fields: add, change, move and delete text fields, checkboxes, radio groups, dropdowns, lists, dates and signature boxes, set the Tab order, find fields on flat forms. Edit content: change, move and delete the page's own lines of text (in the PDF's font when it has the letters), move, resize, replace and delete its pictures, erase areas |
 | M7.7 ✅ | Redesign | Industry design system (paper ground, one steel accent, square hairline frames with corner registration marks, Barlow Condensed over Barlow, Lucide icons at 1.5), tools home per category (`#/tools/pdf`, `#/tools/image`) with a drop bar, a clickable breadcrumb under the top bar on the tools home and tool pages, landing page |
-| M8 | Ship | Web app on Cloudflare Pages (ream.deityhub.com), installable offline PWA, CI, MIT licence |
+| M8 ✅ | Ship | Web app on Cloudflare Pages (ream.deityhub.com), installable offline PWA, CI, MIT licence |
 | Gate | Phase 2 | Decide per feature: OCR, Word and HTML → PDF, PDF/A, ML image tools |
 
 Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), check accessibility on every new page.
@@ -217,6 +226,6 @@ The result preview waits 600 ms after the last change to any option before it re
 - `node scripts/contrast.ts` checks every token pair (4.5:1 for text, 3:1 for icons and input borders) in both modes and fails if one drops below.
 - **Fonts**: Barlow Condensed for headings and buttons over Barlow for text, bundled through `@fontsource/barlow-condensed` and `@fontsource/barlow` so they work offline (Industry's stylesheet loads them from Google Fonts; Ream doesn't). Numbers use tabular figures. Text watermarks on images (Watermark image) are drawn in Barlow.
 - **Icons**: Lucide's shapes at stroke 1.5, copied into `packages/ui/src/Icon.tsx` (ISC licence, no dependency). Whiteout, highlight and redact have no Lucide match and are drawn for Ream.
-- **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` (in the steel colours) is the static version; `apps/web/icons/icon.{svg,png}` (still the earlier blue) is the source of the app icons, redrawn in M8.
+- **Logo**: one sheet cut on a diagonal and slid apart (split and merge). `Logo` in `packages/ui` follows the theme; `apps/web/public/favicon.svg` (in the steel colours) is the static version; `apps/web/icons/icon.svg` (the mark on the steel accent, square) is the source of the app icons.
 - **Pages**: `#/` is the landing page, `#/tools` the tools home.
 - Not done: page thumbnails strip in the tool page (waits for M3 tools whose output keeps one page per input page), command palette. The design's network monitor, recent-files list, save-to folder and "Show in folder" were left out: Ream has none of them.

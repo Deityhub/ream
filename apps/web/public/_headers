@@ -11,3 +11,7 @@
 # Vite names these by their content, so they never change: cache them for good
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# the service worker and the page must always be checked for a newer version
+/sw.js
+  Cache-Control: no-cache

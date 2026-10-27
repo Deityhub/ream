@@ -1,7 +1,8 @@
 import { Icon } from '@ream/ui'
 import { findTool, tools } from '@ream/tools'
 import type { Category, Tool } from '@ream/core'
-import { Marketing, kicker, primary, wrap } from './Marketing'
+import { Marketing, kicker, primary, secondary, wrap } from './Marketing'
+import { install, installed, usePwa } from './pwa'
 import { ToolCard } from './Home'
 import { filterHref, focus } from './TopBar'
 
@@ -28,7 +29,7 @@ const groups: { cat: Category; label: string; title: string; blurb: string; noun
 
 const trust = [
   { icon: 'upload', title: 'No uploads', body: 'Files are read into memory on your computer and processed there. Ream has no server that receives files.' },
-  { icon: 'wifi-off', title: 'Nothing over the network', body: 'The tools run in this page. Nothing about your files goes over the network.' },
+  { icon: 'wifi-off', title: 'Works offline', body: 'Visit once and every tool works with no connection. Install Ream to open it like any other app. Nothing about your files goes over the network.' },
   { icon: 'user-off', title: 'No account', body: 'No sign-up, no email, no profile. Open a tool and drop a file in.' },
 ]
 
@@ -43,10 +44,35 @@ const facts = [
   ['Account', 'None'],
   ['Analytics or trackers', 'None'],
   ['Network requests', 'Font names, on your click'],
+  ['Works offline', 'After one visit'],
 ]
 
 const no = (i: number) => String(i + 1).padStart(2, '0')
 const cell = 'blueprint flex flex-col gap-2 border border-line p-5'
+
+/** the browser's own install offer, where it makes one (Chrome, Edge, Android) */
+function InstallButton() {
+  const { install: offer } = usePwa()
+  if (!offer) return null
+  return <button type="button" className={secondary} onClick={install}>Install Ream</button>
+}
+
+/** how to install where the browser has no offer to show: Safari has its own menu items, Firefox can't */
+function InstallHint() {
+  const { install: offer } = usePwa()
+  if (offer || installed()) return null
+  const ua = navigator.userAgent
+  const apple = /iPhone|iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  const safari = /Safari\//.test(ua) && !/Chrome|Chromium|Edg|Firefox|FxiOS|CriOS/.test(ua)
+  const hint = apple
+    ? 'To install Ream, tap Share, then Add to Home Screen.'
+    : safari
+      ? 'To install Ream, choose File, then Add to Dock.'
+      : /Firefox/.test(ua)
+        ? "Firefox can't install sites as apps, but after one visit every tool here works offline."
+        : null
+  return hint && <p className="mt-4 text-[15px] text-muted">{hint}</p>
+}
 
 export function Landing() {
   return (
@@ -62,7 +88,9 @@ export function Landing() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a className={primary} href="#/tools">Open the tools</a>
+          <InstallButton />
         </div>
+        <InstallHint />
       </section>
 
       <section className={`${wrap} pt-8`}>
