@@ -108,12 +108,16 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
+      # the repo goes in repo/, not the working directory: wrangler-action picks its package manager from the files
+      # it finds there, and the runner's own Yarn 1 refuses to run in a project pinned to Yarn 4
       - uses: actions/checkout@v7
+        with:
+          path: repo
       - uses: actions/setup-node@v7
         with:
           node-version: 22 # scripts/release.ts is TypeScript, run directly
       - id: version
-        run: echo "version=$(node scripts/release.ts version)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node repo/scripts/release.ts version)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         with:
           name: site
@@ -126,7 +130,7 @@ jobs:
       - name: Tag the release and write its notes (the pull requests merged since the last one)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ steps.version.outputs.version }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes
+        run: gh release create "v${{ steps.version.outputs.version }}" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes
       # the image for self-hosting: Intel/AMD and ARM, tagged with the version and latest. The site is built once, on
       # the runner's own platform; each platform's image only copies the files, so no emulation is needed.
       - uses: docker/setup-buildx-action@v4
@@ -150,7 +154,7 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: repo
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
