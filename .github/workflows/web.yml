@@ -127,10 +127,12 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name ream --branch main --commit-hash "${{ github.sha }}" --commit-message "v${{ steps.version.outputs.version }}"
-      - name: Tag the release and write its notes (the pull requests merged since the last one)
+      - name: Tag the release, with its CHANGELOG.md section as the notes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ steps.version.outputs.version }}" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes
+        run: |
+          node repo/scripts/release.ts notes > notes.md
+          gh release create "v${{ steps.version.outputs.version }}" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --notes-file notes.md
       # the image for self-hosting: Intel/AMD and ARM, tagged with the version and latest. The site is built once, on
       # the runner's own platform; each platform's image only copies the files, so no emulation is needed.
       - uses: docker/setup-buildx-action@v4
