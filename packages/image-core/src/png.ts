@@ -3,6 +3,16 @@ import { checkPixels, createImage, type ImageBuffer } from './buffer.ts'
 
 const SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
 const CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }
+// Adam7: first column, first row, column step, row step of each of the seven passes
+const ADAM7 = [
+  [0, 0, 8, 8],
+  [4, 0, 8, 8],
+  [0, 4, 4, 8],
+  [2, 0, 4, 4],
+  [0, 2, 2, 4],
+  [1, 0, 2, 2],
+  [0, 1, 1, 2],
+]
 
 export async function decodePng(bytes: Uint8Array): Promise<ImageBuffer> {
   if (bytes.length < 8 || SIGNATURE.some((b, i) => bytes[i] !== b)) throw new UserError("This isn't a PNG file.")
@@ -26,8 +36,7 @@ export async function decodePng(bytes: Uint8Array): Promise<ImageBuffer> {
   }
   if (!hdr || !idat.length) throw new UserError('This PNG is damaged.')
   const { w, h, depth, color } = hdr
-  if (!(color in CHANNELS) || ![1, 2, 4, 8, 16].includes(depth) || w < 1 || h < 1) throw new UserError('This PNG uses a format that is not supported.')
-  if (hdr.interlace) throw new UserError('Interlaced PNGs are not supported by this decoder yet.')
+  if (!(color in CHANNELS) || ![1, 2, 4, 8, 16].includes(depth) || w < 1 || h < 1 || hdr.interlace > 1) throw new UserError('This PNG uses a format that is not supported.')
   checkPixels(w, h, 'This image is')
 
   const joined = new Uint8Array(idat.reduce((n, c) => n + c.length, 0))
@@ -39,45 +48,60 @@ export async function decodePng(bytes: Uint8Array): Promise<ImageBuffer> {
     throw new UserError('This PNG is damaged.')
   }
   const channels = CHANNELS[color]
-  const rowBytes = (channels * depth * w + 7) >> 3
-  if (raw.length < h * (rowBytes + 1)) throw new UserError('This PNG is damaged.')
-  const px = pngPredictor(raw, w, channels, depth)
-
-  const out = createImage(w, h)
   const mask = (1 << Math.min(depth, 8)) - 1
-  for (let y = 0; y < h; y++) {
-    const row = y * rowBytes
-    // one sample (0 .. 2^depth-1; 16-bit keeps its high byte)
-    const sample = (i: number) =>
-      depth === 8 ? px[row + i] : depth === 16 ? px[row + 2 * i] : (px[row + ((i * depth) >> 3)] >> (8 - depth - ((i * depth) & 7))) & mask
-    const to8 = (s: number) => (depth >= 8 ? s : Math.round((s * 255) / mask))
-    for (let x = 0; x < w; x++) {
-      const o = (y * w + x) * 4
-      let r: number, g: number, b: number, a = 255
-      if (color === 3) {
-        const idx = sample(x)
-        r = plte?.[idx * 3] ?? 0
-        g = plte?.[idx * 3 + 1] ?? 0
-        b = plte?.[idx * 3 + 2] ?? 0
-        a = trns && idx < trns.length ? trns[idx] : 255
-      } else if (color === 0 || color === 4) {
-        const s = sample(x * channels)
-        r = g = b = to8(s)
-        if (color === 4) a = to8(sample(x * 2 + 1))
-        // ponytail: colour-key transparency (tRNS) is honoured for depths up to 8 only
-        else if (trns && depth < 16 && s === trns[1]) a = 0
-      } else {
-        const s = [sample(x * channels), sample(x * channels + 1), sample(x * channels + 2)]
-        r = s[0]
-        g = s[1]
-        b = s[2]
-        if (color === 6) a = sample(x * 4 + 3)
-        else if (trns && depth === 8 && s[0] === trns[1] && s[1] === trns[3] && s[2] === trns[5]) a = 0
+  const out = createImage(w, h)
+
+  /** unpack `ph` filtered rows of `pw` pixels starting at `raw[off]`; `place(x, y)` gives the pixel's offset in the output */
+  const unpack = (off: number, pw: number, ph: number, place: (x: number, y: number) => number) => {
+    const rowBytes = (channels * depth * pw + 7) >> 3
+    if (raw.length < off + ph * (rowBytes + 1)) throw new UserError('This PNG is damaged.')
+    const px = pngPredictor(raw.subarray(off, off + ph * (rowBytes + 1)), pw, channels, depth)
+    for (let y = 0; y < ph; y++) {
+      const row = y * rowBytes
+      // one sample (0 .. 2^depth-1; 16-bit keeps its high byte)
+      const sample = (i: number) =>
+        depth === 8 ? px[row + i] : depth === 16 ? px[row + 2 * i] : (px[row + ((i * depth) >> 3)] >> (8 - depth - ((i * depth) & 7))) & mask
+      const to8 = (s: number) => (depth >= 8 ? s : Math.round((s * 255) / mask))
+      for (let x = 0; x < pw; x++) {
+        const o = place(x, y)
+        let r: number, g: number, b: number, a = 255
+        if (color === 3) {
+          const idx = sample(x)
+          r = plte?.[idx * 3] ?? 0
+          g = plte?.[idx * 3 + 1] ?? 0
+          b = plte?.[idx * 3 + 2] ?? 0
+          a = trns && idx < trns.length ? trns[idx] : 255
+        } else if (color === 0 || color === 4) {
+          const s = sample(x * channels)
+          r = g = b = to8(s)
+          if (color === 4) a = to8(sample(x * 2 + 1))
+          // ponytail: colour-key transparency (tRNS) is honoured for depths up to 8 only
+          else if (trns && depth < 16 && s === trns[1]) a = 0
+        } else {
+          const s = [sample(x * channels), sample(x * channels + 1), sample(x * channels + 2)]
+          r = s[0]
+          g = s[1]
+          b = s[2]
+          if (color === 6) a = sample(x * 4 + 3)
+          else if (trns && depth === 8 && s[0] === trns[1] && s[1] === trns[3] && s[2] === trns[5]) a = 0
+        }
+        out.data[o] = r
+        out.data[o + 1] = g
+        out.data[o + 2] = b
+        out.data[o + 3] = a
       }
-      out.data[o] = r
-      out.data[o + 1] = g
-      out.data[o + 2] = b
-      out.data[o + 3] = a
+    }
+  }
+
+  if (!hdr.interlace) unpack(0, w, h, (x, y) => (y * w + x) * 4)
+  else {
+    let off = 0
+    for (const [x0, y0, dx, dy] of ADAM7) {
+      const pw = Math.ceil((w - x0) / dx)
+      const ph = Math.ceil((h - y0) / dy)
+      if (pw < 1 || ph < 1) continue // small pictures have empty passes
+      unpack(off, pw, ph, (x, y) => ((y0 + y * dy) * w + x0 + x * dx) * 4)
+      off += ph * (((channels * depth * pw + 7) >> 3) + 1)
     }
   }
   return out
@@ -93,23 +117,164 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
   return out
 }
 
-/** 8-bit RGBA, no interlacing */
-export async function encodePng(img: ImageBuffer): Promise<Uint8Array> {
-  const stride = img.width * 4
-  const raw = new Uint8Array((stride + 1) * img.height)
-  for (let y = 0; y < img.height; y++) {
-    const r = y * (stride + 1)
-    raw[r] = 1 // ponytail: Sub filter on every row; choosing the best filter per row comes with the M4 PNG optimiser
-    for (let i = 0; i < stride; i++) raw[r + 1 + i] = img.data[y * stride + i] - (i >= 4 ? img.data[y * stride + i - 4] : 0)
+/**
+ * Filter each row with whichever of the five PNG filters leaves the smallest sum of absolute values (libpng's heuristic),
+ * `bpp` being the bytes per complete pixel (at least 1). Rows are `stride` bytes, in `pixels`.
+ */
+export function filterRows(pixels: Uint8Array, stride: number, height: number, bpp: number, filters: number[]): Uint8Array {
+  const out = new Uint8Array((stride + 1) * height)
+  const tries = [0, 1, 2, 3, 4].map(() => new Uint8Array(stride))
+  const zero = new Uint8Array(stride)
+  for (let y = 0; y < height; y++) {
+    const cur = pixels.subarray(y * stride, (y + 1) * stride)
+    const up = y ? pixels.subarray((y - 1) * stride, y * stride) : zero
+    let best = 0
+    let bestCost = Infinity
+    for (const ft of filters) {
+      const t = tries[ft]
+      let cost = 0
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? cur[i - bpp] : 0
+        const b = up[i]
+        let p = 0
+        if (ft === 1) p = a
+        else if (ft === 2) p = b
+        else if (ft === 3) p = (a + b) >> 1
+        else if (ft === 4) {
+          const c = i >= bpp ? up[i - bpp] : 0
+          const q = a + b - c
+          const pa = Math.abs(q - a)
+          const pb = Math.abs(q - b)
+          const pc = Math.abs(q - c)
+          p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+        }
+        const d = (cur[i] - p) & 255
+        t[i] = d
+        cost += d < 128 ? d : 256 - d
+      }
+      if (cost < bestCost) {
+        bestCost = cost
+        best = ft
+      }
+    }
+    out[y * (stride + 1)] = best
+    out.set(tries[best], y * (stride + 1) + 1)
   }
+  return out
+}
+
+export type PngOptions = {
+  /** pick the smallest lossless form: palette, grey or RGB instead of always RGBA, and the best filter per row (default true) */
+  optimize?: boolean
+  /** complete chunks to write after the header (colour profile, density: see `colourChunks`) */
+  chunks?: Uint8Array[]
+}
+
+type Layout = { color: number; depth: number; plte?: Uint8Array; trns?: Uint8Array; pixels: Uint8Array; stride: number; bpp: number }
+
+/** the pixel bytes of the picture in the smallest PNG colour layout that holds it exactly */
+function layoutOf(img: ImageBuffer, optimize: boolean, allowPalette = true): Layout {
+  const { width: w, height: h, data } = img
+  const n = w * h
+  const rgba = (): Layout => ({ color: 6, depth: 8, pixels: new Uint8Array(data.buffer, data.byteOffset, data.length), stride: w * 4, bpp: 4 })
+  if (!optimize) return rgba()
+
+  let alpha = false
+  let grey = true
+  // up to 256 distinct colours are kept, as r, g, b, a packed into one number
+  const index = new Map<number, number>()
+  let many = false
+  for (let i = 0; i < n; i++) {
+    const r = data[i * 4]
+    const g = data[i * 4 + 1]
+    const b = data[i * 4 + 2]
+    const a = data[i * 4 + 3]
+    if (a !== 255) alpha = true
+    if (r !== g || r !== b) grey = false
+    if (!many) {
+      const key = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+      if (!index.has(key)) {
+        if (index.size === 256) many = true
+        else index.set(key, index.size)
+      }
+    }
+  }
+
+  // a palette pays off up to 256 colours, except for plain grey with many levels (grey8 has no palette to store)
+  if (allowPalette && !many && !(grey && !alpha && index.size > 16)) {
+    const entries = [...index.keys()]
+    // transparent entries first, so the tRNS chunk only has to list those
+    entries.sort((p, q) => (p & 255) - (q & 255))
+    const slot = new Map(entries.map((k, i) => [k, i]))
+    const plte = new Uint8Array(entries.length * 3)
+    const trnsFull = new Uint8Array(entries.length)
+    entries.forEach((k, i) => {
+      plte[i * 3] = k >>> 24
+      plte[i * 3 + 1] = (k >>> 16) & 255
+      plte[i * 3 + 2] = (k >>> 8) & 255
+      trnsFull[i] = k & 255
+    })
+    let lastTrans = -1
+    trnsFull.forEach((a, i) => a !== 255 && (lastTrans = i))
+    const depth = entries.length <= 2 ? 1 : entries.length <= 4 ? 2 : entries.length <= 16 ? 4 : 8
+    const stride = (w * depth + 7) >> 3
+    const pixels = new Uint8Array(stride * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        const k = slot.get((((data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3]) >>> 0))!
+        if (depth === 8) pixels[y * stride + x] = k
+        else pixels[y * stride + ((x * depth) >> 3)] |= k << (8 - depth - ((x * depth) & 7))
+      }
+    }
+    return { color: 3, depth, plte, trns: lastTrans >= 0 ? trnsFull.subarray(0, lastTrans + 1) : undefined, pixels, stride, bpp: 1 }
+  }
+  if (grey) {
+    const ch = alpha ? 2 : 1
+    const pixels = new Uint8Array(n * ch)
+    for (let i = 0; i < n; i++) {
+      pixels[i * ch] = data[i * 4]
+      if (alpha) pixels[i * ch + 1] = data[i * 4 + 3]
+    }
+    return { color: alpha ? 4 : 0, depth: 8, pixels, stride: w * ch, bpp: ch }
+  }
+  if (!alpha) {
+    const pixels = new Uint8Array(n * 3)
+    for (let i = 0; i < n; i++) pixels.set(data.subarray(i * 4, i * 4 + 3), i * 3)
+    return { color: 2, depth: 8, pixels, stride: w * 3, bpp: 3 }
+  }
+  return rgba()
+}
+
+async function write(img: ImageBuffer, l: Layout, optimize: boolean, chunks: Uint8Array[]): Promise<Uint8Array> {
+  // ponytail: the filter heuristic is libpng's, and deflate is the platform's (zlib level 6); a tighter deflate of our own would save a few percent more
+  // packed pixels (depth < 8) don't filter well, so those rows go unfiltered, as in libpng
+  const filters = !optimize ? [1] : l.depth === 8 ? [0, 1, 2, 3, 4] : [0]
+  const filtered = filterRows(l.pixels, l.stride, img.height, l.bpp, filters)
   const ihdr = new Uint8Array(13)
   const hv = new DataView(ihdr.buffer)
   hv.setUint32(0, img.width)
   hv.setUint32(4, img.height)
-  ihdr[8] = 8
-  ihdr[9] = 6
-  const parts = [Uint8Array.from(SIGNATURE), chunk('IHDR', ihdr), chunk('IDAT', await deflate(raw)), chunk('IEND', new Uint8Array(0))]
+  ihdr[8] = l.depth
+  ihdr[9] = l.color
+  const parts = [Uint8Array.from(SIGNATURE), chunk('IHDR', ihdr), ...chunks]
+  if (l.plte) parts.push(chunk('PLTE', l.plte))
+  if (l.trns) parts.push(chunk('tRNS', l.trns))
+  parts.push(chunk('IDAT', await deflate(filtered)), chunk('IEND', new Uint8Array(0)))
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
   parts.reduce((at, p) => (out.set(p, at), at + p.length), 0)
   return out
+}
+
+/** Encode a picture. Without `optimize: false` the result is the smallest lossless PNG this encoder can make. */
+export async function encodePng(img: ImageBuffer, o: PngOptions = {}): Promise<Uint8Array> {
+  const optimize = o.optimize ?? true
+  const l = layoutOf(img, optimize)
+  const best = await write(img, l, optimize, o.chunks ?? [])
+  // a palette costs 3 bytes a colour, which a small picture with many colours can't earn back: try the plain form too
+  if (optimize && l.color === 3 && l.plte!.length > 48 && img.width * img.height <= 262144) {
+    const plain = await write(img, layoutOf(img, optimize, false), optimize, o.chunks ?? [])
+    if (plain.length < best.length) return plain
+  }
+  return best
 }

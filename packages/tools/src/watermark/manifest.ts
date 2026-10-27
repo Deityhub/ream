@@ -10,5 +10,6 @@ export const watermark: Tool = {
   action: 'Add watermark',
   multiple: false,
   minFiles: 1,
-  status: 'soon',
+  preview: 'live',
+  status: 'ready',
 }

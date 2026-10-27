@@ -1,9 +1,42 @@
 @import 'tailwindcss';
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/600.css';
+@import '@fontsource/barlow/700.css';
+@import '@fontsource/barlow-condensed/400.css';
+@import '@fontsource/barlow-condensed/600.css';
 @import '@ream/ui/theme.css';
 @source '../../../packages/ui/src';
 @source '../../../packages/tools/src';
 
 body {
-  @apply bg-canvas text-ink antialiased;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  @apply bg-canvas font-sans text-ink antialiased;
+}
+
+/* Industry condenses its headings; a class on the heading still wins */
+@layer base {
+  h1, h2, h3, h4 { @apply font-heading font-semibold tracking-tight; }
+}
+
+input { accent-color: var(--accent); }
+
+/* a fieldset sizes itself to its widest child by default, which pushed wide selects out of their card */
+fieldset { min-width: 0; }
+select, input { max-width: 100%; }
+
+/* Tailwind v4 resets buttons to the default cursor; everything else that reacts to a click gets the pointer too */
+button:not(:disabled), [role='tab']:not(:disabled), [role='button'], a[href], summary, select:not(:disabled),
+input:is([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']):not(:disabled),
+label:has(input:is([type='checkbox'], [type='radio']):not(:disabled)) { cursor: pointer; }
+:is(button, select, input):disabled { cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* shows transparency in image previews */
+.checker {
+  background-color: var(--surface);
+  background-image: conic-gradient(var(--surface-2) 25%, transparent 0 50%, var(--surface-2) 0 75%, transparent 0);
+  background-size: 16px 16px;
 }

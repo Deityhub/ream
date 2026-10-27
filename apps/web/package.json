@@ -1,6 +1,7 @@
 {
   "name": "@ream/web",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
     "@ream/core": "workspace:*",
     "@ream/image-core": "workspace:*",
+    "@ream/office-core": "workspace:*",
+    "@ream/pdf-core": "workspace:*",
+    "@ream/pdf-render": "workspace:*",
     "@ream/tools": "workspace:*",
     "@ream/ui": "workspace:*",
     "react": "^19.0.0",

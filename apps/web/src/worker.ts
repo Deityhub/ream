@@ -1,9 +1,11 @@
 import { UserError, type FileData } from '@ream/core'
 import { setCodec } from '@ream/image-core'
-import { browserCodec } from '@ream/image-core/browser'
+import { appCodec } from '@ream/image-core/browser'
 import { runners } from '@ream/tools/runners'
+import { installStandardFonts } from '@ream/tools/standard-fonts'
 
-setCodec(browserCodec)
+setCodec(appCodec)
+installStandardFonts()
 
 type Request = { id: string; files: FileData[]; options: unknown }
 

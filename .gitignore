@@ -4,3 +4,7 @@ dist
 !.yarn/releases
 *.log
 .DS_Store
+.render-compare
+.claude
+.wrangler
+.env

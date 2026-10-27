@@ -11,5 +11,6 @@ export const mergeImages: Tool = {
   action: 'Merge images',
   multiple: true,
   minFiles: 2,
+  preview: 'live',
   status: 'ready',
 }

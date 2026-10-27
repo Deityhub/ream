@@ -1,4 +1,6 @@
 export { Icon } from './Icon.tsx'
+export { Logo } from './Logo.tsx'
 export { Button } from './Button.tsx'
 export { Card } from './Card.tsx'
 export { Dropzone } from './Dropzone.tsx'
+export { ZoomBar, useZoom, useWidth, zoomedWidth, renderWidthFor, type Zoom } from './Zoom.tsx'

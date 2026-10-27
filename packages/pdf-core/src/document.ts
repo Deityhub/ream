@@ -1,7 +1,8 @@
-import { PdfKeyword, PdfRef, PdfStream, isDict, isName, type PdfDict, type PdfObj } from './objects.ts'
+import { PdfKeyword, PdfRef, PdfStream, PdfString, isDict, isName, name, type PdfDict, type PdfObj } from './objects.ts'
 import { Parser, parseIndirectAt } from './parser.ts'
-import { decodeStream } from './flate.ts'
-import { PdfEncryptedError, PdfParseError } from './errors.ts'
+import { decodeStream } from './filters.ts'
+import { PdfEncryptedError, PdfParseError, PdfPasswordError } from './errors.ts'
+import { decryptObjects, openSecurity } from './security.ts'
 import { ascii, indexOfBytes } from './bytes.ts'
 
 type Entry = { kind: 'free' } | { kind: 'direct'; offset: number } | { kind: 'compressed'; stm: number }
@@ -17,22 +18,36 @@ const INHERITED = ['Resources', 'MediaBox', 'CropBox', 'Rotate']
 const unknownLength = () => NaN
 
 // ponytail: every object is parsed up front; fine for normal files, make it lazy if huge PDFs hurt
+export type LoadOptions = {
+  /** user or owner password; the empty password is tried by default, which opens files that only restrict editing */
+  password?: string
+  /** keep going when the file has no usable catalog or page tree (the repair tool puts that right); normal loading refuses such a file */
+  repair?: boolean
+}
+
 export class PdfDocument {
   objects: Map<number, PdfObj>
   trailer: PdfDict
-  constructor(objects: Map<number, PdfObj>, trailer: PdfDict) {
+  /** the file was encrypted; everything in `objects` is already decrypted */
+  encrypted: boolean
+  /** the cross-reference table was missing or wrong, so the objects were found by scanning the file */
+  rebuilt = false
+  constructor(objects: Map<number, PdfObj>, trailer: PdfDict, encrypted = false) {
     this.objects = objects
     this.trailer = trailer
+    this.encrypted = encrypted
   }
 
-  static async load(bytes: Uint8Array): Promise<PdfDocument> {
+  static async load(bytes: Uint8Array, { password = '', repair = false }: LoadOptions = {}): Promise<PdfDocument> {
     const head = indexOfBytes(bytes.subarray(0, 1024), ascii('%PDF-'))
     if (head < 0) throw new PdfParseError("This file isn't a PDF.")
     try {
-      return validate(await loadFromXref(bytes))
+      return validate(await loadFromXref(bytes, password))
     } catch (e) {
-      if (e instanceof PdfEncryptedError) throw e
-      return validate(await rebuild(bytes))
+      if (e instanceof PdfEncryptedError || e instanceof PdfPasswordError) throw e
+      const doc = await rebuild(bytes, password, repair)
+      doc.rebuilt = true
+      return repair ? doc : validate(doc)
     }
   }
 
@@ -47,6 +62,25 @@ export class PdfDocument {
     const root = this.resolve(this.trailer.get('Root'))
     if (!isDict(root)) throw new PdfParseError("This PDF has no document catalog; the file may be damaged.")
     return root
+  }
+
+  /** the visible box (crop box, else media box) as [x1, y1, x2, y2] with x1 < x2 and y1 < y2, and the page rotation (0, 90, 180 or 270) */
+  pageBox(page: Page): { box: [number, number, number, number]; rotate: number } {
+    const get = (k: string) => this.resolve(page.dict.get(k) ?? page.inherited.get(k))
+    const raw = get('CropBox') ?? get('MediaBox')
+    const n = Array.isArray(raw) ? raw.map((v) => this.resolve(v)) : []
+    const ok = n.length === 4 && n.every((v) => typeof v === 'number')
+    const [x1, y1, x2, y2] = ok ? (n as number[]) : [0, 0, 612, 792] // US Letter when the file gives no usable box
+    const r = get('Rotate')
+    const rotate = typeof r === 'number' ? ((Math.round(r / 90) * 90) % 360 + 360) % 360 : 0
+    return { box: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)], rotate }
+  }
+
+  /** displayed size in points: the crop box (or media box) with the page rotation applied */
+  pageSize(page: Page): { width: number; height: number } {
+    const { box, rotate } = this.pageBox(page)
+    const [w, h] = [box[2] - box[0], box[3] - box[1]]
+    return rotate % 180 === 90 ? { width: h, height: w } : { width: w, height: h }
   }
 
   pages(): Page[] {
@@ -71,16 +105,29 @@ export class PdfDocument {
 }
 
 function validate(doc: PdfDocument): PdfDocument {
-  if (doc.trailer.has('Encrypt')) throw new PdfEncryptedError()
   if (!isDict(doc.resolve(doc.catalog().get('Pages')))) throw new PdfParseError("Couldn't find the pages in this PDF.")
   return doc
 }
 
+/** if the trailer names an /Encrypt dictionary, work out the key from the password and decrypt every object in place */
+async function unlock(trailer: PdfDict, objects: Map<number, PdfObj>, gens: Map<number, number>, password: string): Promise<boolean> {
+  if (!trailer.has('Encrypt')) return false
+  const resolve = (o: PdfObj): PdfObj => (o instanceof PdfRef ? objects.get(o.num) ?? null : o)
+  const ref = trailer.get('Encrypt') ?? null
+  const enc = resolve(ref)
+  if (!isDict(enc)) throw new PdfEncryptedError()
+  const id = resolve(trailer.get('ID') ?? null)
+  const id0 = Array.isArray(id) && id[0] instanceof PdfString ? id[0].bytes : new Uint8Array(0)
+  const dec = await openSecurity(enc, id0, password, resolve)
+  decryptObjects(objects, gens, dec, ref instanceof PdfRef ? ref.num : -1)
+  trailer.delete('Encrypt')
+  return true
+}
+
 // ---------- normal path: follow startxref ----------
 
-async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
+async function loadFromXref(bytes: Uint8Array, password: string): Promise<PdfDocument> {
   const { entries, trailer } = await readXrefChain(bytes, findStartXref(bytes))
-  if (trailer.has('Encrypt')) throw new PdfEncryptedError()
 
   const directLength = (num: number) => {
     const e = entries.get(num)
@@ -95,12 +142,16 @@ async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
   const lengthOf = (o: PdfObj) => (typeof o === 'number' ? o : o instanceof PdfRef ? directLength(o.num) : NaN)
 
   const objects = new Map<number, PdfObj>()
+  const gens = new Map<number, number>()
   for (const [num, e] of entries) {
     if (e.kind !== 'direct') continue
     const r = parseIndirectAt(bytes, e.offset, lengthOf)
     if (r.num !== num) throw new PdfParseError('The cross-reference table is wrong')
     objects.set(num, r.obj)
+    gens.set(num, r.gen)
   }
+  // decrypt before object streams are opened: their contents are plain only once the stream itself is decrypted
+  const encrypted = await unlock(trailer, objects, gens, password)
   const stms = new Set<number>()
   for (const e of entries.values()) if (e.kind === 'compressed') stms.add(e.stm)
   for (const stm of stms) {
@@ -111,7 +162,7 @@ async function loadFromXref(bytes: Uint8Array): Promise<PdfDocument> {
       return e?.kind === 'compressed' && e.stm === stm
     }, objects)
   }
-  return new PdfDocument(objects, trailer)
+  return new PdfDocument(objects, trailer, encrypted)
 }
 
 function findStartXref(bytes: Uint8Array): number {
@@ -227,14 +278,16 @@ async function expandObjStm(stm: PdfStream, accept: (num: number) => boolean, ou
 
 // ---------- fallback: scan the whole file for "n g obj" ----------
 
-async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
+async function rebuild(bytes: Uint8Array, password: string, repair: boolean): Promise<PdfDocument> {
   const text = new TextDecoder('latin1').decode(bytes)
   const objects = new Map<number, PdfObj>()
+  const gens = new Map<number, number>()
   const re = /(?<![\w.])(\d+)\s+(\d+)\s+obj\b/g
   for (let m = re.exec(text); m; m = re.exec(text)) {
     try {
       const r = parseIndirectAt(bytes, m.index, unknownLength)
       objects.set(r.num, r.obj)
+      gens.set(r.num, r.gen)
       re.lastIndex = Math.max(re.lastIndex, r.end)
     } catch {
       // skip objects we can't read
@@ -251,8 +304,23 @@ async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
       // ignore
     }
   }
-  for (const o of [...objects.values()]) {
+  for (const o of objects.values()) {
     if (o instanceof PdfStream && isName(o.dict.get('Type'), 'XRef') && o.dict.has('Root')) trailer = o.dict
+  }
+  if (!trailer) {
+    for (const [num, o] of objects) if (isDict(o) && isName(o.get('Type'), 'Catalog')) trailer = new Map([['Root', new PdfRef(num)]])
+  }
+  if (!trailer && repair && [...objects.values()].some((o) => isDict(o) && isName(o.get('Type'), 'Page'))) {
+    // no catalog survived but pages did: a new catalog is made, and the repair gives it a page tree
+    const num = Math.max(0, ...objects.keys()) + 1
+    objects.set(num, new Map<string, PdfObj>([['Type', name('Catalog')]]))
+    trailer = new Map([['Root', new PdfRef(num)]])
+  }
+  if (!trailer) throw new PdfParseError("Couldn't read this PDF; the file may be damaged.")
+
+  // decrypt first, then open object streams: their contents are plain only once the stream itself is decrypted
+  const encrypted = await unlock(trailer, objects, gens, password)
+  for (const o of [...objects.values()]) {
     if (o instanceof PdfStream && isName(o.dict.get('Type'), 'ObjStm')) {
       try {
         await expandObjStm(o, (n) => !objects.has(n), objects)
@@ -261,9 +329,5 @@ async function rebuild(bytes: Uint8Array): Promise<PdfDocument> {
       }
     }
   }
-  if (!trailer) {
-    for (const [num, o] of objects) if (isDict(o) && isName(o.get('Type'), 'Catalog')) trailer = new Map([['Root', new PdfRef(num)]])
-  }
-  if (!trailer) throw new PdfParseError("Couldn't read this PDF; the file may be damaged.")
-  return new PdfDocument(objects, trailer)
+  return new PdfDocument(objects, trailer, encrypted)
 }

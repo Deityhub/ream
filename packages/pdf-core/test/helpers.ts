@@ -124,3 +124,27 @@ export async function pageTexts(bytes: Uint8Array): Promise<string[]> {
 }
 
 export { isName }
+
+/** one page with every kind of form field: text, multi-line, comb, check box, two radio buttons, drop-down, signature */
+export function formPdf(extraForm = ''): Uint8Array {
+  const stream = (c: string) => `<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length ${c.length} >>\nstream\n${c}\nendstream`
+  const w = (rect: string, rest: string) => `<< /Type /Annot /Subtype /Widget /Rect [${rect}] /F 4 /P 4 0 R ${rest} >>`
+  const bg = '/MK << /BC [0 0 0] /BG [0.9 0.9 0.9] >>'
+  return assemble([
+    [1, `<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 17 0 R 18 0 R] /DR << /Font << /Helv 3 0 R >> >> /DA (/Helv 0 Tf 0 g) /NeedAppearances true ${extraForm} >> >>`],
+    [2, '<< /Type /Pages /Kids [4 0 R] /Count 1 >>'],
+    [3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'],
+    [4, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << >> /Annots [10 0 R 11 0 R 12 0 R 13 0 R 15 0 R 16 0 R 17 0 R 18 0 R] >>'],
+    [10, w('20 340 200 360', `/FT /Tx /T (name) /V (Ann) /DA (/Helv 12 Tf 0 g) ${bg}`)],
+    [11, w('20 250 200 320', `/FT /Tx /Ff 4096 /T (notes) /DA (/Helv 10 Tf 0 g) ${bg}`)],
+    [12, w('20 210 100 230', `/FT /Tx /Ff 16777216 /MaxLen 4 /T (code) /DA (/Helv 12 Tf 0 g) ${bg}`)],
+    [13, w('20 170 40 190', '/FT /Btn /T (agree) /V /Off /AS /Off /AP << /N << /Yes 20 0 R /Off 21 0 R >> >>')],
+    [14, '<< /FT /Btn /Ff 32768 /T (size) /V /Off /Kids [15 0 R 16 0 R] >>'],
+    [15, w('60 170 80 190', '/Parent 14 0 R /AS /Off /AP << /N << /S 20 0 R /Off 21 0 R >> >>')],
+    [16, w('100 170 120 190', '/Parent 14 0 R /AS /Off /AP << /N << /L 20 0 R /Off 21 0 R >> >>')],
+    [17, w('20 120 200 140', `/FT /Ch /Ff 131072 /T (country) /DA (/Helv 12 Tf 0 g) /Opt [(France) (Germany) [(it) (Italy)]] ${bg}`)],
+    [18, w('20 60 200 100', '/FT /Sig /T (sig)')],
+    [20, stream('0 0 20 20 re f')],
+    [21, stream('')],
+  ]).bytes
+}

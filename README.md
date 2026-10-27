@@ -1,57 +1,74 @@
 # Ream
 
-PDF and image tools that run entirely on your device, in the browser or as an Electron app. Own engines, no runtime dependencies in phase 1.
+**Ream is the file toolkit that runs on your computer.** Convert, edit, compress and secure PDFs, images and Office documents in your browser, with more kinds of file on the way. Your files are opened and processed on your own device and never reach a server. No account, no uploads, no trackers, and it works offline.
+
+**Use it at [ream.deityhub.com](https://ream.deityhub.com).**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/landing-dark.png">
+  <img alt="Ream's home page: the file toolkit that runs on your computer" src="docs/images/landing-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/tool-dark.png">
+  <img alt="PowerPoint to PDF in Ream: the slides, converted, beside the tool's options" src="docs/images/tool-light.png">
+</picture>
+
+## What it does
+
+- **PDF:** merge, split, organize pages, compress, crop, page numbers, watermark, sign, fill forms, redact, edit text, pictures and form fields, bookmarks, metadata, protect and unlock, repair, extract images, PDF to text.
+- **Conversions:** PDF to Word, Excel, PowerPoint and images; Excel, PowerPoint and images to PDF.
+- **Images:** resize, compress, convert, crop, rotate and flip, merge, blur or hide parts, filters, watermark, photo metadata, animated GIFs, memes.
+
+Everything runs in the page, on Ream's own engines (PDF parser, writer and renderer, image codecs, Office readers), with no server behind them. The one network request Ream can make is **Download free fonts**, which sends font names only, when you click it.
+
+## Installation
+
+**In the browser:** open [ream.deityhub.com](https://ream.deityhub.com). Nothing to install.
+
+**As an app:** Ream installs from the browser and then opens in its own window, with no connection needed after the first visit.
+
+- Chrome or Edge: click **Install Ream** on the home page (or the install icon in the address bar).
+- Safari on a Mac: File → Add to Dock.
+- iPhone or iPad: Share → Add to Home Screen.
+- Firefox can't install sites as apps, but Ream still works offline there after one visit.
+
+**With Docker:** run your own copy, for example on a company network.
 
 ```bash
-yarn dev          # web app on http://localhost:5173
-yarn desktop      # build, then open in Electron
-yarn test         # vitest
-yarn typecheck
-yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rotate | split
+docker run --rm -p 8080:8080 ghcr.io/deityhub/ream
 ```
 
-## Layout
+Then open http://localhost:8080. The image is also on Docker Hub as `deityhub/ream`. Behind HTTPS (your usual proxy), it installs as an app and works offline the same way. See [docs/deploy.md](docs/deploy.md#docker).
 
-| Path | What |
-|---|---|
-| `packages/core` | Tool manifest types |
-| `packages/pdf-core` | Own PDF parser, writer and page operations (pure TS, no DOM) |
-| `packages/image-core` | RGBA pixel buffer, resize/crop/rotate/flip/stitch, own PNG codec, browser codec |
-| `packages/ui` | Theme tokens and shared React components |
-| `packages/tools` | One folder per tool, plus the registry |
-| `apps/web` | Vite + React + Tailwind v4 |
-| `apps/desktop` | Electron shell |
+**From the source:** you need Node 22 and Yarn 4 (`corepack enable` provides it).
 
-## Roadmap
+```bash
+git clone https://github.com/Deityhub/ream.git
+cd ream
+corepack enable
+yarn install
+```
 
-| # | Milestone | Contents |
-|---|---|---|
-| M0 ✅ | Skeleton | Monorepo, UI shell, registry, Electron |
-| M1 ✅ | PDF core | Parser, writer; merge, split, rotate, remove/extract pages |
-| M1.5 ✅ | Tool runtime | `run()` contract, Web Worker execution, progress/cancel, result card (download, ZIP, use in another tool), readable errors, size limits, Electron save dialog. Merge PDF is the first end-to-end tool |
-| M2 ✅ | Image core | Pixel buffer, browser codec seam; resize, crop, rotate/flip, convert, stitch |
-| M3 | PDF edit | Images → PDF, page numbers, watermark, crop, metadata, extract images |
-| M4 | Own codecs | PNG/GIF/BMP/JPEG; image compress, PDF lossless compress, animated GIF, EXIF |
-| M5 | PDF security | Encrypt/decrypt, visual signature |
-| M6 | Image edit | Watermark, manual blur, filters, meme |
-| M7 | PDF advanced | Organize grid, flatten, repair, forms, PDF → text/Markdown, TTF embedding, bookmarks |
-| M8 | Ship | PWA, packaging, signing, auto-update, CI on 3 OSes |
-| Gate | Phase 2 | Decide per feature: PDF renderer, OCR, Office/HTML → PDF, PDF/A, ML image tools |
+## Running
 
-Cross-cutting: grow the PDF test corpus (`packages/pdf-core/test/fixtures`), check accessibility on every new page.
+```bash
+yarn dev                             # the app with live reload, on http://localhost:5173
+yarn build                           # the production site, in apps/web/dist
+yarn workspace @ream/web preview     # serve that build on http://localhost:4173 (offline app included)
+yarn test                            # the tests
+yarn typecheck                       # TypeScript
+docker build -t ream . && docker run --rm -p 8080:8080 ream   # the production site in a container
+```
 
-## Known M1 limits
+The production site is a folder of static files: any web server can serve `apps/web/dist`. `apps/web/public/_headers` has the response headers it should send (Cloudflare Pages reads it as it is).
 
-- Merge and page operations drop bookmarks, AcroForm fields and named destinations; links to dropped pages become dead (M7).
-- Encrypted PDFs are refused with a clear message (M5).
-- Electron save dialog: the Download button relies on Chromium's default download prompt; not yet checked by hand.
-- Streams other than Flate are copied through untouched but can't be decoded yet (only needed for xref/object streams).
-- All objects are parsed up front; make parsing lazy if very large files become a problem.
+## Contributing
 
-## Known M2 limits
+Contributions are welcome. Branch from `dev`, open a pull request into `dev`, and make sure `yarn typecheck`, `yarn test` and `yarn build` pass; the pipeline checks the same on every pull request and links a preview of your change. Ream keeps a few firm rules: nothing leaves the user's device, its engines have no runtime dependencies, and everything shipped is MIT-compatible.
 
-- JPEG, WebP and GIF go through the browser's codecs (OffscreenCanvas in the worker); our own codec reads and writes PNG only until M4. Animated GIFs lose their animation (first frame only).
-- HEIC, TIFF, RAW and SVG inputs are not accepted yet.
-- Our own PNG decoder rejects interlaced files; the browser codec handles them.
-- Crop is drag-to-select with mouse or touch, plus numeric fields for keyboard use.
-- Checked in Electron (Chromium) only; Safari and Firefox are untested.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the details, and [AGENTS.md](AGENTS.md) is the full guide to the code. More in [docs/](docs): the [design](docs/design.md), and [deploys and releases](docs/deploy.md).
+
+## Licence
+
+Ream is released under the [MIT licence](LICENSE). The software and fonts it ships from others (React, the Lucide icon shapes and the bundled fonts) keep their own licences, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

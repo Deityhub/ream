@@ -10,5 +10,6 @@ export const mergePdf: Tool = {
   action: 'Merge PDFs',
   multiple: true,
   minFiles: 2,
+  preview: 'live',
   status: 'ready',
 }

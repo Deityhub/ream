@@ -1,6 +1,8 @@
 {
   "name": "ream",
+  "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "yarn@4.16.0",
   "workspaces": [
@@ -12,9 +14,7 @@
     "build": "yarn workspace @ream/web build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "pdf": "node scripts/pdf.ts",
-    "desktop": "yarn build && yarn workspace @ream/desktop start",
-    "desktop:dev": "REAM_DEV_URL=http://localhost:5173 yarn workspace @ream/desktop start"
+    "pdf": "node scripts/pdf.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

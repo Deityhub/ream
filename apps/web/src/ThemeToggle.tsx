@@ -35,9 +35,9 @@ export function ThemeToggle() {
     <button
       onClick={() => setMode(next)}
       aria-label={`Theme: ${mode}. Switch to ${next}`}
-      className="rounded-lg border border-line bg-surface p-2 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent"
+      className="flex size-9 shrink-0 items-center justify-center border border-line hover:bg-ink/7 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
-      <Icon name={icon[mode]} className="size-4" />
+      <Icon name={icon[mode]} className="size-4.5" />
     </button>
   );
 }

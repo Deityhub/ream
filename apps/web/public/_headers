@@ -1,0 +1,17 @@
+# Cloudflare Pages response headers (https://developers.cloudflare.com/pages/configuration/headers/).
+# The policy lets the app load only its own files. The one exception is Download free fonts: Fontsource's API, and the
+# font files it points to on jsDelivr. Files the user opens never leave the page (blob: and data: URLs stay local).
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self' blob: data:; connect-src 'self' blob: data: https://api.fontsource.org https://cdn.jsdelivr.net; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: local-fonts=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+
+# Vite names these by their content, so they never change: cache them for good
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# the service worker and the page must always be checked for a newer version
+/sw.js
+  Cache-Control: no-cache

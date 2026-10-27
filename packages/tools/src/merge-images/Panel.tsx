@@ -39,20 +39,20 @@ export function Panel({ options, onChange }: PanelProps<MergeImagesOptions>) {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-5">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex flex-wrap items-center gap-2 text-sm">
             Space between
             <input type="number" min={0} value={options.gap} onChange={(e) => set({ gap: toInt(e.target.value) })} className={`${inputClass} w-20`} />
             px
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex flex-wrap items-center gap-2 text-sm">
             Background
             <select value={options.background} onChange={(e) => set({ background: e.target.value as MergeImagesOptions['background'] })} className={inputClass}>
               <option value="white">White</option>
-              <option value="transparent">Transparent (PNG or WebP)</option>
+              <option value="transparent">Transparent</option>
             </select>
           </label>
         </div>
-        <p className="text-xs text-muted">Images are made the same height or width without enlarging any of them. Use the arrows above to set the order.</p>
+        <p className="text-xs text-muted">Images are made the same height or width without enlarging any of them. Use the arrows above to set the order. A transparent background needs PNG or WebP.</p>
       </fieldset>
       <FormatFields format={options.format} quality={options.quality} onChange={set} />
     </div>

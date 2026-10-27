@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" stroke-width="2" stroke-linejoin="round">
+  <style>
+    .a { fill: #416180; stroke: #416180 }
+    .b { fill: #597ea3; stroke: #597ea3 }
+    @media (prefers-color-scheme: dark) {
+      .a { fill: #94bce3; stroke: #94bce3 }
+      .b { fill: #749dc4; stroke: #749dc4 }
+    }
+  </style>
+  <path class="a" d="M8 4H24V12L8 20Z" transform="translate(2.2 -1.1)" />
+  <path class="b" d="M8 20L24 12V28H8Z" transform="translate(-2.2 1.1)" />
+</svg>

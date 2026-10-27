@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-// hash routing keeps the app working under file:// in Electron without a router dependency
+// hash routing needs no server rewrites (any static host serves index.html) and no router dependency
 export function useHash() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {

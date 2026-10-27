@@ -1,5 +1,7 @@
+import type { Rect } from '../rect.ts'
+
 /** the area to keep as fractions (0..1) of the image, so it doesn't depend on the image's pixel size */
-export type CropOptions = { x: number; y: number; w: number; h: number }
+export type CropOptions = Rect
 
 /** the pixel box for a fractional selection; the preview and the engine both use this so they always agree */
 export function cropBox(o: CropOptions, width: number, height: number) {
