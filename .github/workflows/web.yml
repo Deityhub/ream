@@ -1,7 +1,8 @@
 # Ream's pipeline. Linux only, a few minutes a run, inside GitHub's free allowance.
 #   pull request into dev    check, then a preview deploy (<branch>.ream-bqb.pages.dev) with its link on the PR
-#   pull request into main   check (a release: see CONTRIBUTING.md)
-#   merge into main          check, then production (ream.deityhub.com)
+#   pull request into main   check, and the version must be new (a release: see CONTRIBUTING.md)
+#   merge into main          check, then production (ream.deityhub.com), the v<version> tag and a GitHub Release
+# A released version can be put back with the Deploy a version workflow (deploy-version.yml).
 # Plain pushes to other branches run nothing. `check` is the status the branch rules require
 # (.github/rulesets/protect-dev-main.json).
 name: Web
@@ -26,10 +27,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release tags, for the version check
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: corepack enable
+      - name: The version is new (releases only)
+        if: github.base_ref == 'main' || github.ref == 'refs/heads/main'
+        run: node scripts/release.ts check
       - run: yarn install --immutable
       - run: yarn typecheck
       - run: yarn test
@@ -76,7 +82,17 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # one production deploy at a time (this job and deploy-version.yml)
+    concurrency: production
+    permissions:
+      contents: write # the tag and the GitHub Release
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # scripts/release.ts is TypeScript, run directly
+      - id: version
+        run: echo "version=$(node scripts/release.ts version)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           name: site
@@ -85,4 +101,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name ream --branch main --commit-hash "${{ github.sha }}"
+          command: pages deploy dist --project-name ream --branch main --commit-hash "${{ github.sha }}" --commit-message "v${{ steps.version.outputs.version }}"
+      - name: Tag the release and write its notes (the pull requests merged since the last one)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.version.outputs.version }}" --target "${{ github.sha }}" --title "v${{ steps.version.outputs.version }}" --generate-notes

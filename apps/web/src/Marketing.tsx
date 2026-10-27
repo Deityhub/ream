@@ -34,6 +34,7 @@ export function Marketing({ children }: { children: ReactNode }) {
           </span>
           <span className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
             <span>© 2026 Chizoba Jude Ojini</span>
+            <span className="tabular-nums">Version {__APP_VERSION__}</span>
             <a className={`underline hover:text-ink ${focus}`} href="#/licence">MIT licence</a>
             <a className={`underline hover:text-ink ${focus}`} href="#/notices">Third-party notices</a>
           </span>
