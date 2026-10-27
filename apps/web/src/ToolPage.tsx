@@ -3,7 +3,7 @@ import { Button, Card, Dropzone, Icon } from '@ream/ui'
 import { UserError, acceptsFile, formatBytes, type FileData, type Tool } from '@ream/core'
 import { tools } from '@ream/tools'
 import { panels, type PanelModule } from '@ream/tools/panels'
-import { runTool, type Running } from './runtime'
+import { runTool, warmTool, type Running } from './runtime'
 import { download, toFile } from './download'
 import { clearHandoff, peekHandoff, setHandoff } from './handoff'
 import { FileMeta, Thumb } from './Thumb'
@@ -77,6 +77,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
   useEffect(() => {
     clearHandoff()
     if (!tool || tool.status === 'soon' || !panels[tool.id]) return
+    warmTool(tool.id)
     let live = true
     panels[tool.id]().then((m) => {
       if (!live) return

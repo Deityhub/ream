@@ -28,7 +28,8 @@ export type Tool = {
   status: 'ready' | 'soon'
 }
 
-export type FileData = { name: string; type: string; bytes: Uint8Array }
+/** `key` names the same input across runs (the app's worker keeps decoded pictures under it); absent in tests and outputs */
+export type FileData = { name: string; type: string; bytes: Uint8Array; key?: string }
 
 export type RunContext = { progress: (fraction: number) => void }
 

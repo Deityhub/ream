@@ -1,5 +1,6 @@
 import { UserError } from '@ream/core'
 import { checkPixels, createImage, type ImageBuffer } from './buffer.ts'
+import { overlay } from './compose.ts'
 
 const copy = (img: ImageBuffer): ImageBuffer => ({ width: img.width, height: img.height, data: img.data.slice() })
 
@@ -120,15 +121,16 @@ export function rotate(img: ImageBuffer, turns: number): ImageBuffer {
   if (t === 0) return copy(img)
   const { width: w, height: h, data } = img
   const out = t === 2 ? createImage(w, h) : createImage(h, w)
+  // each source row lands as a column (or a reversed row) of the result: its first pixel's place and the step between them
+  const step = t === 1 ? h * 4 : t === 2 ? -4 : -h * 4
+  const o = out.data
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const [dx, dy] = t === 1 ? [h - 1 - y, x] : t === 2 ? [w - 1 - x, h - 1 - y] : [y, w - 1 - x]
-      const s = (y * w + x) * 4
-      const d = (dy * out.width + dx) * 4
-      out.data[d] = data[s]
-      out.data[d + 1] = data[s + 1]
-      out.data[d + 2] = data[s + 2]
-      out.data[d + 3] = data[s + 3]
+    let d = (t === 1 ? h - 1 - y : t === 2 ? (h - 1 - y) * w + w - 1 : (w - 1) * h + y) * 4
+    for (let s = y * w * 4, end = s + w * 4; s < end; s += 4, d += step) {
+      o[d] = data[s]
+      o[d + 1] = data[s + 1]
+      o[d + 2] = data[s + 2]
+      o[d + 3] = data[s + 3]
     }
   }
   return out
@@ -160,10 +162,16 @@ export function flip(img: ImageBuffer, axis: 'horizontal' | 'vertical'): ImageBu
   const { width: w, height: h, data } = img
   const out = createImage(w, h)
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const s = (y * w + x) * 4
-      const d = (axis === 'horizontal' ? y * w + (w - 1 - x) : (h - 1 - y) * w + x) * 4
-      out.data.set(data.subarray(s, s + 4), d)
+    const row = y * w * 4
+    if (axis === 'vertical') {
+      out.data.set(data.subarray(row, row + w * 4), (h - 1 - y) * w * 4)
+      continue
+    }
+    for (let s = row, d = row + (w - 1) * 4; s < row + w * 4; s += 4, d -= 4) {
+      out.data[d] = data[s]
+      out.data[d + 1] = data[s + 1]
+      out.data[d + 2] = data[s + 2]
+      out.data[d + 3] = data[s + 3]
     }
   }
   return out
@@ -180,27 +188,6 @@ export function flattenOnWhite(img: ImageBuffer): ImageBuffer {
     out.data[i + 3] = 255
   }
   return out
-}
-
-/** source-over blend of src onto dst at (ox, oy) */
-function blit(dst: ImageBuffer, src: ImageBuffer, ox: number, oy: number) {
-  for (let y = 0; y < src.height; y++) {
-    for (let x = 0; x < src.width; x++) {
-      const s = (y * src.width + x) * 4
-      const sa = src.data[s + 3]
-      if (sa === 0) continue
-      const d = ((oy + y) * dst.width + ox + x) * 4
-      if (sa === 255) {
-        dst.data.set(src.data.subarray(s, s + 4), d)
-        continue
-      }
-      const a = sa / 255
-      const b = dst.data[d + 3] / 255
-      const oa = a + b * (1 - a)
-      for (let c = 0; c < 3; c++) dst.data[d + c] = (src.data[s + c] * a + dst.data[d + c] * b * (1 - a)) / oa
-      dst.data[d + 3] = oa * 255
-    }
-  }
 }
 
 export type StitchOptions = {
@@ -266,6 +253,6 @@ export function stitch(images: ImageBuffer[], o: StitchOptions): ImageBuffer {
 
   const out = createImage(width, height)
   if (o.background === 'white') out.data.fill(255)
-  for (const p of placed) blit(out, p.img, p.x, p.y)
+  for (const p of placed) overlay(out, p.img, p.x, p.y)
   return out
 }

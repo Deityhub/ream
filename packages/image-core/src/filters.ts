@@ -15,15 +15,52 @@ function within(img: ImageBuffer, a?: Area): Area | null {
 
 // ---------- blur: three box passes per direction, close to a Gaussian of the same radius ----------
 
-/** one box pass along a line of `n` pixels starting at `start`, `step` apart in the data; edges repeat their last pixel */
-function boxLine(d: Uint8ClampedArray, start: number, step: number, n: number, r: number, line: Float32Array) {
-  for (let c = 0; c < 4; c++) {
-    for (let i = 0; i < n; i++) line[i] = d[start + i * step + c]
+/** what `sum / div` becomes when stored in the picture, for every sum a box of bytes can have (the same rounding, no division per pixel) */
+function quotients(div: number): Uint8ClampedArray {
+  const q = new Uint8ClampedArray(255 * div + 1)
+  for (let s = 0; s < q.length; s++) q[s] = s / div
+  return q
+}
+
+/**
+ * one box pass along a row of `n` pixels starting at `start`, 4 bytes apart; edges repeat their last pixel. `channels` 3
+ * leaves alpha alone (an opaque picture stays opaque). `line` holds the row's old values while it is rewritten.
+ */
+function boxRow(d: Uint8ClampedArray, start: number, n: number, r: number, channels: number, q: Uint8ClampedArray, line: Uint8Array) {
+  line.set(d.subarray(start, start + n * 4))
+  const last = (n - 1) * 4
+  for (let c = 0; c < channels; c++) {
     let sum = 0
-    for (let k = -r; k <= r; k++) sum += line[Math.min(n - 1, Math.max(0, k))]
-    for (let i = 0; i < n; i++) {
-      d[start + i * step + c] = sum / (2 * r + 1)
-      sum += line[Math.min(n - 1, i + r + 1)] - line[Math.max(0, i - r)]
+    for (let k = -r; k <= r; k++) sum += line[(k < 0 ? 0 : k >= n ? n - 1 : k) * 4 + c]
+    for (let i = 0, p = start + c; i < n; i++, p += 4) {
+      d[p] = q[sum]
+      const add = i + r + 1
+      const sub = i - r
+      sum += line[add < n ? add * 4 + c : last + c] - line[sub > 0 ? sub * 4 + c : c]
+    }
+  }
+}
+
+/**
+ * the same pass down every column of the area at once, row by row (in memory order: walking one column at a time
+ * misses the cache on every pixel). `src` is a copy of the area's rows, the values before this pass.
+ */
+function boxColumns(d: Uint8ClampedArray, at: number, row: number, w: number, h: number, r: number, channels: number, q: Uint8ClampedArray, src: Uint8Array, sums: Int32Array) {
+  const span = w * 4
+  sums.fill(0)
+  for (let k = -r; k <= r; k++) {
+    const from = (k < 0 ? 0 : k >= h ? h - 1 : k) * span
+    for (let j = 0; j < span; j++) sums[j] += src[from + j]
+  }
+  for (let i = 0; i < h; i++) {
+    const add = (i + r + 1 < h ? i + r + 1 : h - 1) * span
+    const sub = (i - r > 0 ? i - r : 0) * span
+    const out = at + i * row
+    for (let j = 0; j < span; j += 4) {
+      for (let c = 0; c < channels; c++) {
+        d[out + j + c] = q[sums[j + c]]
+        sums[j + c] += src[add + j + c] - src[sub + j + c]
+      }
     }
   }
 }
@@ -38,7 +75,7 @@ export function blur(img: ImageBuffer, radius: number, area?: Area): void {
   const at = (x: number, y: number) => (y * img.width + x) * 4
   // colour is averaged weighted by alpha, so see-through pixels (often black underneath) don't darken their neighbours
   let translucent = false
-  for (let y = a.y; y < a.y + a.h && !translucent; y++) for (let x = a.x; x < a.x + a.w; x++) if (d[at(x, y) + 3] < 255) { translucent = true; break }
+  for (let y = a.y; y < a.y + a.h && !translucent; y++) for (let i = at(a.x, y), end = i + a.w * 4; i < end; i += 4) if (d[i + 3] < 255) { translucent = true; break }
   if (translucent) {
     for (let y = a.y; y < a.y + a.h; y++) for (let x = a.x; x < a.x + a.w; x++) {
       const i = at(x, y)
@@ -46,10 +83,15 @@ export function blur(img: ImageBuffer, radius: number, area?: Area): void {
       d[i] *= k; d[i + 1] *= k; d[i + 2] *= k
     }
   }
-  const line = new Float32Array(Math.max(a.w, a.h))
+  const q = quotients(2 * r + 1)
+  const line = new Uint8Array(a.w * 4)
+  const rows = new Uint8Array(a.w * 4 * a.h)
+  const sums = new Int32Array(a.w * 4)
+  const channels = translucent ? 4 : 3
   for (let pass = 0; pass < 3; pass++) {
-    for (let y = a.y; y < a.y + a.h; y++) boxLine(d, at(a.x, y), 4, a.w, r, line)
-    for (let x = a.x; x < a.x + a.w; x++) boxLine(d, at(x, a.y), row, a.h, r, line)
+    for (let y = a.y; y < a.y + a.h; y++) boxRow(d, at(a.x, y), a.w, r, channels, q, line)
+    for (let y = 0; y < a.h; y++) rows.set(d.subarray(at(a.x, a.y + y), at(a.x + a.w, a.y + y)), y * a.w * 4)
+    boxColumns(d, at(a.x, a.y), row, a.w, a.h, r, channels, q, rows, sums)
   }
   if (translucent) {
     for (let y = a.y; y < a.y + a.h; y++) for (let x = a.x; x < a.x + a.w; x++) {
@@ -77,8 +119,15 @@ export function pixelate(img: ImageBuffer, block: number, area?: Area): void {
         r += d[i] * k; g += d[i + 1] * k; bl += d[i + 2] * k; al += k
       }
       const n = (x1 - bx) * (y1 - by)
-      const avg = [al ? r / al : 0, al ? g / al : 0, al ? bl / al : 0, al / n]
-      for (let y = by; y < y1; y++) for (let x = bx; x < x1; x++) d.set(avg, (y * img.width + x) * 4)
+      const [ar, ag, ab, aa] = [al ? r / al : 0, al ? g / al : 0, al ? bl / al : 0, al / n]
+      for (let y = by; y < y1; y++) {
+        for (let i = (y * img.width + bx) * 4, end = (y * img.width + x1) * 4; i < end; i += 4) {
+          d[i] = ar
+          d[i + 1] = ag
+          d[i + 2] = ab
+          d[i + 3] = aa
+        }
+      }
     }
   }
 }
@@ -87,7 +136,15 @@ export function pixelate(img: ImageBuffer, block: number, area?: Area): void {
 export function fill(img: ImageBuffer, rgb: [number, number, number], area?: Area): void {
   const a = within(img, area)
   if (!a) return
-  for (let y = a.y; y < a.y + a.h; y++) for (let x = a.x; x < a.x + a.w; x++) img.data.set([rgb[0], rgb[1], rgb[2], 255], (y * img.width + x) * 4)
+  const d = img.data
+  for (let y = a.y; y < a.y + a.h; y++) {
+    for (let i = (y * img.width + a.x) * 4, end = i + a.w * 4; i < end; i += 4) {
+      d[i] = rgb[0]
+      d[i + 1] = rgb[1]
+      d[i + 2] = rgb[2]
+      d[i + 3] = 255
+    }
+  }
 }
 
 // ---------- colour ----------

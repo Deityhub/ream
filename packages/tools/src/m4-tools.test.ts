@@ -78,6 +78,20 @@ describe('compress-image', () => {
     expect([pixels.width, pixels.height]).toEqual([40, 64]) // the sideways photo was turned
   })
 
+  test("the file's own colour profile replaces one the encoder adds (the browser's writes sRGB)", async () => {
+    const own = icc()
+    const input = file('IMG.jpg', 'image/jpeg', tagged(photo(160, 120)))
+    const srgb = Uint8Array.from([0xff, 0xe2, 0, 16, ...ascii('ICC_PROFILE'), 1, 1])
+    setCodec({ ...ownCodec, encode: async (img) => encodeJpeg(img, { quality: 60, segments: [srgb] }) })
+    try {
+      const [out] = await compress([input], { ...compressDefaults, quality: 60 }, ctx)
+      const profiles = readSegments(out.bytes).segments.filter((s) => s.kind === 'icc')
+      expect(profiles.map((s) => Array.from(s.bytes))).toEqual([Array.from(own)])
+    } finally {
+      setCodec(ownCodec)
+    }
+  })
+
   test('a lower quality is smaller', async () => {
     const input = file('a.jpg', 'image/jpeg', tagged(photo(160, 120)))
     const sizes = await Promise.all([30, 60, 90].map(async (quality) => (await compress([input], { ...compressDefaults, quality }, ctx))[0].bytes.length))
