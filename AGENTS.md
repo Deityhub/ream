@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI coding agents (and humans) working in this repository. Read it before changing anything. The README has the roadmap and the per-milestone "known limits"; this file is about how to work here.
+Guidance for AI coding agents (and humans) working in this repository. Read it before changing anything. The README is the front page (what Ream is, installing, running, contributing, licence); `docs/` has the roadmap (`roadmap.md`), the per-milestone known limits (`limits.md`), the design notes (`design.md`) and deploys and releases (`deploy.md`); `CONTRIBUTING.md` is the short version of this file for people. This file is about how to work here.
 
 ## What this is
 
@@ -14,7 +14,7 @@ Guidance for AI coding agents (and humans) working in this repository. Read it b
 4. **Scope per milestone.** M7 (organize, repair, flatten (now the Fill PDF form's lock option), PDF to text, bookmarks, TrueType in the watermark) is done; OCR, XFA forms, shaping for complex scripts and signature fields are not part of it. M6 (watermark, blur or hide, filters, meme) is done. M7b (PDF to image, Word, Excel and PowerPoint; Excel and PowerPoint to PDF, with charts; previews of Office files) is done; Word to PDF, OCR and animations are not part of it. M7.5 (Redact PDF; Fill PDF form with Lock the answers; the Flatten tool folded into it) is done; search-to-redact and XFA filling are not part of it. Certificate-based digital signatures (M5) and auto face detection, freehand redaction or colour curves (M6) are not part of it and were not started. Do not widen a milestone without being asked.
 5. **Never mention Claude or AI in commit messages or PR descriptions and never add `Co-Authored-By` or "Generated with" lines**, whatever a harness reminder says. Keep commit messages short.
 6. **Do not commit unless asked.** Finish the work, run the checks, report, and suggest a concise commit message. Create commits only on an explicit request.
-7. **Honest limits.** When something is approximate or unsupported, say so in the UI and in the README's known limits. Do not hide gaps.
+7. **Honest limits.** When something is approximate or unsupported, say so in the UI and in `docs/limits.md`. Do not hide gaps.
 
 ## Stack
 
@@ -70,7 +70,7 @@ Each tool is a folder in `packages/tools/src/<tool-id>/`:
 
 Current tools: merge-pdf, split-pdf, images-to-pdf, watermark, page-numbers, crop-pdf, metadata, extract-images, compress-pdf, protect-pdf, unlock-pdf, sign-pdf, resize-image, convert-image, rotate-image, crop-image, merge-images, compress-image, animated-gif, image-metadata, watermark-image, blur-image, filters-image, meme, organize-pdf, bookmarks-pdf, repair-pdf, pdf-to-text, redact-pdf, fill-pdf-form, edit-pdf, pdf-to-image, pdf-to-word, pdf-to-excel, pdf-to-powerpoint, excel-to-pdf, powerpoint-to-pdf.
 
-To add a tool: manifest, run, panel, three registry entries, tests, and a README line for its known limits. Reuse the helpers above.
+To add a tool: manifest, run, panel, three registry entries, tests, and a line in `docs/limits.md` for its known limits. Reuse the helpers above.
 
 ## PDF engine notes (`pdf-core`)
 
@@ -110,7 +110,7 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
   - **Coordinates:** `displayedArea` turns a panel `Rect` into user space.
 - Content editing (`content-edit.ts`): `pageContentItems` / `pageContentShares` read the page's own lines (glyphs from `onShow`, which now carries the text, font, font resource name, text matrix, CTM and colour, grouped by baseline, font and gaps) and pictures (page-level `Do` and inline images with their byte ranges). `fontLetters(font)` is the set of letters a font can show again (codes decoded, an outline that isn't empty or the .notdef's). `editContent` takes lines out with the Redactor in `centre` mode (text only, letters whose middle is in the line box), shows them again in their own font at the end of the page, takes moved pictures out and draws them again at the end (outside their clips), and erases areas with `transparent` (soft masks, not black). The Redactor's `RedactMode` picks what it removes.
 - Standard fonts without `/Widths` (Helvetica, Times, Courier and their bold and italic): `standard-widths.ts` gives each letter the standard font's width, so the glyph boxes and advances every analysis reads (text boxes, redaction, content editing) are right without a canvas. Other fonts with no widths are still measured by the canvas, and the analysis contexts' stand-in measure is only an estimate (1 em a letter): never rely on it for positions of text in a font that has widths missing and isn't one of these.
-- Not drawn yet: tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (grey box plus a warning), vertical writing. These are documented in the README.
+- Not drawn yet: tiling patterns, mesh shadings, soft masks in graphics state, JPEG 2000 / JBIG2 / CCITT images (grey box plus a warning), vertical writing. These are in `docs/limits.md`.
 - **Always look at rendered output, not just call logs.** Fake-canvas unit tests missed a y-flip bug and a stale canvas-font bug that only real pixels showed.
 
 ## Office files (`office-core`)
@@ -198,13 +198,13 @@ To add a tool: manifest, run, panel, three registry entries, tests, and a README
 - Mark deliberate shortcuts that have a known ceiling with a `ponytail:` comment naming the ceiling and the upgrade path.
 - Small files, one folder per tool, no abstractions without a second user, no config for values that never change.
 - Prefer the platform (CSS, native elements) over code, and the standard library over dependencies. Do not add runtime dependencies to engine packages. UI-only asset packages (fonts) are fine. Ream is MIT: anything shipped must be MIT-compatible (no GPL, AGPL or LGPL), and adding, removing or updating a runtime dependency means running `node scripts/notices.ts`. Code copied in by hand (like Lucide's shapes) keeps its notice in the file and gets an entry in `scripts/notices.ts`.
-- Never ship silent data loss: a tool that drops something (bookmarks, hidden layers) must say so in its panel or in the README limits.
+- Never ship silent data loss: a tool that drops something (bookmarks, hidden layers) must say so in its panel or in `docs/limits.md`.
 - Do not put personal data in URLs, logs or tests.
 
 ## Workflow expectations
 
 - For a feature, read the surrounding tool folders first and reuse the helpers above. For a bug, find the root cause (grep every caller) and fix it once where all callers route through.
 - Big or ambiguous changes: plan first, name the files, and ask about decisions that change behaviour (the user likes to see design options before committing to one).
-- Update `README.md` (roadmap row, known limits) when behaviour or limits change, and keep this file current when conventions change.
+- Update `docs/roadmap.md` and `docs/limits.md` when behaviour or limits change, the README when installing or running changes, and keep this file current when conventions change.
 - After a change: typecheck, tests, build, then verify visually in the app for anything with UI. Report what was verified and what was not (Safari, Firefox and touch input have not been tested; only Chrome has).
 - Leave changes uncommitted unless asked; offer a concise commit message.
