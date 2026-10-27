@@ -7,3 +7,4 @@ dist
 .render-compare
 .claude
 .wrangler
+.env
