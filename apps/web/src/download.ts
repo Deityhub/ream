@@ -1,6 +1,6 @@
 import { zip, type FileData } from '@ream/core'
 
-/** one file downloads as itself, several as a ZIP. In Electron the same click opens the native save dialog. */
+/** one file downloads as itself, several as a ZIP */
 export function download(outputs: FileData[]) {
   const file = outputs.length === 1 ? outputs[0] : { name: 'ream-output.zip', type: 'application/zip', bytes: zip(outputs) }
   const url = URL.createObjectURL(new Blob([file.bytes as BlobPart], { type: file.type }))

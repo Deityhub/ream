@@ -1,4 +1,4 @@
-// Runs inside an Electron page (bundled by scripts/render-compare.ts): renders a PDF page with our renderer and
+// Runs inside a Chrome page (bundled by scripts/render-compare.ts): renders a PDF page with our renderer and
 // compares it with a reference raster of the same page made by another renderer.
 import { PdfDocument } from '@ream/pdf-core'
 import { browserPlatform, pageGeometry, renderPage } from '@ream/pdf-render'

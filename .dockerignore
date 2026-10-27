@@ -1,0 +1,14 @@
+# only what the build needs goes into the image's build stage
+**/node_modules
+**/dist
+.git
+.github
+.claude
+.render-compare
+.wrangler
+.env
+**/*.log
+.DS_Store
+packages/*/test
+packages/**/*.test.ts
+apps/web/src/*.test.ts

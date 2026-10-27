@@ -107,8 +107,9 @@ describe('other cases', () => {
   })
 
   test('a damaged cross-reference table still decrypts (rebuild path)', async () => {
-    const text = new TextDecoder('latin1').decode(fixture('enc-aes-128.pdf')).replace(/startxref\s+\d+/, 'startxref\n1')
-    const broken = Uint8Array.from(text, (c) => c.charCodeAt(0))
+    // Buffer's latin1 is byte for byte; TextDecoder('latin1') is really windows-1252 (0x80 becomes €), which breaks the round trip
+    const text = Buffer.from(fixture('enc-aes-128.pdf')).toString('latin1').replace(/startxref\s+\d+/, 'startxref\n1')
+    const broken = new Uint8Array(Buffer.from(text, 'latin1'))
     expect(await contents(await PdfDocument.load(broken, { password: USER }))).toEqual(expected)
   })
 })

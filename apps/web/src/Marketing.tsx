@@ -11,10 +11,11 @@ export const secondary = `${action} border border-line hover:bg-ink/7`
 export const kicker = 'block border-b border-line pb-2 font-sans text-[13px] font-semibold tracking-widest text-accent-ink uppercase tabular-nums'
 export const wrap = 'mx-auto max-w-[1600px] px-4 sm:px-8'
 
-/** Frame of the web-only pages (landing, download): their own nav and footer, not the app's bar. */
+/** Frame of the landing, licence and notices pages: their own nav and footer, not the app's bar. */
 export function Marketing({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen">
+    // a column at least the window's height: the content takes the free space, so a short page still ends in its footer
+    <div className="flex min-h-screen flex-col">
       <header>
         <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 py-4`}>
           <a href="#/" className={`flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
@@ -25,13 +26,18 @@ export function Marketing({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      {children}
+      <main className="flex-1">{children}</main>
       <footer className="mt-24">
         <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 border-t border-line py-7 text-sm text-muted`}>
           <span className="flex items-center gap-2 font-heading text-lg font-semibold tracking-wide text-ink uppercase">
             <Logo size={20} /> Ream
           </span>
-          <span className="text-[13px] text-muted">© {new Date().getFullYear()} Ream, Inc. All rights reserved.</span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
+            <span>© 2026 Chizoba Jude Ojini</span>
+            <span className="tabular-nums">Version {__APP_VERSION__}</span>
+            <a className={`underline hover:text-ink ${focus}`} href="#/licence">MIT licence</a>
+            <a className={`underline hover:text-ink ${focus}`} href="#/notices">Third-party notices</a>
+          </span>
         </div>
       </footer>
     </div>

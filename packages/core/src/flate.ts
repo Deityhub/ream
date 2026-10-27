@@ -1,4 +1,4 @@
-// Platform seam: browser, Electron and Node 22 all ship these streams. A React Native build swaps in its own.
+// Platform seam: browsers and Node 22 both ship these streams. A React Native build swaps in its own.
 async function pipe(data: Uint8Array, t: DecompressionStream | CompressionStream): Promise<Uint8Array> {
   const out = new Response(new Blob([data as BlobPart]).stream().pipeThrough(t as ReadableWritablePair<Uint8Array, BufferSource>))
   return new Uint8Array(await out.arrayBuffer())
