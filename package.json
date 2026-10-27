@@ -1,6 +1,6 @@
 {
   "name": "ream",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,8 @@
     "build": "yarn workspace @ream/web build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "pdf": "node scripts/pdf.ts"
+    "pdf": "node scripts/pdf.ts",
+    "release": "node scripts/release.ts prepare"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

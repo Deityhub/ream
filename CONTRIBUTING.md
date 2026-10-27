@@ -30,7 +30,7 @@ Add tests with your change: engines and tools are tested in plain Node, and a to
 ## Branches and releases
 
 - Branch from `dev` and open your pull request into `dev`. It runs `check` and gets a preview deploy, linked in a comment.
-- A release is a pull request from `dev` into `main` that raises the version with `yarn version patch|minor|major`. Merging it deploys ream.deityhub.com, tags the version and publishes the release notes and Docker image. See [docs/deploy.md](docs/deploy.md).
+- A release is a pull request from `dev` into `main` that raises the version and adds its `CHANGELOG.md` section, both written by `yarn release patch|minor|major`. Merging it deploys ream.deityhub.com, tags the version and publishes the release notes and Docker image. See [docs/deploy.md](docs/deploy.md).
 
 ## Ground rules
 
