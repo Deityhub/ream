@@ -1,0 +1,37 @@
+# Checks every push, then publishes the site to Cloudflare Pages: `main` is ream.deityhub.com, any other branch gets a
+# preview address of its own (<branch>.ream-xxx.pages.dev). Linux only, a few minutes a run, inside GitHub's free allowance.
+name: Web
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn typecheck
+      - run: yarn test
+      - run: node scripts/notices.ts --check
+      - run: yarn build
+      # skipped until the two Cloudflare secrets are set in the repo's settings
+      - name: Deploy to Cloudflare Pages
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: yarn dlx wrangler@4 pages deploy apps/web/dist --project-name ream --branch "${{ github.ref_name }}" --commit-hash "${{ github.sha }}"

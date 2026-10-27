@@ -9,6 +9,12 @@ yarn typecheck
 yarn pdf <cmd>    # dev CLI for pdf-core: info | merge | extract | remove | rotate | split | decrypt | optimize
 ```
 
+## Deploy
+
+The site is https://ream.deityhub.com, on Cloudflare Pages. `.github/workflows/web.yml` runs on every push: typecheck, tests, the notices check and the build, then `wrangler pages deploy`. A push to `main` updates the live site; any other branch gets a preview address of its own (`<branch>.<project>.pages.dev`). It needs two repo secrets, `CLOUDFLARE_API_TOKEN` (Account → Cloudflare Pages → Edit) and `CLOUDFLARE_ACCOUNT_ID`; without them the deploy step is skipped. A bad release is undone in the Cloudflare dashboard: Workers & Pages → ream → Deployments → an earlier one → Rollback.
+
+`apps/web/public/_headers` sets the response headers: a content security policy that lets the page load only its own files (plus Fontsource and jsDelivr, for Download free fonts), no inline scripts or styles, no framing; no referrer; and a year's caching for the content-named files in `/assets`. To try the headers locally: `yarn build`, then `yarn dlx wrangler@4 pages dev apps/web/dist`.
+
 ## Licence
 
 Ream is MIT licensed: see [LICENSE](LICENSE). The software and fonts it ships from others (React, the Lucide icon shapes, and the OFL fonts) are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `node scripts/notices.ts` writes; the site shows both as pages (`#/licence`, `#/notices`), linked from the footer.
