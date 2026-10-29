@@ -279,9 +279,12 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           </aside>
         )}
       </div>
-      <Suspense fallback={null}>
-        <ToolAbout tool={tool} />
-      </Suspense>
+      {/* about the tool: for a visitor who hasn't started; once there are files it is out of the way */}
+      {empty && (
+        <Suspense fallback={null}>
+          <ToolAbout tool={tool} />
+        </Suspense>
+      )}
       </main>
       {state.kind === 'done' && <ResultDialog tool={tool} outputs={state.outputs} onClose={() => setState({ kind: 'idle' })} onReset={() => changeFiles([])} />}
       {asking && (
