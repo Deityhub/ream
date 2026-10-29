@@ -4,6 +4,8 @@ import { tools } from '@ream/tools'
 import { acceptsFile, type Category, type Tool } from '@ream/core'
 import { setHandoff } from './handoff'
 import { Breadcrumb, TopBar, filterHref, focus, type Filter } from './TopBar'
+import { Link, navigate } from './router'
+import { toolPath } from './routes'
 
 const ready = tools.filter((t) => t.status === 'ready')
 const heads: Record<Filter, string> = { all: 'All tools', pdf: 'PDF tools', image: 'Image tools' }
@@ -31,7 +33,7 @@ export function Home({ cat }: { cat: Filter }) {
 
   const open = (t: Tool) => {
     setHandoff(dropped)
-    location.hash = `#/tool/${t.id}`
+    navigate(toolPath(t.id))
   }
 
   return (
@@ -79,7 +81,7 @@ export function Home({ cat }: { cat: Filter }) {
           <section key={s.title ?? i} aria-label={s.title ?? head} className="space-y-5">
             {s.title && (
               <h2 className="border-b border-line pb-2 text-2xl uppercase">
-                {s.href ? <a href={s.href} className={`hover:text-accent-ink hover:underline ${focus}`}>{s.title}</a> : s.title}
+                {s.href ? <Link to={s.href} className={`hover:text-accent-ink hover:underline ${focus}`}>{s.title}</Link> : s.title}
               </h2>
             )}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(min(250px,100%),1fr))] gap-5">
@@ -113,5 +115,5 @@ export function ToolCard({ tool: t, suggested, dim, onOpen }: { tool: Tool; sugg
   const box = `blueprint flex h-full w-full flex-col gap-1.5 border p-4 text-left transition-colors duration-150 ${edge}`
   if (dim) return <div aria-disabled="true" className={`${box} opacity-50`}>{body}</div>
   if (onOpen) return <button onClick={onOpen} className={`${box} ${focus}`}>{body}</button>
-  return <a href={`#/tool/${t.id}`} className={`${box} ${focus}`}>{body}</a>
+  return <Link to={toolPath(t.id)} className={`${box} ${focus}`}>{body}</Link>
 }

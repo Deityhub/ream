@@ -32,8 +32,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
   if (request.mode === 'navigate') {
-    // the page itself: the newest from the network, the kept copy when offline
-    event.respondWith(fetch(request).catch(() => caches.match('./', { cacheName: APP })))
+    // the page itself: the newest from the network, the kept copy when offline (its own, else the app's first page: every address is a page of the app)
+    event.respondWith(fetch(request).catch(() => caches.match(request, { cacheName: APP }).then((page) => page ?? caches.match('./', { cacheName: APP }))))
     return
   }
   event.respondWith(

@@ -15,6 +15,8 @@ import { SizeEstimate } from './SizeEstimate'
 import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 import { Breadcrumb, TopBar, focus } from './TopBar'
+import { Link, navigate } from './router'
+import { toolPath } from './routes'
 
 type State =
   | { kind: 'idle' }
@@ -96,7 +98,7 @@ export function ToolPage({ tool }: { tool?: Tool }) {
         <TopBar />
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8">
           <Breadcrumb cat="all" />
-          <p className="text-[15px]">That tool doesn't exist. <a href="#/tools" className={`font-semibold text-accent-ink underline ${focus}`}>See all tools</a>.</p>
+          <p className="text-[15px]">That tool doesn't exist. <Link to="/tools/" className={`font-semibold text-accent-ink underline ${focus}`}>See all tools</Link>.</p>
         </main>
       </>
     )
@@ -380,7 +382,7 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
                 key={t.id}
                 onClick={() => {
                   setHandoff(outputs.map(toFile))
-                  location.hash = `#/tool/${t.id}`
+                  navigate(toolPath(t.id))
                 }}
                 className="border border-line px-2.5 py-1 hover:bg-ink/7 focus-visible:outline-2 focus-visible:outline-accent"
               >

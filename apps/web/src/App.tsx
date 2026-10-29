@@ -1,22 +1,30 @@
 import { useEffect } from 'react'
 import { findTool } from '@ream/tools'
-import { useHash } from './useHash'
+import { usePath } from './router'
+import { parseRoute } from './routes'
 import { Home } from './Home'
 import { ToolPage } from './ToolPage'
 import { Landing } from './Landing'
 import { Legal } from './Legal'
+import { NotFound } from './NotFound'
 
 export function App() {
-  const hash = useHash()
+  const path = usePath()
   useEffect(() => {
     scrollTo(0, 0)
-  }, [hash])
-  const id = hash.match(/^#\/tool\/([\w-]+)$/)?.[1]
-  if (id) return <ToolPage key={id} tool={findTool(id)} />
-  const cat = hash.match(/^#\/tools\/(pdf|image)$/)?.[1] as 'pdf' | 'image' | undefined
-  if (cat) return <Home key={cat} cat={cat} />
-  if (hash === '#/tools') return <Home key="all" cat="all" />
-  if (hash === '#/licence') return <Legal page="licence" />
-  if (hash === '#/notices') return <Legal page="notices" />
-  return <Landing />
+  }, [path])
+  const route = parseRoute(path)
+  switch (route.page) {
+    case 'tool':
+      return <ToolPage key={route.id} tool={findTool(route.id)} />
+    case 'tools':
+      return <Home key={route.cat} cat={route.cat} />
+    case 'licence':
+    case 'notices':
+      return <Legal page={route.page} />
+    case 'notFound':
+      return <NotFound />
+    case 'landing':
+      return <Landing />
+  }
 }

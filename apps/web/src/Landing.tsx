@@ -5,6 +5,7 @@ import { Marketing, kicker, primary, secondary, wrap } from './Marketing'
 import { install, installed, usePwa } from './pwa'
 import { ToolCard } from './Home'
 import { filterHref, focus } from './TopBar'
+import { Link } from './router'
 
 const ready = tools.filter((t) => t.status === 'ready')
 const pick = (ids: string[]) => ids.map(findTool).filter((t): t is Tool => !!t)
@@ -87,7 +88,7 @@ export function Landing() {
           Convert, edit, compress and secure your files: PDFs, images and Office documents today, with more kinds of file on the way. Every tool runs on your own machine, so your files never reach a server.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <a className={primary} href="#/tools">Open the tools</a>
+          <Link className={primary} to="/tools/">Open the tools</Link>
           <InstallButton />
         </div>
         <InstallHint />
@@ -155,7 +156,7 @@ export function Landing() {
 
       <section className={`${wrap} flex flex-col items-start gap-6 pt-24`}>
         <h2 className="max-w-3xl text-[clamp(2.25rem,4.6vw,3.5rem)] leading-[1.04] uppercase">Pick a tool and start. Your files stay with you.</h2>
-        <a className={primary} href="#/tools">Open the tools</a>
+        <Link className={primary} to="/tools/">Open the tools</Link>
       </section>
 
       {groups.map((g, i) => (
@@ -166,9 +167,9 @@ export function Landing() {
               <h2 className="text-4xl uppercase">{g.title}</h2>
               <p className="mt-1 text-[17px] text-muted">{g.blurb}</p>
             </div>
-            <a href={filterHref(g.cat)} className={`font-heading text-lg font-semibold tracking-wide text-accent-ink uppercase hover:underline ${focus}`}>
+            <Link to={filterHref(g.cat)} className={`font-heading text-lg font-semibold tracking-wide text-accent-ink uppercase hover:underline ${focus}`}>
               All {ready.filter((t) => t.category === g.cat).length} {g.noun} tools →
-            </a>
+            </Link>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(16rem,100%),1fr))] gap-6">
             {g.tools.map((t) => <ToolCard key={t.id} tool={t} />)}

@@ -4,7 +4,9 @@ import './index.css'
 import { App } from './App'
 import { startPwa } from './pwa'
 import { UpdateBar } from './UpdateBar'
+import { upgradeLegacyUrl } from './router'
 
+upgradeLegacyUrl()
 startPwa()
 
 createRoot(document.getElementById('root')!).render(
