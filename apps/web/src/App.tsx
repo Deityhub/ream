@@ -14,6 +14,14 @@ export function App() {
     scrollTo(0, 0)
   }, [path])
   const route = parseRoute(path)
+  // a page opened at its address already has its head from the build; moving between pages keeps it in step
+  useEffect(() => {
+    let live = true
+    void import('./seoHead').then((m) => live && m.applyHead(parseRoute(path)))
+    return () => {
+      live = false
+    }
+  }, [path])
   switch (route.page) {
     case 'tool':
       return <ToolPage key={route.id} tool={findTool(route.id)} />

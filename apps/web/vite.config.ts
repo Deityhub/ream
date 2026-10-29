@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { seoPages } from './seoPlugin'
 
 /** the release version (root package.json), shown in the footer and in the offline cache's name */
 const VERSION: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version
@@ -49,4 +50,4 @@ const serviceWorker = (): Plugin => {
 
 // base '/': every page has its own folder (/tool/merge-pdf/), so assets are found from the site's root; the site is served from a domain's root on Cloudflare and in the Docker image
 // worker format es: the worker loads each tool's engine with a dynamic import, which needs code splitting
-export default defineConfig({ base: '/', define: { __APP_VERSION__: JSON.stringify(VERSION) }, plugins: [react(), tailwindcss(), serviceWorker()], worker: { format: 'es' } })
+export default defineConfig({ base: '/', define: { __APP_VERSION__: JSON.stringify(VERSION) }, plugins: [react(), tailwindcss(), seoPages(VERSION), serviceWorker()], worker: { format: 'es' } })

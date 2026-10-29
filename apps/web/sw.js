@@ -33,11 +33,12 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
   if (request.mode === 'navigate') {
     // the page itself: the newest from the network, the kept copy when offline (its own, else the app's first page: every address is a page of the app)
-    event.respondWith(fetch(request).catch(() => caches.match(request, { cacheName: APP }).then((page) => page ?? caches.match('./', { cacheName: APP }))))
+    event.respondWith(fetch(request).catch(() => caches.match(request, { cacheName: APP, ignoreVary: true }).then((page) => page ?? caches.match('./', { cacheName: APP, ignoreVary: true }))))
     return
   }
+  // ignoreVary: a host that sends `Vary: Origin` would otherwise make every module script miss its kept copy (the page's request has an Origin header, the one that filled the cache has none); the names carry a hash, so one copy is the only copy
   event.respondWith(
-    caches.match(request).then(
+    caches.match(request, { ignoreVary: true }).then(
       (kept) =>
         kept ??
         fetch(request).then((response) => {

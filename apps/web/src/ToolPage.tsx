@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, Dropzone, Icon } from '@ream/ui'
 import { UserError, acceptsFile, formatBytes, type FileData, type Tool } from '@ream/core'
 import { tools } from '@ream/tools'
@@ -17,6 +17,9 @@ import { usePreview } from './usePreview'
 import { Breadcrumb, TopBar, focus } from './TopBar'
 import { Link, navigate } from './router'
 import { toolPath } from './routes'
+
+// the page's words (what it does, questions, more tools) load after the tool itself
+const ToolAbout = lazy(() => import('./ToolAbout').then((m) => ({ default: m.ToolAbout })))
 
 type State =
   | { kind: 'idle' }
@@ -276,6 +279,9 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           </aside>
         )}
       </div>
+      <Suspense fallback={null}>
+        <ToolAbout tool={tool} />
+      </Suspense>
       </main>
       {state.kind === 'done' && <ResultDialog tool={tool} outputs={state.outputs} onClose={() => setState({ kind: 'idle' })} onReset={() => changeFiles([])} />}
       {asking && (
