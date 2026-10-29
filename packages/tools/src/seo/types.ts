@@ -1,5 +1,5 @@
 /**
- * The words of a tool's own page (ream.deityhub.com/tool/<id>/): what search engines list and what a visitor reads under
+ * The words of a tool's own page (ream.deityhub.com/tools/<kind>/<id>/): what search engines list and what a visitor reads under
  * the tool. Plain, true claims only: say what the tool does and where it stops (no OCR, no certificate signatures...).
  * `seo.test.ts` checks the lengths and that every tool has an entry.
  */

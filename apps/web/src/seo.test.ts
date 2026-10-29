@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { tools } from '@ream/tools'
+import { findTool, tools } from '@ream/tools'
 import { seoOf, toolSeo } from '@ream/tools/seo'
-import { allRoutes, pathOf } from './routes'
+import { allRoutes, parseRoute, pathOf } from './routes'
 import { SITE, headTags, pageSeo, sitemapXml } from './seo'
 
 const ready = tools.filter((t) => t.status === 'ready')
@@ -65,24 +65,28 @@ describe('pages', () => {
     expect(new Set(urls).size).toBe(urls.length)
     expect(urls).toHaveLength(ready.length + 4) // the landing page, all tools and the two categories
     expect(urls).toContain(`${SITE}/`)
-    expect(urls).toContain(`${SITE}/tool/compress-pdf/`)
+    expect(urls).toContain(`${SITE}/tools/pdf/compress-pdf/`)
+    expect(urls).toContain(`${SITE}/tools/image/resize-image/`)
+    expect(urls.some((u) => u.includes('/tool/'))).toBe(false)
     expect(urls.every((u) => u.startsWith(`${SITE}/`) && u.endsWith('/'))).toBe(true)
     expect(xml).not.toMatch(/licence|notices|404/)
   })
 
   test('licence, notices and not-found pages are kept out of search; a missing tool is a not-found page', () => {
-    for (const r of [{ page: 'licence' }, { page: 'notices' }, { page: 'notFound' }, { page: 'tool', id: 'no-such-tool' }] as const) {
+    const missing = parseRoute('/tools/pdf/no-such-tool/')
+    const soon = { page: 'tool', tool: { ...findTool('merge-pdf')!, status: 'soon' } } as const
+    for (const r of [{ page: 'licence' }, { page: 'notices' }, { page: 'notFound' }, missing, soon] as const) {
       expect(pageSeo(r, '1').index, r.page).toBe(false)
       expect(headTags(pageSeo(r, '1'))).toContain('noindex')
     }
-    expect(pageSeo({ page: 'tool', id: 'no-such-tool' }, '1').path).toBe('/404.html')
+    expect(pageSeo(missing, '1').path).toBe('/404.html')
     expect(headTags(pageSeo({ page: 'notFound' }, '1'))).not.toMatch(/canonical|og:url/) // no address of its own to declare
   })
 
   test('the head names the page, points at its canonical address and carries structured data that parses', () => {
-    const tool = pageSeo({ page: 'tool', id: 'merge-pdf' }, '1')
+    const tool = pageSeo(parseRoute('/tools/pdf/merge-pdf/'), '1')
     const head = headTags(tool)
-    expect(head).toContain(`<link data-seo rel="canonical" href="${SITE}/tool/merge-pdf/" />`)
+    expect(head).toContain(`<link data-seo rel="canonical" href="${SITE}/tools/pdf/merge-pdf/" />`)
     expect(head).toContain('og:title')
     expect(head).toContain('twitter:card')
     expect(head).toContain(`${SITE}/og.png`)
@@ -102,7 +106,7 @@ describe('pages', () => {
 
   test('the text inside the page links to every tool of its kind and has one heading', () => {
     const landing = pageSeo({ page: 'landing' }, '1').html
-    for (const t of ready) expect(landing).toContain(`href="/tool/${t.id}/"`)
+    for (const t of ready) expect(landing).toContain(`href="/tools/${t.category}/${t.id}/"`)
     for (const p of pages) expect(p.html.match(/<h1>/g), p.path).toHaveLength(1)
   })
 })

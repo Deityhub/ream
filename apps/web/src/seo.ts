@@ -2,7 +2,7 @@
 // text inside #root. One source for the build (which writes a file per route, see ../seoPlugin.ts) and for the app (which
 // keeps the head in step when you move between pages). Plain functions, no React or DOM.
 import type { Category, Tool } from '@ream/core'
-import { findTool, tools } from '@ream/tools'
+import { tools } from '@ream/tools'
 import { seoOf } from '@ream/tools/seo'
 import { categoryPath, toolPath, type Route, pathOf } from './routes'
 
@@ -40,7 +40,7 @@ export const relatedTools = (tool: Tool) => ready.filter((t) => t.category === t
 
 const link = (path: string, text: string) => `<a href="${path}">${esc(text)}</a>`
 const list = (items: string[]) => `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>`
-const toolLinks = (ts: Tool[]) => list(ts.map((t) => `${link(toolPath(t.id), t.title)}: ${esc(t.description)}`))
+const toolLinks = (ts: Tool[]) => list(ts.map((t) => `${link(toolPath(t), t.title)}: ${esc(t.description)}`))
 
 const breadcrumb = (items: [name: string, path: string][]) => ({
   '@context': 'https://schema.org',
@@ -99,13 +99,13 @@ export function pageSeo(route: Route, version: string): PageSeo {
         description,
         path,
         index: true,
-        jsonLd: [breadcrumb(crumbs), { '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: group.map((t, i) => ({ '@type': 'ListItem', position: i + 1, url: SITE + toolPath(t.id), name: t.title })) }],
+        jsonLd: [breadcrumb(crumbs), { '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: group.map((t, i) => ({ '@type': 'ListItem', position: i + 1, url: SITE + toolPath(t), name: t.title })) }],
         html: `<main class="seo"><h1>${esc(name)}</h1><p>${esc(description)}</p>${toolLinks(group)}<p>${link('/', 'Back to Ream')}</p></main>`,
       }
     }
     case 'tool': {
-      const tool = findTool(route.id)
-      if (!tool || tool.status !== 'ready') return notFound('This tool does not exist')
+      const tool = route.tool
+      if (tool.status !== 'ready') return notFound('This tool is not ready')
       const s = seoOf(tool)
       const cat = CATEGORY_NAME[tool.category]
       return {

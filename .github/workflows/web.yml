@@ -58,13 +58,15 @@ jobs:
           headers "/assets/$asset" | grep -qi '^cache-control: public, max-age=31536000, immutable' || fail 'assets are not cached for good'
           headers /no-such-file | grep -q '^HTTP/1.1 404' || fail 'a missing file is not a 404'
           page() { curl -sS "http://localhost:8080$1"; }
-          headers /tool/compress-pdf/ | grep -q '^HTTP/1.1 200' || fail 'a tool page is not served'
-          page /tool/compress-pdf/ | grep -q '<title>Compress PDF' || fail 'the tool page has the wrong title'
-          page /tool/compress-pdf/ | grep -q 'rel="canonical" href="https://ream.deityhub.com/tool/compress-pdf/"' || fail 'the tool page has no canonical address'
+          headers /tools/pdf/compress-pdf/ | grep -q '^HTTP/1.1 200' || fail 'a tool page is not served'
+          page /tools/pdf/compress-pdf/ | grep -q '<title>Compress PDF' || fail 'the tool page has the wrong title'
+          page /tools/pdf/compress-pdf/ | grep -q 'rel="canonical" href="https://ream.deityhub.com/tools/pdf/compress-pdf/"' || fail 'the tool page has no canonical address'
           headers /sitemap.xml | grep -q '^HTTP/1.1 200' || fail 'no sitemap'
-          page /sitemap.xml | grep -q '/tool/merge-pdf/' || fail 'the sitemap lacks a tool'
-          headers /tool/no-such-tool/ | grep -q '^HTTP/1.1 404' || fail 'an unknown tool is not a 404'
-          page /tool/no-such-tool/ | grep -q 'noindex' || fail 'the 404 page can be indexed'
+          page /sitemap.xml | grep -q '/tools/pdf/merge-pdf/' || fail 'the sitemap lacks a tool'
+          for gone in /tools/pdf/no-such-tool/ /tools/image/sign-pdf/ /tools/video/ /tool/compress-pdf/; do
+            headers "$gone" | grep -q '^HTTP/1.1 404' || fail "$gone is not a 404"
+          done
+          page /tools/pdf/no-such-tool/ | grep -q 'noindex' || fail 'the 404 page can be indexed'
           [ "$(docker exec ream id -u)" != 0 ] || fail 'NGINX runs as root'
           echo "image: $(docker image inspect ream:check --format '{{.Size}}') bytes"
       - uses: actions/upload-artifact@v7

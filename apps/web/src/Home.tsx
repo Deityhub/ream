@@ -33,7 +33,7 @@ export function Home({ cat }: { cat: Filter }) {
 
   const open = (t: Tool) => {
     setHandoff(dropped)
-    navigate(toolPath(t.id))
+    navigate(toolPath(t))
   }
 
   return (
@@ -115,5 +115,5 @@ export function ToolCard({ tool: t, suggested, dim, onOpen }: { tool: Tool; sugg
   const box = `blueprint flex h-full w-full flex-col gap-1.5 border p-4 text-left transition-colors duration-150 ${edge}`
   if (dim) return <div aria-disabled="true" className={`${box} opacity-50`}>{body}</div>
   if (onOpen) return <button onClick={onOpen} className={`${box} ${focus}`}>{body}</button>
-  return <Link to={toolPath(t.id)} className={`${box} ${focus}`}>{body}</Link>
+  return <Link to={toolPath(t)} className={`${box} ${focus}`}>{body}</Link>
 }

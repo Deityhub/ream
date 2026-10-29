@@ -15,7 +15,7 @@ import { SizeEstimate } from './SizeEstimate'
 import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 import { Breadcrumb, TopBar, focus } from './TopBar'
-import { Link, navigate } from './router'
+import { navigate } from './router'
 import { toolPath } from './routes'
 
 // the page's words (what it does, questions, more tools) load after the tool itself
@@ -50,7 +50,7 @@ const pdfHost = {
 
 const GENERIC = 'Something went wrong while processing your files. Nothing was uploaded. Try again, or try a different file.'
 
-export function ToolPage({ tool }: { tool?: Tool }) {
+export function ToolPage({ tool }: { tool: Tool }) {
   const [files, setFiles] = useState<File[]>(() => (tool ? peekHandoff().filter((f) => acceptsFile(f, tool.accept)) : []))
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [panel, setPanel] = useState<PanelModule | null>(null)
@@ -94,18 +94,6 @@ export function ToolPage({ tool }: { tool?: Tool }) {
       job.current?.cancel()
     }
   }, [tool])
-
-  if (!tool) {
-    return (
-      <>
-        <TopBar />
-        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8">
-          <Breadcrumb cat="all" />
-          <p className="text-[15px]">That tool doesn't exist. <Link to="/tools/" className={`font-semibold text-accent-ink underline ${focus}`}>See all tools</Link>.</p>
-        </main>
-      </>
-    )
-  }
 
   const changeFiles = (next: File[]) => {
     setFiles(next)
@@ -391,7 +379,7 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
                 key={t.id}
                 onClick={() => {
                   setHandoff(outputs.map(toFile))
-                  navigate(toolPath(t.id))
+                  navigate(toolPath(t))
                 }}
                 className="border border-line px-2.5 py-1 hover:bg-ink/7 focus-visible:outline-2 focus-visible:outline-accent"
               >

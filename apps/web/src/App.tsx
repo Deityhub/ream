@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { findTool } from '@ream/tools'
 import { usePath } from './router'
 import { parseRoute } from './routes'
 import { Home } from './Home'
@@ -24,7 +23,7 @@ export function App() {
   }, [path])
   switch (route.page) {
     case 'tool':
-      return <ToolPage key={route.id} tool={findTool(route.id)} />
+      return <ToolPage key={route.tool.id} tool={route.tool} />
     case 'tools':
       return <Home key={route.cat} cat={route.cat} />
     case 'licence':

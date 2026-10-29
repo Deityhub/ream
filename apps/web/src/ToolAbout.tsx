@@ -42,7 +42,7 @@ export function ToolAbout({ tool }: { tool: Tool }) {
         <h2 id="about-more" className="text-2xl uppercase">More {tool.category === 'pdf' ? 'PDF' : 'image'} tools</h2>
         <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[15px]">
           {more.map((t) => (
-            <li key={t.id}><Link to={toolPath(t.id)} className={`text-accent-ink underline ${focus}`}>{t.title}</Link></li>
+            <li key={t.id}><Link to={toolPath(t)} className={`text-accent-ink underline ${focus}`}>{t.title}</Link></li>
           ))}
         </ul>
       </section>

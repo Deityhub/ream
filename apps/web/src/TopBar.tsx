@@ -30,7 +30,7 @@ export function TopBar({ children }: { children?: ReactNode }) {
 export function Breadcrumb({ cat, tool, className = 'mb-6' }: { cat: Filter; tool?: Tool; className?: string }) {
   const levels = [{ href: filterHref('all'), label: filterName.all }]
   if (cat !== 'all') levels.push({ href: filterHref(cat), label: filterName[cat] })
-  if (tool) levels.push({ href: toolPath(tool.id), label: tool.title })
+  if (tool) levels.push({ href: toolPath(tool), label: tool.title })
   return (
     <nav aria-label="Breadcrumb" className={className}>
       <ol className="flex min-w-0 flex-wrap items-center gap-2.5 text-[13px] font-semibold tracking-widest text-muted uppercase">

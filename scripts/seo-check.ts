@@ -68,6 +68,12 @@ for (const file of pages) {
 }
 
 if (!pages.includes('index.html')) bad('dist', 'no index.html')
+// a tool lives at /tools/<kind>/<id>/ and nowhere else: the shape before that (/tool/<id>/) must not come back
+if (pages.some((f) => f.startsWith('tool/'))) bad('dist', 'a page under /tool/: tools live under /tools/<kind>/')
+for (const f of pages) {
+  const m = /^tools\/([^/]+)\/([^/]+)\/index\.html$/.exec(f)
+  if (m && !readFileSync(join(dist, f), 'utf8').includes(`<link data-seo rel="canonical" href="${SITE}/tools/${m[1]}/${m[2]}/"`)) bad(f, 'a tool page whose canonical is not its own address')
+}
 if (!pages.includes('404.html')) bad('dist', 'no 404.html: Cloudflare Pages would answer every unknown address with 200')
 
 // sitemap: every address is a page that exists, and every indexable page is in it
@@ -99,7 +105,7 @@ if (!files) bad('sw.js', 'no file list')
 else {
   const kept: string[] = JSON.parse(files)
   for (const f of kept) if (f.endsWith('index.html') || f === '404.html' || f === 'robots.txt' || f === 'sitemap.xml') bad('sw.js', `keeps ${f}`)
-  if (!kept.includes('./') || !kept.includes('tool/compress-pdf/')) bad('sw.js', 'does not keep the first page and the tool pages')
+  if (!kept.includes('./') || !kept.includes('tools/pdf/compress-pdf/')) bad('sw.js', 'does not keep the first page and the tool pages')
 }
 
 if (problems.length) {
