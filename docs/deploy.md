@@ -6,6 +6,14 @@ The site is https://ream.deityhub.com, on Cloudflare Pages. `.github/workflows/w
 
 `apps/web/public/_headers` sets the response headers: a content security policy that lets the page load only its own files (plus Fontsource and jsDelivr, for Download free fonts), no inline scripts or styles, no framing; no referrer; and a year's caching for the content-named files in `/assets`. To try the headers locally: `yarn build`, then `yarn dlx wrangler@4 pages dev apps/web/dist`.
 
+### Search engines and AI crawlers
+
+`apps/web/public/robots.txt` welcomes search engines and asks AI **training** crawlers (GPTBot, ClaudeBot, CCBot, Google-Extended, Applebot-Extended, Bytespider, Meta-ExternalAgent and others; the list follows the [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) project) to stay out. AI search and assistant fetchers (OAI-SearchBot, PerplexityBot, Claude-SearchBot and the like) and link-preview bots are allowed, so Ream can be found and quoted but not trained on. It also sends Cloudflare's `Content-Signal: ai-train=no`. To change the choice, edit the lists in that file; `apps/web/src/crawlers.test.ts` checks which crawlers are allowed and which are blocked.
+
+robots.txt is a request that well-behaved crawlers follow, not a lock. The setting that enforces it is Cloudflare's, and it is free: dashboard → ream.deityhub.com → Security → Bots → **Block AI bots** (or AI Crawl Control). If you also turn on Cloudflare's *managed robots.txt*, it adds its own rules in front of this file.
+
+The Cloudflare addresses of the site (`ream-bqb.pages.dev` and each preview) send `X-Robots-Tag: noindex` (host rules at the end of `_headers`), so search engines list only ream.deityhub.com. The self-hosted NGINX site leaves those rules out.
+
 ## Installable and offline (PWA)
 
 Ream is a progressive web app. `apps/web/public/manifest.webmanifest` and the icons in `apps/web/public/icons` (drawn from `apps/web/icons/icon.svg` by `node scripts/icons.ts`) make it installable: Chrome and Edge show Install Ream on the landing page, Safari has File → Add to Dock, iPhone and iPad have Share → Add to Home Screen. The service worker (`apps/web/sw.js`, written into the build as `sw.js` with its file list by the `serviceWorker` plugin in `vite.config.ts`) keeps the app on the device:
@@ -15,6 +23,14 @@ Ream is a progressive web app. `apps/web/public/manifest.webmanifest` and the ic
 - A new deploy is downloaded when the app is opened or comes back into view, and a bar offers to reload into it; it never switches by itself, so a tool isn't cut off half way. The page itself always comes from the network when there is one, so a plain reload is current.
 - Limits: the first visit needs a connection; Firefox works offline but can't install sites as apps on the desktop; the browser can clear the saved app when the device is short of space (it is then downloaded again on the next visit). Checked in Chrome only.
 
+
+## Addresses and search
+
+Every page has a real address: `/`, `/tools/`, `/tools/pdf/`, `/tools/image/`, `/tools/<kind>/<id>/` such as `/tools/pdf/sign-pdf/` (and `/licence/`, `/notices/`). A tool exists only under its own kind; anything else, a tool that doesn't exist or the wrong kind included, gets the 404 page. The build writes a file for each (`tool/merge-pdf/index.html`), with its own title, description, canonical address, social card tags and structured data in the head and plain text inside the page, so search engines and link previews don't depend on running the app. `404.html` is also built, and **must stay**: without it Cloudflare Pages treats the site as a single-page app and answers every unknown address with 200 (a "soft 404" that search engines distrust). `sitemap.xml` lists every page worth finding. `node scripts/seo-check.ts` checks all of it on the built site, and `check` runs it. The Docker image gets the same files, with NGINX answering unknown addresses with `404.html`.
+
+Old links with a `#/` (`/#/tool/merge-pdf` becomes `/tools/pdf/merge-pdf/`) still work: the app turns them into the new addresses when the page opens.
+
+After a release, once: add `ream.deityhub.com` in [Google Search Console](https://search.google.com/search-console) (a DNS TXT record in Cloudflare proves you own it), submit `https://ream.deityhub.com/sitemap.xml`, and do the same in [Bing Webmaster Tools](https://www.bing.com/webmasters), which also feeds DuckDuckGo and others. Pages usually appear in search within days to weeks; Search Console shows which are indexed and why one isn't. The social card is `apps/web/public/og.png` (`node scripts/og.ts` redraws it).
 
 ## Releases and versions
 

@@ -48,7 +48,7 @@ export function startPwa() {
   addEventListener('appinstalled', () => set({ install: null }))
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
   addEventListener('load', async () => {
-    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => null)
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
     if (!reg) return
     // a worker that installs while an older one runs the page is a new version: offer it
     const watch = (w: ServiceWorker | null) => {

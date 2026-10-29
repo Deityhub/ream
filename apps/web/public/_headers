@@ -15,3 +15,10 @@
 # the service worker and the page must always be checked for a newer version
 /sw.js
   Cache-Control: no-cache
+
+# Only ream.deityhub.com is for search engines: the same site on Cloudflare's own addresses (the project's, and every
+# preview deployment's) would be an indexable duplicate
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

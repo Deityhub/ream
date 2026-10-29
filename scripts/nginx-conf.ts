@@ -18,6 +18,10 @@ for (const line of readFileSync(file, 'utf8').split('\n')) {
   }
 }
 
+// rules for a whole address (https://:project.pages.dev/*) are Cloudflare's: a self-hosted copy has one host, and a
+// location can't match one
+for (let i = rules.length; i--; ) if (/^https?:\/\//.test(rules[i].path)) rules.splice(i, 1)
+
 const every = rules.filter((r) => r.path === '/*').flatMap((r) => r.headers)
 // pages and anything without a rule of its own are checked for a newer version each time, like Cloudflare Pages does
 const fallback: [string, string][] = [['Cache-Control', 'public, max-age=0, must-revalidate']]
@@ -37,6 +41,8 @@ const out = [
   '  root /usr/share/nginx/html;',
   '  index index.html;',
   '  server_tokens off;',
+  // a real 404 status with the app's own page (Cloudflare Pages does the same with 404.html)
+  '  error_page 404 /404.html;',
   '',
   '  location / {',
   '    try_files $uri $uri/ =404;',

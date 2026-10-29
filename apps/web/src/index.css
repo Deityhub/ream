@@ -40,3 +40,11 @@ label:has(input:is([type='checkbox'], [type='radio']):not(:disabled)) { cursor: 
   background-image: conic-gradient(var(--surface-2) 25%, transparent 0 50%, var(--surface-2) 0 75%, transparent 0);
   background-size: 16px 16px;
 }
+
+/* What a page holds before the app starts, and what a crawler that doesn't run scripts reads (see seoPlugin.ts). The app replaces it. */
+main.seo { max-width: 46rem; margin: 0 auto; padding: 4rem 1rem; line-height: 1.6; }
+main.seo h1 { font-size: 2.5rem; line-height: 1.1; text-transform: uppercase; margin-bottom: 1rem; }
+main.seo h2 { font-size: 1.5rem; text-transform: uppercase; margin: 2rem 0 0.5rem; }
+main.seo ul { list-style: disc; padding-left: 1.25rem; }
+main.seo dt { font-weight: 600; margin-top: 1rem; }
+main.seo a { color: var(--accent-ink); text-decoration: underline; }

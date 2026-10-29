@@ -20,16 +20,20 @@ Use Yarn, not npm or pnpm.
 yarn typecheck
 yarn test
 yarn build
+node scripts/seo-check.ts                 # the built site as a search engine sees it
 node scripts/notices.ts --check     # after changing dependencies, run it without --check and commit the result
 ```
 
 These are what the `check` job runs (plus building and testing the Docker image). Also run `node scripts/contrast.ts` after changing `packages/ui/src/theme.css`, and `node scripts/render-compare.ts` (macOS) after changing the PDF renderer.
+
+A new tool needs its page text (title, description, intro, points and questions) in `packages/tools/src/seo/`: it is what search results and the page under the tool say, so write what the tool really does and where it stops. `yarn test` fails until it is there.
 
 Add tests with your change: engines and tools are tested in plain Node, and a tool's tests call its `run()` directly. For anything with a screen, look at it in a browser at desktop and phone widths, in light and dark.
 
 ## Branches and releases
 
 - Branch from `dev` and open your pull request into `dev`. It runs `check` and gets a preview deploy, linked in a comment.
+- The badge at the top of the README is the last `check` run on `main` (typecheck, tests, notices, build and the Docker image test). If it is red, `main` is broken: fix that before releasing.
 - A release is a pull request from `dev` into `main` that raises the version and adds its `CHANGELOG.md` section, both written by `yarn release patch|minor|major`. Merging it deploys ream.deityhub.com, tags the version and publishes the release notes and Docker image. See [docs/deploy.md](docs/deploy.md).
 
 ## Ground rules
