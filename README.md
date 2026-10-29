@@ -1,5 +1,7 @@
 # Ream
 
+[![Build and test](https://github.com/Deityhub/ream/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/Deityhub/ream/actions/workflows/web.yml)
+
 **Ream is the file toolkit that runs on your computer.** Convert, edit, compress and secure PDFs, images and Office documents in your browser, with more kinds of file on the way. Your files are opened and processed on your own device and never reach a server. No account, no uploads, no trackers, and it works offline.
 
 **Use it at [ream.deityhub.com](https://ream.deityhub.com).**
