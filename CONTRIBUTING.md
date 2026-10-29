@@ -20,10 +20,13 @@ Use Yarn, not npm or pnpm.
 yarn typecheck
 yarn test
 yarn build
+node scripts/seo-check.ts                 # the built site as a search engine sees it
 node scripts/notices.ts --check     # after changing dependencies, run it without --check and commit the result
 ```
 
 These are what the `check` job runs (plus building and testing the Docker image). Also run `node scripts/contrast.ts` after changing `packages/ui/src/theme.css`, and `node scripts/render-compare.ts` (macOS) after changing the PDF renderer.
+
+A new tool needs its page text (title, description, intro, points and questions) in `packages/tools/src/seo/`: it is what search results and the page under the tool say, so write what the tool really does and where it stops. `yarn test` fails until it is there.
 
 Add tests with your change: engines and tools are tested in plain Node, and a tool's tests call its `run()` directly. For anything with a screen, look at it in a browser at desktop and phone widths, in light and dark.
 

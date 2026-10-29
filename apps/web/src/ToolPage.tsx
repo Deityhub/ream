@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, Dropzone, Icon } from '@ream/ui'
 import { UserError, acceptsFile, formatBytes, type FileData, type Tool } from '@ream/core'
 import { tools } from '@ream/tools'
@@ -15,6 +15,11 @@ import { SizeEstimate } from './SizeEstimate'
 import { LazyPdfPage, PdfPage } from './PdfPage'
 import { usePreview } from './usePreview'
 import { Breadcrumb, TopBar, focus } from './TopBar'
+import { navigate } from './router'
+import { toolPath } from './routes'
+
+// the page's words (what it does, questions, more tools) load after the tool itself
+const ToolAbout = lazy(() => import('./ToolAbout').then((m) => ({ default: m.ToolAbout })))
 
 type State =
   | { kind: 'idle' }
@@ -45,7 +50,7 @@ const pdfHost = {
 
 const GENERIC = 'Something went wrong while processing your files. Nothing was uploaded. Try again, or try a different file.'
 
-export function ToolPage({ tool }: { tool?: Tool }) {
+export function ToolPage({ tool }: { tool: Tool }) {
   const [files, setFiles] = useState<File[]>(() => (tool ? peekHandoff().filter((f) => acceptsFile(f, tool.accept)) : []))
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [panel, setPanel] = useState<PanelModule | null>(null)
@@ -89,18 +94,6 @@ export function ToolPage({ tool }: { tool?: Tool }) {
       job.current?.cancel()
     }
   }, [tool])
-
-  if (!tool) {
-    return (
-      <>
-        <TopBar />
-        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8">
-          <Breadcrumb cat="all" />
-          <p className="text-[15px]">That tool doesn't exist. <a href="#/tools" className={`font-semibold text-accent-ink underline ${focus}`}>See all tools</a>.</p>
-        </main>
-      </>
-    )
-  }
 
   const changeFiles = (next: File[]) => {
     setFiles(next)
@@ -274,6 +267,12 @@ export function ToolPage({ tool }: { tool?: Tool }) {
           </aside>
         )}
       </div>
+      {/* about the tool: for a visitor who hasn't started; once there are files it is out of the way */}
+      {empty && (
+        <Suspense fallback={null}>
+          <ToolAbout tool={tool} />
+        </Suspense>
+      )}
       </main>
       {state.kind === 'done' && <ResultDialog tool={tool} outputs={state.outputs} onClose={() => setState({ kind: 'idle' })} onReset={() => changeFiles([])} />}
       {asking && (
@@ -380,7 +379,7 @@ function ResultDialog({ tool, outputs, onClose, onReset }: { tool: Tool; outputs
                 key={t.id}
                 onClick={() => {
                   setHandoff(outputs.map(toFile))
-                  location.hash = `#/tool/${t.id}`
+                  navigate(toolPath(t))
                 }}
                 className="border border-line px-2.5 py-1 hover:bg-ink/7 focus-visible:outline-2 focus-visible:outline-accent"
               >

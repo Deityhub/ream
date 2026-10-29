@@ -41,6 +41,8 @@ const out = [
   '  root /usr/share/nginx/html;',
   '  index index.html;',
   '  server_tokens off;',
+  // a real 404 status with the app's own page (Cloudflare Pages does the same with 404.html)
+  '  error_page 404 /404.html;',
   '',
   '  location / {',
   '    try_files $uri $uri/ =404;',

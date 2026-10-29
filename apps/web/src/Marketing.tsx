@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Logo } from '@ream/ui'
 import { ThemeToggle } from './ThemeToggle'
 import { focus } from './TopBar'
+import { Link } from './router'
 
 const action = `inline-flex min-h-11 items-center justify-center px-5 font-heading text-[17px] font-semibold tracking-wide transition-colors duration-150 ${focus}`
 /** the one solid object on a page: an accent fill wearing the corner marks */
@@ -18,9 +19,9 @@ export function Marketing({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <header>
         <div className={`${wrap} flex flex-wrap items-center justify-between gap-4 py-4`}>
-          <a href="#/" className={`flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
+          <Link to="/" className={`flex items-center gap-2 font-heading text-[22px] font-semibold tracking-wide uppercase ${focus}`}>
             <Logo size={24} /> Ream
-          </a>
+          </Link>
           <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] font-medium">
             <ThemeToggle />
           </nav>
@@ -35,8 +36,8 @@ export function Marketing({ children }: { children: ReactNode }) {
           <span className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
             <span>© 2026 Chizoba Jude Ojini</span>
             <span className="tabular-nums">Version {__APP_VERSION__}</span>
-            <a className={`underline hover:text-ink ${focus}`} href="#/licence">MIT licence</a>
-            <a className={`underline hover:text-ink ${focus}`} href="#/notices">Third-party notices</a>
+            <Link className={`underline hover:text-ink ${focus}`} to="/licence/">MIT licence</Link>
+            <Link className={`underline hover:text-ink ${focus}`} to="/notices/">Third-party notices</Link>
           </span>
         </div>
       </footer>
