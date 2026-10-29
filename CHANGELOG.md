@@ -2,6 +2,12 @@
 
 What changed in each release of Ream. `yarn release patch|minor|major` writes a section from the pull requests merged since the last release; edit it in the release pull request.
 
+## 0.3.0 (2026-10-29)
+
+- SEO: real URLs, a page per route, copy for all 37 tools ([#12](https://github.com/Deityhub/ream/pull/12))
+- robots.txt: block AI training crawlers; noindex the pages.dev addresses ([#11](https://github.com/Deityhub/ream/pull/11))
+- README: build and test status badge ([#10](https://github.com/Deityhub/ream/pull/10))
+
 ## 0.2.0 (2026-10-27)
 
 - Faster tool processing ([#7](https://github.com/Deityhub/ream/pull/7))
