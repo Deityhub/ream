@@ -6,6 +6,14 @@ The site is https://ream.deityhub.com, on Cloudflare Pages. `.github/workflows/w
 
 `apps/web/public/_headers` sets the response headers: a content security policy that lets the page load only its own files (plus Fontsource and jsDelivr, for Download free fonts), no inline scripts or styles, no framing; no referrer; and a year's caching for the content-named files in `/assets`. To try the headers locally: `yarn build`, then `yarn dlx wrangler@4 pages dev apps/web/dist`.
 
+### Search engines and AI crawlers
+
+`apps/web/public/robots.txt` welcomes search engines and asks AI **training** crawlers (GPTBot, ClaudeBot, CCBot, Google-Extended, Applebot-Extended, Bytespider, Meta-ExternalAgent and others; the list follows the [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) project) to stay out. AI search and assistant fetchers (OAI-SearchBot, PerplexityBot, Claude-SearchBot and the like) and link-preview bots are allowed, so Ream can be found and quoted but not trained on. It also sends Cloudflare's `Content-Signal: ai-train=no`. To change the choice, edit the lists in that file; `apps/web/src/crawlers.test.ts` checks which crawlers are allowed and which are blocked.
+
+robots.txt is a request that well-behaved crawlers follow, not a lock. The setting that enforces it is Cloudflare's, and it is free: dashboard → ream.deityhub.com → Security → Bots → **Block AI bots** (or AI Crawl Control). If you also turn on Cloudflare's *managed robots.txt*, it adds its own rules in front of this file.
+
+The Cloudflare addresses of the site (`ream-bqb.pages.dev` and each preview) send `X-Robots-Tag: noindex` (host rules at the end of `_headers`), so search engines list only ream.deityhub.com. The self-hosted NGINX site leaves those rules out.
+
 ## Installable and offline (PWA)
 
 Ream is a progressive web app. `apps/web/public/manifest.webmanifest` and the icons in `apps/web/public/icons` (drawn from `apps/web/icons/icon.svg` by `node scripts/icons.ts`) make it installable: Chrome and Edge show Install Ream on the landing page, Safari has File → Add to Dock, iPhone and iPad have Share → Add to Home Screen. The service worker (`apps/web/sw.js`, written into the build as `sw.js` with its file list by the `serviceWorker` plugin in `vite.config.ts`) keeps the app on the device:
