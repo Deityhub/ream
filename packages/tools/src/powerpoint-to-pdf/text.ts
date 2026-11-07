@@ -9,8 +9,12 @@ import { hexRgb } from '../office-fonts.ts'
 /** what a line of type is as tall as, in em: the usual ascent and descent of the fonts slides use */
 const EM_HEIGHT = 1.2
 
-type Piece = { text: string; run: SlideRun; font: FontSpec; size: number; rise: number; width: number; space: boolean }
-type Line = { pieces: Piece[]; width: number; size: number; height: number; start: number; avail: number; last: boolean }
+/** `picture`: how tall a picture in the line is (its width is `width`); the run holds the picture itself */
+type Piece = { text: string; run: SlideRun; font: FontSpec; size: number; rise: number; width: number; space: boolean; picture?: number }
+/** `gap`: room left empty above the line (Word moves a line down past a picture it can't sit beside); `base`: where the baseline is below the top of the line, when a picture in it decides that */
+type Line = { pieces: Piece[]; width: number; size: number; height: number; start: number; avail: number; last: boolean; gap?: number; base?: number }
+/** where a line may go: `dx` from the left of the text area, `w` wide; `skip` says there's no room at this height and the line goes that much lower */
+export type Slot = { dx: number; w: number; skip?: number }
 type Mark = 'disc' | 'circle' | 'square' | 'box' | 'diamond' | 'arrowhead' | 'check' | 'arrow'
 export type Laid = { para: SlidePara; lines: Line[]; before: number; after: number; bullet?: { text: string; mark?: Mark; font: FontSpec; size: number; x: number; color: string | undefined } }
 
@@ -30,8 +34,12 @@ function markOf(char: string, font: string | undefined): Mark | undefined {
 /** a run's text as shown: capitals for 'all' and (ponytail: drawn as capitals at 80%) 'small' */
 const shown = (r: SlideRun) => (r.caps ? r.text.toUpperCase() : r.text)
 
-/** every paragraph's lines for a text area `width` wide; list numbering carries from one paragraph to the next */
-export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lineReduction: number, book: FontBook): Laid[] {
+/**
+ * every paragraph's lines for a text area `width` wide; list numbering carries from one paragraph to the next.
+ * `slot` (Word's text around pictures) says where each line may go, given the height reached so far in the paragraph and the
+ * line's likely height; without it every line has the whole width.
+ */
+export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lineReduction: number, book: FontBook, slot?: (offset: number, height: number) => Slot): Laid[] {
   const out: Laid[] = []
   const counters = new Map<number, number>()
   for (const para of paras) {
@@ -54,6 +62,12 @@ export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lin
     for (const run of para.runs) {
       const font = fontFor(run, book)
       const base = run.size ?? 18
+      if (run.picture) {
+        // a picture in the line is a piece as wide as it is, shrunk to fit a line that is too narrow for it
+        const k = Math.min(1, Math.max(10, width - Math.max(start0, marL)) / run.picture.width)
+        tokens.push({ text: '', run, font, size: base, rise: 0, width: run.picture.width * k, space: false, picture: run.picture.height * k })
+        continue
+      }
       // raised and lowered text is drawn smaller, the way PowerPoint does
       const size = run.baseline ? base * 0.67 : run.caps === 'small' ? base * 0.8 : base
       const rise = run.baseline ? run.baseline * base : 0
@@ -65,20 +79,44 @@ export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lin
     const lines: Line[] = []
     let cur: Piece[] = []
     let w = 0
+    // where the line being made may go: the whole width, or what `slot` leaves (a line with no room is moved down)
+    const guess = para.line ?? (para.lineFactor ?? 1) * (1 - lineReduction) * EM_HEIGHT * (para.size ?? 18)
+    let offset = 0
+    let gap = 0
+    let box: Slot = { dx: 0, w: width }
+    const open = () => {
+      gap = 0
+      box = slot ? slot(offset, guess) : { dx: 0, w: width }
+      for (let n = 0; slot && box.skip && n < 50; n++) {
+        gap += box.skip
+        offset += box.skip
+        box = slot(offset, guess)
+      }
+    }
+    open()
     const finish = (last: boolean) => {
       while (cur.length && cur[cur.length - 1].space) w -= cur.pop()!.width
       const size = Math.max(...cur.map((p) => (p.rise ? p.size / 0.67 : p.size)), cur.length ? 0 : para.size ?? 18)
       const first = lines.length === 0
-      const avail = Math.max(1, width - (first ? start0 : marL))
-      const lh = para.line ?? (para.lineFactor ?? 1) * (1 - lineReduction) * EM_HEIGHT * size
-      lines.push({ pieces: cur, width: w, size, height: lh, start: first ? start0 : marL, avail, last })
+      const avail = Math.max(1, box.w - (first ? start0 : marL))
+      let lh = para.line ?? (para.lineFactor ?? 1) * (1 - lineReduction) * EM_HEIGHT * size
+      // a picture stands on the baseline with the text's descent below it: the line is as tall as that, and the baseline is there
+      const pic = Math.max(0, ...cur.map((p) => p.picture ?? 0))
+      let base: number | undefined
+      if (pic && pic + 0.27 * size > lh) {
+        lh = pic + 0.27 * size
+        base = pic
+      }
+      lines.push({ pieces: cur, width: w, size, height: lh, start: box.dx + (first ? start0 : marL), avail, last, gap: gap || undefined, base })
+      offset += lh
       cur = []
       w = 0
+      open()
     }
     for (const tk of tokens) {
       if (tk === 'break') { finish(true); continue }
       const first = lines.length === 0
-      const avail = width - (first ? start0 : marL)
+      const avail = box.w - (first ? start0 : marL)
       if (wrap && !tk.space && cur.some((p) => !p.space) && w + tk.width > avail) finish(false)
       if (!(tk.space && !cur.length)) { cur.push(tk); w += tk.width }
     }
@@ -88,7 +126,7 @@ export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lin
   return out
 }
 
-export const textHeight = (laid: Laid[]): number => laid.reduce((h, l, i) => h + (i ? l.before : 0) + l.lines.reduce((a, ln) => a + ln.height, 0) + l.after, 0)
+export const textHeight = (laid: Laid[]): number => laid.reduce((h, l, i) => h + (i ? l.before : 0) + l.lines.reduce((a, ln) => a + ln.height + (ln.gap ?? 0), 0) + l.after, 0)
 
 /** a bullet mark drawn as a shape: a box `s` tall with its bottom on the baseline */
 function drawMark(page: PageDraw, mark: Mark, x: number, baseline: number, s: number, color: [number, number, number]) {
@@ -108,15 +146,19 @@ function drawMark(page: PageDraw, mark: Mark, x: number, baseline: number, s: nu
   else page.path([['M', cx - r, cy], ['L', cx + r, cy], ['M', cx + r * 0.3, cy - r * 0.6], ['L', cx + r, cy], ['L', cx + r * 0.3, cy + r * 0.6]], { stroke: color, width: s * 0.08 })
 }
 
-/** draw laid out text in the area; `anchor` places the block in it. Overflow is drawn, as slides do. */
-export function drawText(page: PageDraw, laid: Laid[], area: { x: number; y: number; w: number; h: number }, anchor: 'top' | 'middle' | 'bottom'): void {
+/** where one run of a line was drawn: `baseline` is the y of its letters' feet, `width` includes the room justifying adds */
+export type RunBox = { x: number; baseline: number; width: number; size: number; run: SlideRun }
+
+/** draw laid out text in the area; `anchor` places the block in it. Overflow is drawn, as slides do. `onRun` hears where each run went (Word's links). */
+export function drawText(page: PageDraw, laid: Laid[], area: { x: number; y: number; w: number; h: number }, anchor: 'top' | 'middle' | 'bottom', onRun?: (box: RunBox) => void): void {
   const total = textHeight(laid)
   let y = anchor === 'middle' ? area.y + (area.h - total) / 2 : anchor === 'bottom' ? area.y + area.h - total : area.y
   laid.forEach((l, pi) => {
     if (pi) y += l.before
     l.lines.forEach((ln, li) => {
+      y += ln.gap ?? 0
       const s = ln.size
-      const baseline = y + ln.height - 0.27 * s - Math.max(0, (ln.height - EM_HEIGHT * s) / 2)
+      const baseline = ln.base !== undefined ? y + ln.base : y + ln.height - 0.27 * s - Math.max(0, (ln.height - EM_HEIGHT * s) / 2)
       const align = l.para.align ?? 'left'
       let x = area.x + ln.start
       if (align === 'center') x = area.x + ln.start + (ln.avail - ln.width) / 2
@@ -146,6 +188,7 @@ export function drawText(page: PageDraw, laid: Laid[], area: { x: number; y: num
         if (p.run.highlight) page.fillRect(x, baseline - s * 0.9, width, s * 1.15, hexRgb(p.run.highlight))
         page.text(x, baseline - p.rise, text, p.font, p.size, color, p.run.alpha, p.run.spacing)
         if (p.run.underline) page.line(x, baseline + 0.12 * p.size, x + width, baseline + 0.12 * p.size, Math.max(0.4, p.size / 18), color)
+        onRun?.({ x, baseline: baseline - p.rise, width, size: p.size, run: p.run })
         x += width
         i = j
       }

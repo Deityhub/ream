@@ -6,7 +6,7 @@ export type { Anchor, Cell, Edge, Merge, PageSetup, Sheet, SheetChart, SheetPict
 export { writeXlsx, sheetNames } from './xlsx.ts'
 export { readXlsx, type Workbook } from './xlsx-read.ts'
 export { writeDocx } from './docx.ts'
-export type { DocModel, Section as DocSection, Block as DocBlock, Paragraph, Run, Table as DocTable, TableCell as DocTableCell, Picture } from './docx-model.ts'
+export type { DocModel, EmbeddedFont, Section as DocSection, Block as DocBlock, Paragraph, Run, Table as DocTable, TableCell as DocTableCell, Picture } from './docx-model.ts'
 export { writePptx } from './pptx.ts'
 export type { Deck, Slide, SlideShape, SlideBox, SlidePara, SlideRun, SlidePicture, SlideLine, SlideTable, SlideTableCell, SlideChart, Paint, Stroke, LineEnd, CustomPath, Xform } from './pptx-model.ts'
 export { readPptx } from './pptx-read.ts'

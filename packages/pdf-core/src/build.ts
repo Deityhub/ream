@@ -10,6 +10,7 @@ import { ascii } from './bytes.ts'
 import { addImage, type ImageInput } from './images.ts'
 import { encodeWinAnsi, fontResource, textWidth } from './text.ts'
 import { prepareFont, type PreparedFont, type TtfFont } from './ttf.ts'
+import { writeOutline, type OutlineItem } from './outline.ts'
 
 export type Rgb = [number, number, number]
 
@@ -26,9 +27,17 @@ export class FontFace {
   }
   /** the part that has a glyph for this character, or -1 */
   partFor(cp: number): number {
-    for (let i = 0; i < this.parts.length; i++) if (this.parts[i].glyphFor(cp)) return i
-    return -1
+    let part = this.partOf.get(cp)
+    if (part === undefined) {
+      part = -1
+      for (let i = 0; i < this.parts.length && part < 0; i++) if (this.parts[i].glyphFor(cp)) part = i
+      this.partOf.set(cp, part)
+    }
+    return part
   }
+  private partOf = new Map<number, number>()
+  /** widths of strings at size 1, plain and bold (the standard font that stands in for a missing letter differs), so a word is measured once however often it is used */
+  widths = [new Map<string, number>(), new Map<string, number>()]
 }
 
 /** the standard fonts: sans is Helvetica, serif Times, mono Courier. With `face`, the text is drawn in that embedded typeface. */
@@ -59,32 +68,50 @@ function standardWidth(text: string, size: number, family: 'sans' | 'serif' | 'm
 }
 
 /** a string cut into runs that one font draws: a part of the face (index), or -1 for the standard font */
-function runsOf(s: string, face: FontFace): { part: number; text: string }[] {
+function runsOf(text: string, face: FontFace): { part: number; text: string }[] {
+  const s = text.normalize('NFC')
   const out: { part: number; text: string }[] = []
-  for (const ch of s.normalize('NFC')) {
+  let part = -2
+  let start = 0
+  let pos = 0
+  for (const ch of s) {
     const cp = ch.codePointAt(0)!
     // a space or control takes whatever font the text around it uses
-    const part = cp <= 32 && out.length ? out[out.length - 1].part : face.partFor(cp)
-    const last = out[out.length - 1]
-    if (last && last.part === part) last.text += ch
-    else out.push({ part, text: ch })
+    const p = cp <= 32 && part !== -2 ? part : face.partFor(cp)
+    if (part === -2) part = p
+    else if (p !== part) {
+      out.push({ part, text: s.slice(start, pos) })
+      start = pos
+      part = p
+    }
+    pos += ch.length
   }
+  if (pos > start) out.push({ part, text: s.slice(start, pos) })
   return out
 }
+
+const MAX_CACHED_WIDTHS = 50_000
 
 /** width of text in points, in the font it will be drawn with */
 export function measure(text: string, size: number, font: FontSpec): number {
   const k = font.scale ?? 1
   if (!font.face) return standardWidth(text, size, font.family, font.bold) * k
-  let w = 0
-  for (const r of runsOf(text, font.face)) {
-    if (r.part < 0) w += standardWidth(r.text, size, font.face.fallback, font.bold)
-    else {
-      const t = font.face.parts[r.part]
-      for (const ch of r.text) w += (t.advance(t.glyphFor(ch.codePointAt(0)!)) * size) / t.unitsPerEm
+  const face = font.face
+  const cache = face.widths[font.bold ? 1 : 0]
+  let unit = cache.get(text)
+  if (unit === undefined) {
+    unit = 0
+    for (const r of runsOf(text, face)) {
+      if (r.part < 0) unit += standardWidth(r.text, 1, face.fallback, font.bold)
+      else {
+        const t = face.parts[r.part]
+        for (const ch of r.text) unit += t.advance(t.glyphFor(ch.codePointAt(0)!)) / t.unitsPerEm
+      }
     }
+    if (cache.size >= MAX_CACHED_WIDTHS) cache.clear()
+    cache.set(text, unit)
   }
-  return w * k
+  return unit * size * k
 }
 
 /** a path: move, line, cubic curve, close */
@@ -123,8 +150,13 @@ type Op =
   | { k: 'path'; segs: Seg[]; style: PathStyle }
   | { k: 'transform'; m: [number, number, number, number, number, number] }
 
+/** schemes a link may open: a PDF viewer would also run `javascript:` and `file:` ones, so those are dropped */
+const LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+
 export class PageDraw {
   ops: Op[] = []
+  /** clickable boxes, in the page's own y-down points */
+  links: { x: number; y: number; w: number; h: number; uri: string }[] = []
   width: number
   height: number
   constructor(width: number, height: number) {
@@ -143,6 +175,15 @@ export class PageDraw {
   /** `spacing` is extra space after every letter, points (it is not in `measure`: add it per letter) */
   text(x: number, y: number, s: string, font: FontSpec, size: number, color: Rgb, alpha?: number, spacing?: number) { if (s) this.ops.push({ k: 'text', x, y, s, font, size, color, alpha, spacing }) }
   image(id: number, x: number, y: number, w: number, h: number, alpha?: number) { this.ops.push({ k: 'image', id, x, y, w, h, alpha }) }
+  /** a clickable box that opens a web or mail address; any other kind of address, or one that isn't valid, is ignored */
+  link(x: number, y: number, w: number, h: number, uri: string) {
+    try {
+      const u = new URL(uri)
+      if (LINK_SCHEMES.has(u.protocol) && u.href.length <= 2048 && w > 0 && h > 0) this.links.push({ x, y, w, h, uri: u.href })
+    } catch {
+      // not an address
+    }
+  }
   /** draw a path, filled and/or stroked */
   path(segs: Seg[], style: PathStyle) { if (segs.length && (style.fill || style.stroke)) this.ops.push({ k: 'path', segs, style }) }
   /**
@@ -167,6 +208,8 @@ export class PdfDrawing {
   pages: PageDraw[] = []
   images: ImageInput[] = []
   title = ''
+  /** bookmarks; `page` counts from 0 in `pages` */
+  outline: OutlineItem[] = []
   addPage(width: number, height: number): PageDraw {
     if (!(width > 0 && height > 0 && width <= 14400 && height <= 14400)) throw new PdfRangeError('That page size is not valid.')
     const p = new PageDraw(width, height)
@@ -357,10 +400,21 @@ export async function buildPdf(d: PdfDrawing): Promise<{ bytes: Uint8Array; lost
     if (pr.shadings.length) res.set('Shading', new Map<string, PdfObj>(pr.shadings.map((sh, i) => [`Sh${i}`, sh])))
     if (images.size) res.set('XObject', new Map<string, PdfObj>([...images].map((i) => [`Im${i}`, imageRefs[i]])))
     const stream = b.add(new PdfStream(new Map<string, PdfObj>([['Filter', name('FlateDecode')]]), await deflate(ascii(text))))
-    kids.push(b.add(new Map<string, PdfObj>([['Type', name('Page')], ['Parent', pagesRef], ['MediaBox', [0, 0, p.width, p.height]], ['Contents', stream], ['Resources', res]])))
+    const page = new Map<string, PdfObj>([['Type', name('Page')], ['Parent', pagesRef], ['MediaBox', [0, 0, p.width, p.height]], ['Contents', stream], ['Resources', res]])
+    if (p.links.length) {
+      page.set('Annots', p.links.map((l) => b.add(new Map<string, PdfObj>([
+        ['Type', name('Annot')], ['Subtype', name('Link')], ['F', 4], ['Border', [0, 0, 0]],
+        ['Rect', [l.x, p.height - l.y - l.h, l.x + l.w, p.height - l.y].map((v) => Math.round(v * 100) / 100)],
+        ['A', new Map<string, PdfObj>([['S', name('URI')], ['URI', new PdfString(ascii(l.uri))]])],
+      ]))))
+    }
+    kids.push(b.add(page))
   }
   b.set(pagesRef, new Map<string, PdfObj>([['Type', name('Pages')], ['Kids', kids], ['Count', kids.length]]))
-  b.set(catalog, new Map<string, PdfObj>([['Type', name('Catalog')], ['Pages', pagesRef]]))
+  const cat = new Map<string, PdfObj>([['Type', name('Catalog')], ['Pages', pagesRef]])
+  const outlines = writeOutline(b, d.outline, kids)
+  if (outlines) cat.set('Outlines', outlines)
+  b.set(catalog, cat)
   const info = new Map<string, PdfObj>([['Producer', new PdfString(ascii('Ream'))]])
   if (d.title) info.set('Title', encodeTextString(d.title))
   return { bytes: b.serialize(catalog, b.add(info)), lost: [...lost] }

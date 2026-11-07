@@ -36,6 +36,7 @@ import { pdfToWord } from './pdf-to-word/manifest.ts'
 import { pdfToPowerpoint } from './pdf-to-powerpoint/manifest.ts'
 import { powerpointToPdf } from './powerpoint-to-pdf/manifest.ts'
 import { excelToPdf } from './excel-to-pdf/manifest.ts'
+import { wordToPdf } from './word-to-pdf/manifest.ts'
 
 export const tools: Tool[] = [
   mergePdf,
@@ -45,6 +46,7 @@ export const tools: Tool[] = [
   pdfToWord,
   pdfToExcel,
   pdfToPowerpoint,
+  wordToPdf,
   excelToPdf,
   powerpointToPdf,
   watermark,

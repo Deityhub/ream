@@ -84,5 +84,6 @@ export const panels: Record<string, () => Promise<PanelModule>> = {
   'pdf-to-word': () => import('./pdf-to-word/Panel.tsx'),
   'pdf-to-powerpoint': () => import('./pdf-to-powerpoint/Panel.tsx'),
   'powerpoint-to-pdf': () => import('./powerpoint-to-pdf/Panel.tsx'),
+  'word-to-pdf': () => import('./word-to-pdf/Panel.tsx'),
   'excel-to-pdf': () => import('./excel-to-pdf/Panel.tsx'),
 }
