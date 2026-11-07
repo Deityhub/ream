@@ -2,6 +2,10 @@
 
 What changed in each release of Ream. `yarn release patch|minor|major` writes a section from the pull requests merged since the last release; edit it in the release pull request.
 
+## 0.4.0 (2026-11-07)
+
+- Feat: Add Word to PDF (.docx) ([#15](https://github.com/Deityhub/ream/pull/15))
+
 ## 0.3.0 (2026-10-29)
 
 - SEO: real URLs, a page per route, copy for all 37 tools ([#12](https://github.com/Deityhub/ream/pull/12))
