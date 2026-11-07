@@ -50,6 +50,10 @@ export type SlidePara = {
   bulletFont?: string
   bulletColor?: string
   bulletScale?: number
+  /** tab stops by position from the left of the text area (points): where a tab character goes, and the line of dots or dashes before it */
+  tabStops?: { pos: number; align: 'left' | 'center' | 'right' | 'decimal'; leader?: 'dot' | 'hyphen' | 'underscore' }[]
+  /** where a tab goes after the last stop, every this many points (default 36) */
+  defaultTab?: number
 }
 
 export type SlideBox = {
