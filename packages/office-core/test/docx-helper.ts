@@ -63,6 +63,16 @@ export const inline = (w: number, h = w, srcRect = '') =>
   `<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
   `<wp:extent cx="${Math.round(w * 12700)}" cy="${Math.round(h * 12700)}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="pic"/>${srcRect}</pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
 
+/** the notes part of a document (`footnotes` or `endnotes`): each note is [id, text], the first paragraph starting with the mark Word puts there */
+export const notesPart = (kind: 'footnotes' | 'endnotes', items: [string, string][]) => {
+  const one = kind === 'footnotes' ? 'footnote' : 'endnote'
+  const sep = `<w:${one} w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:${one}>`
+  return `<?xml version="1.0"?><w:${kind} ${NS}>${sep}${items.map(([id, text]) => `<w:${one} w:id="${id}"><w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:${one}Ref/></w:r><w:r><w:t xml:space="preserve"> ${text}</w:t></w:r></w:p></w:${one}>`).join('')}</w:${kind}>`
+}
+
+/** a mark in the text for a note */
+export const noteMark = (kind: 'footnote' | 'endnote', id: string) => `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:${kind}Reference w:id="${id}"/></w:r>`
+
 /** a header or footer part: `kind` is 'hdr' or 'ftr' */
 export const part = (kind: 'hdr' | 'ftr', inner: string) => `<?xml version="1.0"?><w:${kind} ${NS}>${inner}</w:${kind}>`
 

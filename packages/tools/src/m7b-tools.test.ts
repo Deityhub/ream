@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, test } from 'vitest'
 import type { FileData } from '@ream/core'
 import { decodeJpeg, decodePng, ownCodec, setCodec } from '@ream/image-core'
-import { PdfDocument, readOutline } from '@ream/pdf-core'
+import { PdfDocument, readOutline, type PdfObj } from '@ream/pdf-core'
 import type { PageRaster } from '@ream/pdf-render'
 import { readXlsx, writeXlsx, writePptx, parseXml, kids, child, type Sheet, type XmlNode } from '@ream/office-core'
 import { unzip } from '@ream/core'
@@ -20,7 +20,7 @@ import { nodeFonts } from './fonts/node.ts'
 import { parseNumber } from './pdf-to-excel/number.ts'
 import { officeToPdf } from './office-preview.ts'
 import { docxToPdf, run as wordToPdf } from './word-to-pdf/run.ts'
-import { PIXEL, inline, makeDocx, para, part, placed, scramble, withFonts } from '../../office-core/test/docx-helper.ts'
+import { PIXEL, inline, makeDocx, noteMark, notesPart, para, part, placed, scramble, withFonts } from '../../office-core/test/docx-helper.ts'
 import { makeTtf } from '../../pdf-core/test/ttf-helper.ts'
 
 beforeAll(() => setCodec(ownCodec)) // JPG pages go through the codec; the browser's is checked in the app
@@ -685,6 +685,172 @@ describe('word to pdf', () => {
     )
     expect((await PdfDocument.load(pdf)).pages().length).toBeGreaterThan(0)
     expect(await pageText(pdf, 0)).toContain('Head')
+  })
+
+  const settingsRel: [string, string, string][] = [['rSet', 'settings', 'settings.xml']]
+  const settings = (inner: string) => `<?xml version="1.0"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${inner}</w:settings>`
+
+  test('tab stops: a right stop with dots (a table of contents line), a stop in the middle, and the default stops every 36 pt', async () => {
+    const stops = '<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9360"/></w:tabs>'
+    const toc = await PdfDocument.load(await pdfOf(makeDocx({ body: `<w:p><w:pPr>${stops}</w:pPr><w:r><w:t>Chapter one</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>12</w:t></w:r></w:p><w:sectPr>${pg}</w:sectPr>` })))
+    const chars = (await pageChars(toc, 0)).chars.filter((c) => c.text.trim())
+    const text = chars.map((c) => c.text).join('')
+    expect(text).toMatch(/^Chapterone\.{20,}12$/) // dots fill the tab, then the number (spaces aren't in the letters)
+    expect(chars[chars.length - 1].x1).toBeCloseTo(540, 0) // the number ends at the right stop (72 + 468)
+    expect(chars[0].x0).toBeCloseTo(72, 0)
+    // no stop set: the next multiple of 36 pt from the margin
+    const plain = await PdfDocument.load(await pdfOf(makeDocx({ body: `<w:p><w:r><w:t>A</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>B</w:t></w:r></w:p><w:sectPr>${pg}</w:sectPr>` })))
+    const [, b] = (await pageChars(plain, 0)).chars.filter((c) => c.text.trim())
+    expect(b.x0).toBeCloseTo(72 + 36, 0)
+    // a centre stop puts the middle of what follows on it
+    const mid = await PdfDocument.load(await pdfOf(makeDocx({ body: `<w:p><w:pPr><w:tabs><w:tab w:val="center" w:pos="4680"/></w:tabs></w:pPr><w:r><w:tab/></w:r><w:r><w:t>MID</w:t></w:r></w:p><w:sectPr>${pg}</w:sectPr>` })))
+    const m = (await pageChars(mid, 0)).chars.filter((c) => c.text.trim())
+    expect((m[0].x0 + m[2].x1) / 2).toBeCloseTo(72 + 234, 0)
+  })
+
+  test('odd and even pages can have their own headers; the number of the first page and how numbers are written can be set', async () => {
+    const pages = (body: string) => body + para('Two', '<w:pageBreakBefore/>') + para('Three', '<w:pageBreakBefore/>')
+    const pdf = await pdfOf(
+      makeDocx({
+        rels: [...settingsRel, ['h', 'header', 'h.xml'], ['he', 'header', 'he.xml'], ['f', 'footer', 'f.xml']],
+        parts: {
+          'word/settings.xml': settings('<w:evenAndOddHeaders/>'),
+          'word/h.xml': part('hdr', para('ODDHEAD')),
+          'word/he.xml': part('hdr', para('EVENHEAD')),
+          'word/f.xml': part('ftr', '<w:p><w:r><w:t xml:space="preserve">No </w:t></w:r><w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>'),
+        },
+        body: pages(para('One')) + `<w:sectPr><w:headerReference w:type="default" r:id="h"/><w:headerReference w:type="even" r:id="he"/><w:footerReference w:type="default" r:id="f"/>${pg}<w:pgNumType w:start="4" w:fmt="lowerRoman"/></w:sectPr>`,
+      }),
+    )
+    // numbering starts at 4 (iv), so the first page is an even one
+    expect(await pageText(pdf, 0)).toContain('EVENHEAD')
+    expect(await pageText(pdf, 1)).toContain('ODDHEAD')
+    expect(await pageText(pdf, 2)).toContain('EVENHEAD')
+    // only the usual footer is defined, so even pages (iv, vi) show none and the odd one shows its number in roman, as the section says
+    const labels = await Promise.all([0, 1, 2].map(async (i) => (await pageText(pdf, i)).match(/No (\w+)/)?.[1]))
+    expect(labels).toEqual([undefined, 'v', undefined])
+  })
+
+  test('a table is on the left (its text on the margin in older documents, its edge in Word 2013 mode), in the middle or on the right', async () => {
+    const table = (props: string) => `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${props}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr/>${para('X')}</w:tc></w:tr></w:tbl>`
+    const xOf = async (props: string, compat = false) => {
+      const docx = await makeDocx({ rels: settingsRel, parts: { 'word/settings.xml': settings(compat ? '<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="x" w:val="15"/></w:compat>' : '') }, body: table(props) + `<w:sectPr>${pg}</w:sectPr>` })
+      return (await pageChars(await PdfDocument.load(await pdfOf(Promise.resolve(docx))), 0)).chars.find((c) => c.text === 'X')!.x0
+    }
+    expect(await xOf('')).toBeCloseTo(72, 0) // text on the margin: the edge is 5.4 pt outside it
+    expect(await xOf('', true)).toBeCloseTo(72 + 5.4, 0)
+    expect(await xOf('<w:jc w:val="center"/>')).toBeCloseTo(72 + (468 - 200) / 2 + 5.4, 0)
+    expect(await xOf('<w:jc w:val="right"/>')).toBeCloseTo(72 + 468 - 200 + 5.4, 0)
+    expect(await xOf('<w:tblInd w:w="720" w:type="dxa"/>', true)).toBeCloseTo(72 + 36 + 5.4, 0)
+  })
+
+  test('a table that goes on to the next page shows its heading rows again at the top of it', async () => {
+    const row = (t: string, header = false) => `<w:tr><w:trPr><w:trHeight w:val="240" w:hRule="exact"/>${header ? '<w:tblHeader/>' : ''}</w:trPr><w:tc><w:tcPr/><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="exact"/></w:pPr><w:r><w:t>${t}</w:t></w:r></w:p></w:tc></w:tr>`
+    const rows = row('HEADROW', true) + Array.from({ length: 70 }, (_, i) => row(`R${i + 1}x`)).join('')
+    const pdf = await pdfOf(makeDocx({ body: `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${rows}</w:tbl><w:sectPr>${pg}</w:sectPr>` }))
+    expect(await pageText(pdf, 0)).toMatch(/^HEADROW R1x/)
+    expect(await pageText(pdf, 1)).toMatch(/^HEADROW R5\dx/) // page 1 holds 54 rows (the heading and 53 of the others), so page 2 goes on from the next
+  })
+
+  test('a footnote is at the bottom of the page its mark is on, which keeps the room it needs; endnotes come at the end', async () => {
+    const noted = (n: number, extra = '') => makeDocx({ rels: [['fn', 'footnotes', 'footnotes.xml'], ['en', 'endnotes', 'endnotes.xml']], parts: { 'word/footnotes.xml': notesPart('footnotes', [['1', 'FOOTONE'], ['2', 'FOOTTWO']]), 'word/endnotes.xml': notesPart('endnotes', [['1', 'ENDNOTE']]) }, body: filler(n) + extra + `<w:sectPr>${pg}</w:sectPr>` })
+    const mark = (id: string, kind: 'footnote' | 'endnote' = 'footnote') => `<w:p><w:pPr><w:spacing w:line="240" w:lineRule="exact"/></w:pPr><w:r><w:t>Marked</w:t></w:r>${noteMark(kind, id)}</w:p>`
+    // a mark early on the page: its note is on that page, below the text, with a rule above it
+    const early = await pdfOf(noted(3, mark('1')))
+    const { chars } = await pageChars(await PdfDocument.load(early), 0)
+    const note = chars.filter((c) => c.text.trim()).map((c) => c.text).join('')
+    expect(note).toContain('FOOTONE')
+    const o = chars.find((c) => c.text === 'O' && note.indexOf('FOOTONE') >= 0)!
+    expect(o.y0).toBeGreaterThan(792 - 72 - 40) // at the foot of the page, not under the mark
+    // 52 lines fill all but two lines of the page: a line with a note that takes more than that goes to the next page, with its note
+    const late = await pdfOf(noted(52, mark('1')))
+    expect(await pageText(late, 0)).not.toContain('FOOTONE')
+    expect(await pageText(late, 1)).toContain('Marked')
+    expect(await pageText(late, 1)).toContain('FOOTONE')
+    // two marks, two notes in order, numbered 1 and 2
+    const two = await pdfOf(noted(3, mark('1') + mark('2')))
+    expect(await pageText(two, 0)).toMatch(/1 FOOTONE 2 FOOTTWO/)
+    // endnotes after the last text
+    const end = await pdfOf(noted(3, mark('1', 'endnote')))
+    expect(await pageText(end, 0)).toMatch(/Markedi.*i ENDNOTE/)
+  })
+
+  test('links to a bookmark jump to where it is, and a page reference shows the page it is really on (not the one the file saved)', async () => {
+    const entry = (target: string, saved: string) =>
+      `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9360"/></w:tabs></w:pPr><w:hyperlink w:anchor="${target}"><w:r><w:t>Chapter</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF ${target} \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>${saved}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink></w:p>`
+    const target = (name: string) => `<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:bookmarkStart w:id="1" w:name="${name}"/><w:r><w:t>The chapter</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>`
+    const pdf = await pdfOf(makeDocx({ body: entry('chap', '9') + entry('nowhere', '7') + target('chap') + `<w:sectPr>${pg}</w:sectPr>` }))
+    const doc = await PdfDocument.load(pdf)
+    // the number is the page the bookmark is on (2), and the one with no bookmark keeps what the file saved
+    expect(await pageText(pdf, 0)).toMatch(/Chapter\.+2 Chapter\.+7/)
+    // one link, to the second page, and none for the bookmark that isn't there
+    const annots = (doc.resolve(doc.pages()[0].dict.get('Annots')) as unknown as PdfObj[]).map((r) => doc.resolve(r) as Map<string, PdfObj>)
+    expect(annots.filter((a) => a.get('Dest'))).toHaveLength(2) // the words and the page number of the one entry
+    for (const a of annots) expect(doc.resolve(((doc.resolve(a.get('Dest')) as unknown as PdfObj[])[0]))).toBe(doc.pages()[1].dict)
+  })
+
+  const sect = (inner: string) => `<w:p><w:pPr><w:sectPr>${inner}${pg}</w:sectPr></w:pPr></w:p>`
+  const cols2 = '<w:cols w:num="2" w:space="720"/>'
+
+  test('text in columns fills the first column, then the second, then goes to the next page', async () => {
+    const doc = await PdfDocument.load(await pdfOf(makeDocx({ body: lines('L', 130) + `<w:sectPr>${cols2}${pg}</w:sectPr>` })))
+    expect(doc.pages().length).toBe(2) // 54 lines to a column: 108 on the first page, the other 22 on the second
+    const chars = (await pageChars(doc, 0)).chars.filter((c) => c.text.trim())
+    const at = (label: string, from = chars) => from.find((c, i) => from.slice(i, i + label.length).map((x) => x.text).join('') === label)!
+    // columns 216 pt wide, 36 apart: the second starts at 72 + 216 + 36 = 324, at the same height as the first
+    expect(at('L1').x0).toBeCloseTo(72, 0)
+    expect(at('L55').x0).toBeCloseTo(324, 0)
+    expect(at('L55').y0).toBeCloseTo(at('L1').y0, 0)
+    expect(Math.max(...chars.filter((c) => c.x0 < 300).map((c) => c.x1))).toBeLessThanOrEqual(288.5)
+    const next = (await pageChars(doc, 1)).chars.filter((c) => c.text.trim())
+    expect(at('L109', next).x0).toBeCloseTo(72, 0) // the next page starts again in the first column
+  })
+
+  test('columns before a continuous break are balanced, and what follows starts below them, back at the full width', async () => {
+    const body = para('TITLE') + sect('') + lines('L', 40) + sect(`<w:type w:val="continuous"/>${cols2}`) + para('AFTER') + `<w:sectPr><w:type w:val="continuous"/>${pg}</w:sectPr>`
+    const doc = await PdfDocument.load(await pdfOf(makeDocx({ body })))
+    expect(doc.pages()).toHaveLength(1)
+    const chars = (await pageChars(doc, 0)).chars.filter((c) => c.text.trim())
+    const at = (label: string) => chars.find((c, i) => chars.slice(i, i + label.length).map((x) => x.text).join('') === label)!
+    // 40 lines would all fit in the first column; balanced, about half are in each (the empty paragraph that carries the section break
+    // is the last line of the second, so the first has 21)
+    expect(at('L1').x0).toBeCloseTo(72, 0)
+    expect(at('L20').x0).toBeCloseTo(72, 0)
+    expect(at('L22').x0).toBeCloseTo(324, 0)
+    expect(at('L22').y0).toBeCloseTo(at('L1').y0, 0)
+    // the second part starts under the tallest column, at the left margin
+    expect(at('AFTER').x0).toBeCloseTo(72, 0)
+    expect(at('AFTER').y0).toBeGreaterThan(at('L20').y0)
+    expect(at('AFTER').y0).toBeLessThan(at('L20').y0 + 40)
+  })
+
+  test('a section that must start on an odd page leaves a blank page when it would start on an even one', async () => {
+    const pdf = await pdfOf(makeDocx({ body: para('FIRST') + sect('') + para('SECOND') + `<w:sectPr><w:type w:val="oddPage"/>${pg}</w:sectPr>` }))
+    const doc = await PdfDocument.load(pdf)
+    expect(doc.pages()).toHaveLength(3)
+    expect(await pageText(pdf, 0)).toContain('FIRST')
+    expect(await pageText(pdf, 1)).toBe('')
+    expect(await pageText(pdf, 2)).toContain('SECOND')
+  })
+
+  test('a table row with more text than fits goes on over the page break, between lines, with its borders; a row that may not split moves whole', async () => {
+    const cell = (n: number, lineProps = '') => `<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="8" w:color="000000"/><w:bottom w:val="single" w:sz="8" w:color="000000"/></w:tcBorders></w:tcPr>${lines('C', n, lineProps)}</w:tc>`
+    const table = (rowProps: string, n: number) => `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr>${rowProps ? `<w:trPr>${rowProps}</w:trPr>` : ''}${cell(n)}</w:tr></w:tbl><w:sectPr>${pg}</w:sectPr>`
+    // one cell of 130 lines: 54 on the first page, 54 on the second, the rest on the third: nothing is lost
+    const long = await pdfOf(makeDocx({ body: table('', 130) }))
+    const doc = await PdfDocument.load(long)
+    expect(doc.pages()).toHaveLength(3)
+    expect(await pageText(long, 0)).toMatch(/^C1 C2 /)
+    expect(await pageText(long, 1)).toMatch(/^C55 C56 /)
+    expect(await pageText(long, 2)).toMatch(/C130$/)
+    // after some text a row of 60 lines doesn't fit in what is left: it starts right there and goes on, where "can't split" moves it to the next page
+    const some = filler(40)
+    const split = await pdfOf(makeDocx({ body: some + table('', 60) }))
+    expect(await pageText(split, 0)).toContain('C1 C2')
+    expect(await pageText(split, 1)).toMatch(/^C\d+ /)
+    const whole = await pdfOf(makeDocx({ body: some + table('<w:cantSplit/>', 60) }))
+    expect(await pageText(whole, 0)).not.toContain('C1 C2')
+    expect(await pageText(whole, 1)).toMatch(/^C1 C2 /)
   })
 
   test('run: the file and its errors', async () => {

@@ -10,7 +10,7 @@ import { hexRgb } from '../office-fonts.ts'
 const EM_HEIGHT = 1.2
 
 /** `picture`: how tall a picture in the line is (its width is `width`); the run holds the picture itself */
-type Piece = { text: string; run: SlideRun; font: FontSpec; size: number; rise: number; width: number; space: boolean; picture?: number }
+type Piece = { text: string; run: SlideRun; font: FontSpec; size: number; rise: number; width: number; space: boolean; picture?: number; /** a tab: the character that fills its width (dots, dashes), if any */ tab?: { leader?: string } }
 /** `gap`: room left empty above the line (Word moves a line down past a picture it can't sit beside); `base`: where the baseline is below the top of the line, when a picture in it decides that */
 type Line = { pieces: Piece[]; width: number; size: number; height: number; start: number; avail: number; last: boolean; gap?: number; base?: number }
 /** where a line may go: `dx` from the left of the text area, `w` wide; `skip` says there's no room at this height and the line goes that much lower */
@@ -71,8 +71,9 @@ export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lin
       // raised and lowered text is drawn smaller, the way PowerPoint does
       const size = run.baseline ? base * 0.67 : run.caps === 'small' ? base * 0.8 : base
       const rise = run.baseline ? run.baseline * base : 0
-      for (const t of shown(run).match(/\n|[^\S\n]+|[^\s]+/g) ?? []) {
+      for (const t of shown(run).match(/\n|\t|[^\S\n\t]+|[^\s]+/g) ?? []) {
         if (t === '\n') tokens.push('break')
+        else if (t === '\t') tokens.push({ text: '', run, font, size: base, rise: 0, width: 0, space: true, tab: {} })
         else tokens.push({ text: t, run, font, size, rise, width: measure(t, size, font) + (run.spacing ?? 0) * [...t].length, space: /^\s/.test(t) })
       }
     }
@@ -113,10 +114,38 @@ export function layoutText(paras: SlidePara[], width: number, wrap: boolean, lin
       w = 0
       open()
     }
-    for (const tk of tokens) {
+    const stops = [...(para.tabStops ?? [])].sort((a, b) => a.pos - b.pos)
+    const every = Math.max(1, para.defaultTab ?? 36)
+    for (let ti = 0; ti < tokens.length; ti++) {
+      const tk = tokens[ti]
       if (tk === 'break') { finish(true); continue }
       const first = lines.length === 0
       const avail = box.w - (first ? start0 : marL)
+      if (tk.tab) {
+        // a tab goes to the next stop to the right of where the text is; text after a right, centre or decimal stop is placed against it
+        const at = box.dx + (first ? start0 : marL) + w
+        const stop = stops.find((s) => s.pos > at + 0.01)
+        const next = stop ? stop.pos : Math.ceil((at + 0.01) / every) * every
+        let target = next
+        if (stop && stop.align !== 'left') {
+          let after = 0
+          let dot = -1
+          for (let k = ti + 1; k < tokens.length; k++) {
+            const t = tokens[k]
+            if (t === 'break' || t.tab) break
+            if (stop.align === 'decimal' && dot < 0 && t.text.includes('.')) dot = after + measure(t.text.slice(0, t.text.indexOf('.')), t.size, t.font)
+            after += t.width
+          }
+          target = stop.align === 'right' ? next - after : stop.align === 'center' ? next - after / 2 : dot >= 0 ? next - dot : next - after
+        }
+        const room = Math.max(0, box.dx + (first ? 0 : 0) + box.w - at)
+        tk.width = Math.max(0, Math.min(target - at, room))
+        const leader = stop?.leader === 'dot' ? '.' : stop?.leader === 'hyphen' ? '-' : stop?.leader === 'underscore' ? '_' : undefined
+        tk.tab = { leader }
+        cur.push(tk)
+        w += tk.width
+        continue
+      }
       if (wrap && !tk.space && cur.some((p) => !p.space) && w + tk.width > avail) finish(false)
       if (!(tk.space && !cur.length)) { cur.push(tk); w += tk.width }
     }
@@ -164,7 +193,7 @@ export function drawText(page: PageDraw, laid: Laid[], area: { x: number; y: num
       if (align === 'center') x = area.x + ln.start + (ln.avail - ln.width) / 2
       else if (align === 'right') x = area.x + ln.start + ln.avail - ln.width
       // justified lines (not the last of a paragraph) spread the leftover room over their spaces
-      const spaces = ln.pieces.filter((p) => p.space).length
+      const spaces = ln.pieces.filter((p) => p.space && !p.tab).length
       const extra = align === 'justify' && !ln.last && spaces ? Math.max(0, ln.avail - ln.width) / spaces : 0
       if (li === 0 && l.bullet) {
         // the bullet keeps its distance from the text, wherever alignment puts the text
@@ -175,12 +204,23 @@ export function drawText(page: PageDraw, laid: Laid[], area: { x: number; y: num
       }
       // pieces of one run go out as one string, spaces included, so the text can be searched and copied from the PDF
       for (let i = 0; i < ln.pieces.length; ) {
+        const t = ln.pieces[i]
+        if (t.tab) {
+          // a tab is room; with a leader it is filled with dots or dashes, ending where the next text starts
+          const lead = t.tab.leader
+          const cw = lead ? measure(lead, t.size, t.font) : 0
+          const n = lead && cw > 0 ? Math.floor(t.width / cw) : 0
+          if (n > 0) page.text(x + t.width - n * cw, baseline, lead!.repeat(n), t.font, t.size, hexRgb(t.run.color))
+          x += t.width
+          i++
+          continue
+        }
         let j = i
         let text = ''
         let width = 0
-        while (j < ln.pieces.length && ln.pieces[j].run === ln.pieces[i].run && !(extra && ln.pieces[j].space && j > i)) {
+        while (j < ln.pieces.length && ln.pieces[j].run === ln.pieces[i].run && !ln.pieces[j].tab && !(extra && ln.pieces[j].space && j > i)) {
           text += ln.pieces[j].text
-          width += ln.pieces[j].width + (extra && ln.pieces[j].space ? extra : 0)
+          width += ln.pieces[j].width + (extra && ln.pieces[j].space && !ln.pieces[j].tab ? extra : 0)
           j++
         }
         const p = ln.pieces[i]

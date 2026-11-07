@@ -128,3 +128,19 @@ test('links become URI annotations in page space (web and mail only); bookmarks 
   const marks = readOutline(doc)
   expect(marks.map((m) => [m.title, m.page, m.children.map((c) => c.title)])).toEqual([['One', 0, []], ['Two', 1, ['Two.a']]])
 })
+
+test('a link to a place in the document points at its page, however far on, and how far down', async () => {
+  const d = new PdfDrawing()
+  d.addPage(200, 100).goto(10, 20, 50, 12, 2, 30)
+  d.pages[0].goto(0, 0, 10, 10, 9, 0) // no such page: left out
+  d.addPage(200, 100)
+  d.addPage(300, 400)
+  const doc = await PdfDocument.load((await buildPdf(d)).bytes)
+  const annots = doc.resolve(doc.pages()[0].dict.get('Annots')) as unknown as PdfObj[]
+  expect(annots).toHaveLength(1)
+  const a = doc.resolve(annots[0]) as Map<string, PdfObj>
+  const dest = doc.resolve(a.get('Dest')) as unknown as PdfObj[]
+  expect(doc.resolve(dest[0])).toBe(doc.pages()[2].dict) // the third page, which comes after the link's own
+  expect(dest.slice(2)).toEqual([null, 370, null]) // 400 - 30 from the bottom of that page
+  expect(a.get('A')).toBeUndefined()
+})

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { readDocx, usedFonts, type DocBlock, type Paragraph } from '../src/index.ts'
-import { PIXEL, inline, makeDocx, para, part, scramble, withFonts } from './docx-helper.ts'
+import { readDocx, usedFonts, type DocBlock, type DocTable, type Paragraph } from '../src/index.ts'
+import { PIXEL, inline, makeDocx, noteMark, notesPart, para, part, scramble, withFonts } from './docx-helper.ts'
 
 // report.docx (python-docx, its default template): a title, mixed runs, a centred line, bullets, a numbered list, a grid
 // table, a picture, a page break and a heading on the second page
@@ -110,4 +110,67 @@ test('a picture in a line is a run of its paragraph, with its crop (cut from the
   // nothing absurd: a crop that leaves nothing of the picture is dropped
   const none = await makeDocx({ rels: [['pic', 'image', 'media/pic.png']], parts: { 'word/media/pic.png': PIXEL }, body: `<w:p>${inline(10, 10, '<a:srcRect l="60000" r="60000"/>')}</w:p>` })
   expect(((await readDocx(none)).sections[0].blocks[0] as Paragraph).runs[0].picture?.crop).toBeUndefined()
+})
+
+// a table style the way Word writes one: borders for the whole table, a bold white-on-blue first row, grey banded rows
+test('a table style gives its cells fills, borders, bold and banding; the cell\'s own settings win; heading rows are marked', async () => {
+  const styles =
+    '<w:style w:type="table" w:styleId="Fancy"><w:name w:val="Fancy"/>' +
+    '<w:tblPr><w:tblBorders><w:top w:val="single" w:sz="8" w:color="FF0000"/><w:bottom w:val="single" w:sz="8" w:color="FF0000"/><w:insideH w:val="single" w:sz="4" w:color="00FF00"/></w:tblBorders></w:tblPr>' +
+    '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr><w:tcPr><w:shd w:val="clear" w:fill="1F4E79"/></w:tcPr></w:tblStylePr>' +
+    '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:fill="DDDDDD"/></w:tcPr></w:tblStylePr></w:style>'
+  const cell = (text: string, props = '') => `<w:tc><w:tcPr>${props}</w:tcPr>${para(text)}</w:tc>`
+  const row = (cells: string, header = false) => `<w:tr>${header ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells}</w:tr>`
+  const bytes = await makeDocx({
+    styles,
+    body:
+      '<w:tbl><w:tblPr><w:tblStyle w:val="Fancy"/><w:tblLook w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
+      row(cell('H1') + cell('H2'), true) + row(cell('a') + cell('b', '<w:shd w:val="clear" w:fill="FFFF00"/><w:tcBorders><w:left w:val="single" w:sz="16" w:color="0000FF"/></w:tcBorders>')) + row(cell('c') + cell('d')) + row(cell('e') + cell('f')) +
+      '</w:tbl><w:sectPr/>',
+  })
+  const t = (await readDocx(bytes)).sections[0].blocks[0] as DocTable
+  const [head, one, two, three] = t.rows
+  expect(t.headerRows).toBe(1)
+  // the first row: the style's blue and its bold white text
+  expect(head[0].fill).toBe('1F4E79')
+  expect(head[0].paragraphs[0].runs[0]).toMatchObject({ bold: true, color: 'FFFFFF' })
+  // banding counts the rows below the first: band 1 is grey, band 2 has nothing, band 1 again
+  expect([one[0].fill, two[0].fill, three[0].fill]).toEqual(['DDDDDD', undefined, 'DDDDDD'])
+  expect(one[0].paragraphs[0].runs[0].bold).toBeUndefined()
+  // the cell's own shading and left border win over the style's; the rest is the style's
+  expect(one[1].fill).toBe('FFFF00')
+  expect(one[1].border?.left).toEqual({ w: 2, color: '0000FF' })
+  // borders: the outer ones at the edges (1 pt), the inner ones between rows (0.5 pt), none between columns the style doesn't give
+  expect(head[0].border).toMatchObject({ top: { w: 1, color: 'FF0000' }, bottom: { w: 0.5, color: '00FF00' }, left: null })
+  expect(three[1].border).toMatchObject({ top: { w: 0.5, color: '00FF00' }, bottom: { w: 1, color: 'FF0000' }, right: null })
+})
+
+test('footnote and endnote marks are numbered in the order they come, whatever ids they have, with their text attached', async () => {
+  const bytes = await makeDocx({
+    rels: [['fn', 'footnotes', 'footnotes.xml'], ['en', 'endnotes', 'endnotes.xml']],
+    parts: { 'word/footnotes.xml': notesPart('footnotes', [['7', 'Seven.'], ['3', 'Three.']]), 'word/endnotes.xml': notesPart('endnotes', [['2', 'The end.']]) },
+    body: `<w:p><w:r><w:t>First</w:t></w:r>${noteMark('footnote', '3')}<w:r><w:t>second</w:t></w:r>${noteMark('footnote', '7')}${noteMark('endnote', '2')}</w:p><w:sectPr/>`,
+  })
+  const doc = await readDocx(bytes)
+  const p = doc.sections[0].blocks[0] as Paragraph
+  expect(p.runs.filter((r) => r.note).map((r) => [r.text, r.note, r.vertAlign])).toEqual([['1', { id: '3', kind: 'foot' }, 'super'], ['2', { id: '7', kind: 'foot' }, 'super'], ['i', { id: '2', kind: 'end' }, 'super']])
+  // the notes carry their own mark and text; the separators are left out
+  expect(Object.keys(doc.notes ?? {}).sort()).toEqual(['end:2', 'foot:3', 'foot:7'])
+  expect(doc.notes!['foot:3'][0].runs.map((r) => r.text).join('')).toBe('1 Three.')
+  expect(doc.notes!['foot:7'][0].runs.map((r) => r.text).join('')).toBe('2 Seven.')
+  expect(doc.notes!['end:2'][0].runs.map((r) => r.text).join('')).toBe('i The end.')
+})
+
+test('columns: equal ones share the text width less the space between them; listed ones keep their widths; a section can start where the last one ended', async () => {
+  const pg = '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>'
+  const sect = (inner: string) => `<w:p><w:pPr><w:sectPr>${inner}${pg}</w:sectPr></w:pPr></w:p>`
+  const bytes = await makeDocx({
+    body: para('one') + sect('<w:cols w:num="2" w:space="720" w:sep="1"/>') + para('two') + sect('<w:type w:val="continuous"/><w:cols w:num="3" w:space="360" w:equalWidth="0"><w:col w:w="2000" w:space="200"/><w:col w:w="3000" w:space="200"/><w:col w:w="4000"/></w:cols>') + para('three') + `<w:sectPr><w:type w:val="oddPage"/><w:cols w:num="1"/>${pg}</w:sectPr>`,
+  })
+  const [a, b, c] = (await readDocx(bytes)).sections
+  expect(a.columns).toEqual({ widths: [216, 216], space: [36, 0], line: true }) // (468 - 36) / 2 each
+  expect(b.type).toBe('continuous')
+  expect(b.columns).toEqual({ widths: [100, 150, 200], space: [10, 10, 0], line: false })
+  expect(c.type).toBe('oddPage')
+  expect(c.columns).toBeUndefined() // one column is no columns
 })

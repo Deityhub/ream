@@ -155,8 +155,8 @@ const LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
 
 export class PageDraw {
   ops: Op[] = []
-  /** clickable boxes, in the page's own y-down points */
-  links: { x: number; y: number; w: number; h: number; uri: string }[] = []
+  /** clickable boxes, in the page's own y-down points: to a web or mail address, or to a place in the document (a page, 0-based, and how far down it that place is) */
+  links: { x: number; y: number; w: number; h: number; uri?: string; to?: { page: number; y: number } }[] = []
   width: number
   height: number
   constructor(width: number, height: number) {
@@ -183,6 +183,10 @@ export class PageDraw {
     } catch {
       // not an address
     }
+  }
+  /** a clickable box that jumps to a place in the document: page `page` (from 0), `top` points from its top */
+  goto(x: number, y: number, w: number, h: number, page: number, top: number) {
+    if (w > 0 && h > 0 && Number.isInteger(page) && page >= 0 && Number.isFinite(top)) this.links.push({ x, y, w, h, to: { page, y: top } })
   }
   /** draw a path, filled and/or stroked */
   path(segs: Seg[], style: PathStyle) { if (segs.length && (style.fill || style.stroke)) this.ops.push({ k: 'path', segs, style }) }
@@ -387,8 +391,9 @@ export async function buildPdf(d: PdfDrawing): Promise<{ bytes: Uint8Array; lost
   }
   const imageRefs: PdfRef[] = []
   for (const img of d.images) imageRefs.push(await addImage(b, img))
-  const kids: PdfRef[] = []
-  for (const p of d.pages) {
+  // every page's object is reserved first, so a link can point at a page that comes after it
+  const kids = d.pages.map(() => b.reserve())
+  for (const [pi, p] of d.pages.entries()) {
     const pr: PageRes = { alphas: new Map(), shadings: [], std: new Set(), parts: new Set() }
     const text = content(p, lost, pr, prepared, resName)
     const images = new Set(p.ops.flatMap((o) => (o.k === 'image' ? [o.id] : [])))
@@ -401,14 +406,19 @@ export async function buildPdf(d: PdfDrawing): Promise<{ bytes: Uint8Array; lost
     if (images.size) res.set('XObject', new Map<string, PdfObj>([...images].map((i) => [`Im${i}`, imageRefs[i]])))
     const stream = b.add(new PdfStream(new Map<string, PdfObj>([['Filter', name('FlateDecode')]]), await deflate(ascii(text))))
     const page = new Map<string, PdfObj>([['Type', name('Page')], ['Parent', pagesRef], ['MediaBox', [0, 0, p.width, p.height]], ['Contents', stream], ['Resources', res]])
-    if (p.links.length) {
-      page.set('Annots', p.links.map((l) => b.add(new Map<string, PdfObj>([
-        ['Type', name('Annot')], ['Subtype', name('Link')], ['F', 4], ['Border', [0, 0, 0]],
-        ['Rect', [l.x, p.height - l.y - l.h, l.x + l.w, p.height - l.y].map((v) => Math.round(v * 100) / 100)],
-        ['A', new Map<string, PdfObj>([['S', name('URI')], ['URI', new PdfString(ascii(l.uri))]])],
-      ]))))
+    const links = p.links.filter((l) => l.uri !== undefined || (l.to && l.to.page < d.pages.length))
+    if (links.length) {
+      page.set('Annots', links.map((l) => {
+        const dict = new Map<string, PdfObj>([
+          ['Type', name('Annot')], ['Subtype', name('Link')], ['F', 4], ['Border', [0, 0, 0]],
+          ['Rect', [l.x, p.height - l.y - l.h, l.x + l.w, p.height - l.y].map((v) => Math.round(v * 100) / 100)],
+        ])
+        if (l.uri !== undefined) dict.set('A', new Map<string, PdfObj>([['S', name('URI')], ['URI', new PdfString(ascii(l.uri))]]))
+        else dict.set('Dest', [kids[l.to!.page], name('XYZ'), null, Math.round((d.pages[l.to!.page].height - l.to!.y) * 100) / 100, null])
+        return b.add(dict)
+      }))
     }
-    kids.push(b.add(page))
+    b.set(kids[pi], page)
   }
   b.set(pagesRef, new Map<string, PdfObj>([['Type', name('Pages')], ['Kids', kids], ['Count', kids.length]]))
   const cat = new Map<string, PdfObj>([['Type', name('Catalog')], ['Pages', pagesRef]])
