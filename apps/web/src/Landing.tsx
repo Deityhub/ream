@@ -129,7 +129,7 @@ export function Landing() {
             <span className="border-l border-line px-6 py-3 text-muted">Sheet 03</span>
           </div>
           <p className="max-w-[70ch] px-6 pt-5 text-[15px] leading-relaxed text-muted">
-            Open your browser's developer tools and watch the Network tab while a tool runs. Your file never appears there. The one request Ream can make is Download free fonts in the PDF tool (shown in Edit PDF, Excel to PDF and PowerPoint to PDF), which sends font names only, on your click.
+            Open your browser's developer tools and watch the Network tab while a tool runs. Your file never appears there. The one request Ream can make is Download free fonts in the PDF tool (shown in Edit PDF, Word to PDF, Excel to PDF and PowerPoint to PDF), which sends font names only, on your click.
           </p>
           <div className="overflow-x-auto px-6 pb-3 pt-4">
             <table className="w-full min-w-md text-left">

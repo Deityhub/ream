@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { FontFace, PdfDocument, PdfStream, PdfDrawing, buildPdf, decodeStream, isDict, measure, parseTtf } from '../src/index.ts'
+import { FontFace, PdfDocument, PdfStream, PdfDrawing, buildPdf, decodeStream, isDict, measure, parseTtf, readOutline, type PdfObj } from '../src/index.ts'
 import { makeTtf } from './ttf-helper.ts'
 
 const dec = new TextDecoder('latin1')
@@ -103,4 +103,44 @@ test('paths in page space, turning about a centre, transparency as a graphics st
   const gs = isDict(res) ? doc.resolve(res.get('ExtGState')) : null
   expect(isDict(gs) && [...gs.keys()]).toEqual(['A0'])
   expect(measure('Hi', 10, { family: 'sans', scale: 0.5 })).toBeCloseTo(measure('Hi', 10, { family: 'sans' }) / 2, 6)
+})
+
+test('links become URI annotations in page space (web and mail only); bookmarks point at their pages', async () => {
+  const d = new PdfDrawing()
+  const a = d.addPage(200, 100)
+  a.link(10, 20, 50, 12, 'https://example.com/a b')
+  a.link(0, 0, 10, 10, 'javascript:alert(1)')
+  a.link(0, 0, 10, 10, 'file:///etc/passwd')
+  a.link(0, 0, 10, 10, 'not an address')
+  a.link(70, 20, 30, 12, 'mailto:me@example.com')
+  d.addPage(200, 100)
+  d.outline = [{ title: 'One', page: 0, fit: [], open: true, children: [] }, { title: 'Two', page: 1, fit: [], open: true, children: [{ title: 'Two.a', page: 1, fit: [], open: true, children: [] }] }]
+  const doc = await PdfDocument.load((await buildPdf(d)).bytes)
+  const get = (o: unknown) => doc.resolve(o as PdfObj) as Map<string, PdfObj>
+  const annots = get(doc.pages()[0].dict.get('Annots')) as unknown as PdfObj[]
+  expect(annots).toHaveLength(2)
+  const uri = (a: Map<string, PdfObj>) => dec.decode((get(a.get('A')).get('URI') as unknown as { bytes: Uint8Array }).bytes)
+  const [web, mail] = annots.map(get)
+  expect(web.get('Rect')).toEqual([10, 68, 60, 80]) // 100 - 20 - 12 .. 100 - 20
+  expect(uri(web)).toBe('https://example.com/a%20b')
+  expect(uri(mail)).toBe('mailto:me@example.com')
+  expect(doc.pages()[1].dict.get('Annots')).toBeUndefined()
+  const marks = readOutline(doc)
+  expect(marks.map((m) => [m.title, m.page, m.children.map((c) => c.title)])).toEqual([['One', 0, []], ['Two', 1, ['Two.a']]])
+})
+
+test('a link to a place in the document points at its page, however far on, and how far down', async () => {
+  const d = new PdfDrawing()
+  d.addPage(200, 100).goto(10, 20, 50, 12, 2, 30)
+  d.pages[0].goto(0, 0, 10, 10, 9, 0) // no such page: left out
+  d.addPage(200, 100)
+  d.addPage(300, 400)
+  const doc = await PdfDocument.load((await buildPdf(d)).bytes)
+  const annots = doc.resolve(doc.pages()[0].dict.get('Annots')) as unknown as PdfObj[]
+  expect(annots).toHaveLength(1)
+  const a = doc.resolve(annots[0]) as Map<string, PdfObj>
+  const dest = doc.resolve(a.get('Dest')) as unknown as PdfObj[]
+  expect(doc.resolve(dest[0])).toBe(doc.pages()[2].dict) // the third page, which comes after the link's own
+  expect(dest.slice(2)).toEqual([null, 370, null]) // 400 - 30 from the bottom of that page
+  expect(a.get('A')).toBeUndefined()
 })

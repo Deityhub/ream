@@ -51,6 +51,17 @@ export const convertSeo: Record<string, ToolSeo> = {
       ['Does it work with scanned PDFs?', 'No. A scan has no text to place on the slides, and Ream has no text recognition (OCR) yet.'],
     ],
   },
+  'word-to-pdf': {
+    title: 'Convert Word (DOCX) to PDF online | Ream',
+    description: 'Save a Word document as a PDF with its headers, footers, page numbers, links and pictures. Runs in your browser; nothing is uploaded.',
+    intro: 'Turn a .docx into a PDF to share or print, without opening Word. Ream reads the document and lays out its pages itself, with headers and footers, page numbers, footnotes, columns, styled tables, pictures and text boxes, clickable links and a bookmark for every heading. A preview shows the result before you download.',
+    points: ['Headers, footers, footnotes and page numbers', 'Columns, styled tables and a table of contents with real page numbers', 'Clickable links and bookmarks from your headings'],
+    faq: [
+      ['Will it look exactly like it does in Word?', 'Close, not identical. Ream lays the pages out itself and uses look-alike fonts when yours are not available, so a line or a page break can fall in a different place. Documents set in Aptos are the usual case, since it has no free look-alike. The preview is marked approximate for that reason, and you can add the fonts the document uses to get closer.'],
+      ['Does it work with older .doc files?', 'Only .docx files. In Word, choose Save As and pick Word Document (.docx) first. A document with a password has to be saved without it.'],
+      ['What is not carried over?', 'Shapes other than pictures and text boxes, equations, comments and tracked changes are not drawn, text wraps around a picture by its box and not its outline, and right-to-left or complex scripts such as Arabic, Hebrew and Hindi are not shaped. Footnotes, columns, table styles, tabs, bookmarks and the page numbers of a table of contents are kept.'],
+    ],
+  },
   'excel-to-pdf': {
     title: 'Convert Excel (XLSX) to PDF online | Ream',
     description: 'Print an Excel workbook to PDF with its formatting, merged cells, pictures and charts. Runs in your browser; nothing is uploaded.',

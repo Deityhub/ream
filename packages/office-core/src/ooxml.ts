@@ -31,10 +31,10 @@ export function resolvePart(from: string, target: string): string {
 export const relsOf = (part: string) => part.replace(/([^/]+)$/, '_rels/$1.rels')
 
 /** relationship id -> { target part, type }, from a parsed .rels file */
-export function readRels(rels: XmlNode | undefined, from: string): Map<string, { part: string; type: string; external: boolean }> {
-  const out = new Map<string, { part: string; type: string; external: boolean }>()
+export function readRels(rels: XmlNode | undefined, from: string): Map<string, { part: string; type: string; external: boolean; /** the Target as written: an address for an external one */ target: string }> {
+  const out = new Map<string, { part: string; type: string; external: boolean; target: string }>()
   for (const r of kids(rels, 'Relationship')) {
-    if (r.attrs.Id && r.attrs.Target) out.set(r.attrs.Id, { part: resolvePart(from, r.attrs.Target), type: r.attrs.Type ?? '', external: r.attrs.TargetMode === 'External' })
+    if (r.attrs.Id && r.attrs.Target) out.set(r.attrs.Id, { part: resolvePart(from, r.attrs.Target), type: r.attrs.Type ?? '', external: r.attrs.TargetMode === 'External', target: r.attrs.Target })
   }
   return out
 }
