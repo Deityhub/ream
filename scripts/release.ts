@@ -1,6 +1,7 @@
 // The release version (the root package.json's "version", tagged v<version> when it reaches main) and its CHANGELOG.md section.
 //   node scripts/release.ts prepare patch|minor|major   raise the version and write its changelog section (yarn release ...)
-//   node scripts/release.ts check     fail unless the version is new, higher than every released one, and in the changelog (PRs into main)
+//   node scripts/release.ts check     PRs into main: pass when the version is already released (nothing ships, e.g. a docs-only change); otherwise it must be higher than every released one and in the changelog
+//   node scripts/release.ts pending   print true when v<version> isn't tagged yet (a merge into main releases), else false
 //   node scripts/release.ts version   print it (the release job's tag and deploy message)
 //   node scripts/release.ts notes     print its changelog section (the GitHub Release's text)
 import { execFileSync } from 'node:child_process'
@@ -30,6 +31,7 @@ const latest = () =>
     .filter((v): v is number[] => !!v)
     .sort(newer)
     .at(-1)
+const released = () => git('tag', '--list', `v${version}`).trim() !== ''
 const changelog = () => (existsSync(logPath) ? readFileSync(logPath, 'utf8') : '')
 /** the text under "## <v>" up to the next section, or null when there is none */
 const section = (v: string) => {
@@ -57,7 +59,12 @@ function entries(from: string | null): string[] {
 const mode = process.argv[2]
 if (mode === 'version') console.log(version)
 else if (mode === 'notes') console.log(section(version) ?? fail(`CHANGELOG.md has no section for ${version}.`))
+else if (mode === 'pending') console.log(!released())
 else if (mode === 'check') {
+  if (released()) {
+    console.log(`Version ${version} is already released: this change is not a release, so nothing will be deployed.`)
+    process.exit(0)
+  }
   const last = latest()
   if (last && newer(own, last) <= 0) fail(`Version ${version} is already released or older than the latest release (${last.join('.')}). Raise it in this pull request: yarn release patch, minor or major.`)
   if (!section(version)) fail(`CHANGELOG.md has no section for ${version}, or it is empty. yarn release patch, minor or major writes one.`)
