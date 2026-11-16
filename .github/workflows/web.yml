@@ -1,7 +1,8 @@
 # Ream's pipeline. Linux only, a few minutes a run, inside GitHub's free allowance.
 #   pull request into dev    check, then a preview deploy (<branch>.ream-bqb.pages.dev) with its link on the PR
-#   pull request into main   check, and the version must be new (a release: see CONTRIBUTING.md)
-#   merge into main          check, then production (ream.deityhub.com), the v<version> tag, a GitHub Release and the
+#   pull request into main   check; a new version is a release (see CONTRIBUTING.md), the same version as the last
+#                            release is not (a docs-only change) and ships nothing
+#   merge into main          check, then, only when the version is new, production (ream.deityhub.com), the v<version> tag, a GitHub Release and the
 #                            Docker image (ghcr.io/deityhub/ream, docker.io/deityhub/ream)
 # A released version can be put back with the Deploy a version workflow (deploy-version.yml).
 # Plain pushes to other branches run nothing. `check` is the status the branch rules require
@@ -26,6 +27,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      release: ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,6 +40,8 @@ jobs:
       - name: The version is new (releases only)
         if: github.base_ref == 'main' || github.ref == 'refs/heads/main'
         run: node scripts/release.ts check
+      - id: release # false when v<version> is already tagged: production and the tag are skipped
+        run: echo "release=$(node scripts/release.ts pending)" >> "$GITHUB_OUTPUT"
       - run: yarn install --immutable
       - run: yarn typecheck
       - run: yarn test
@@ -106,7 +111,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "$body" --edit-last --create-if-none
 
   production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check.outputs.release == 'true'
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 10
